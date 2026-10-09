@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "preset-ja-technical-writing": {
+      "sentence-length": {
+        "max": 70
+      },
+      "max-ten": {
+        "max": 3
+      }
+    },
+    "@textlint-ja/preset-ai-writing": {
+      "ai-tech-writing-guideline": {
+        "enableDocumentAnalysis": false
+      }
+    }
+  }
+}

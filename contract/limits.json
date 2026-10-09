@@ -1,0 +1,113 @@
+{
+  "claim": {
+    "maxChars": 60
+  },
+  "explanation": {
+    "maxChars": 200
+  },
+  "figure": {
+    "labelMaxWidth": 12,
+    "noteMaxWidth": 16
+  },
+  "flow": {
+    "maxSteps": 6
+  },
+  "layers": {
+    "maxLayers": 4,
+    "maxItems": 4
+  },
+  "sequence": {
+    "maxActors": 4,
+    "maxMessages": 8
+  },
+  "textlint": {
+    "warnOnly": [
+      "@textlint-ja/ai-writing/ai-tech-writing-guideline"
+    ]
+  },
+  "bar": {
+    "maxItems": 8
+  },
+  "line": {
+    "maxSeries": 3,
+    "maxPoints": 12
+  },
+  "stack": {
+    "maxItems": 5
+  },
+  "progress": {
+    "maxItems": 6
+  },
+  "scatter": {
+    "maxPoints": 200
+  },
+  "heatmap": {
+    "maxX": 12,
+    "maxY": 8
+  },
+  "sankey": {
+    "maxNodes": 10,
+    "maxLinks": 12
+  },
+  "boxplot": {
+    "maxItems": 6
+  },
+  "treemap": {
+    "maxGroups": 3,
+    "maxItems": 12
+  },
+  "branch": {
+    "maxCases": 4
+  },
+  "tree": {
+    "maxChildren": 4,
+    "maxItems": 4
+  },
+  "timeline": {
+    "maxEvents": 5
+  },
+  "compare": {
+    "maxRows": 3,
+    "maxCols": 3
+  },
+  "state": {
+    "maxStates": 5,
+    "maxTransitions": 8
+  },
+  "swimlane": {
+    "maxLanes": 4,
+    "maxSteps": 6
+  },
+  "gitgraph": {
+    "maxBranches": 4,
+    "maxCommits": 12
+  },
+  "zones": {
+    "maxZones": 5,
+    "maxNodes": 3,
+    "maxLinks": 8,
+    "maxGroups": 3
+  },
+  "screenshot": {
+    "maxMarks": 6,
+    "noteMaxChars": 60,
+    "maxBytes": 1500000
+  },
+  "refs": {
+    "maxItems": 3,
+    "quoteMaxChars": 300
+  },
+  "free": {
+    "maxHeight": 560,
+    "maxTexts": 30,
+    "minFontSize": 12
+  },
+  "venn": {
+    "maxSets": 3
+  },
+  "gantt": {
+    "maxTasks": 12,
+    "maxGroups": 4,
+    "maxDays": 400
+  }
+}

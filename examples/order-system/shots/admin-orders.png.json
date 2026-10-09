@@ -1,0 +1,25 @@
+{
+  "url": "http://localhost:8080/admin-orders.html",
+  "captured": "2026年10月10日",
+  "viewport": 960,
+  "marks": {
+    ".status-filter": [
+      62,
+      117,
+      98,
+      36
+    ],
+    ".row-paid .status": [
+      699,
+      275,
+      68,
+      21
+    ],
+    ".row-shipped .cancel": [
+      835,
+      217,
+      52,
+      30
+    ]
+  }
+}

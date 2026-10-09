@@ -1,0 +1,874 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>注文管理システム 運用レポート 2026年9月</title>
+<style>
+:root{--ink:#1c2530;--sub:#5b6673;--line:#93a0ad;--surface:#f3f5f7;--paper:#ffffff;--accent:#0f5f8a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Hiragino Sans", "Yu Gothic UI", "Noto Sans JP", "Noto Sans CJK JP", "Meiryo", sans-serif;line-height:1.85;font-feature-settings:"palt";-webkit-text-size-adjust:100%}
+main{max-width:800px;margin:0 auto;padding:56px 24px 96px}
+h1{font-size:1.9rem;line-height:1.4;margin:0 0 12px;letter-spacing:.02em}
+h1+p{color:var(--sub);margin:0 0 8px}
+h2{font-size:1.3rem;line-height:1.5;margin:72px 0 10px;padding-top:20px;border-top:2px solid var(--ink);break-after:avoid}
+h3{font-size:1.08rem;margin:48px 0 8px;color:var(--accent);break-after:avoid}
+p,li{font-size:.95rem;color:var(--sub);margin:10px 0}
+p.claim{font-size:1.1rem;font-weight:600;color:var(--ink);line-height:1.7;margin:0 0 18px}
+figure{margin:0 0 18px;padding:22px 18px;background:var(--paper);border:1px solid #dfe4ea;border-radius:8px;break-inside:avoid}
+figure>svg{display:block;height:auto}
+figure.error{border-color:#b42318;color:#b42318;font-size:.9rem}
+table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:.92rem;break-inside:avoid}
+th{text-align:left;font-weight:600;color:var(--ink);border-bottom:2px solid var(--ink);padding:8px 12px}
+td{color:var(--ink);border-bottom:1px solid #dfe4ea;padding:8px 12px;vertical-align:top}
+code{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;font-size:.88em;background:var(--surface);padding:.1em .35em;border-radius:4px;color:var(--ink)}
+pre{background:var(--surface)!important;padding:14px 16px;border-radius:8px;overflow-x:auto;line-height:1.6;font-size:.86rem}
+pre code{background:none;padding:0}
+a{color:var(--accent)}
+.meta{font-size:.78rem;color:var(--sub);margin:4px 0}.right{margin-left:auto}
+.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;border-radius:11px;background:var(--accent);color:#fff;font-size:.75rem;font-weight:700}.num.note{background:#c2410c}
+ol.marks{list-style:none;margin:-4px 0 6px;padding:0}ol.marks li{display:flex;gap:10px;align-items:flex-start;margin:6px 0;color:var(--ink);font-size:.92rem}
+.refs{margin:22px 0 18px}.refs-h{font-size:.8rem;font-weight:700;color:var(--sub);margin-bottom:8px}
+.ref{padding:14px 16px;border:1px solid #dfe4ea;border-radius:8px;margin-top:10px;break-inside:avoid}.ref p{color:var(--ink);font-size:.9rem;margin:8px 0}
+.ref-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.84rem}
+.tag{font-size:.74rem;font-weight:600;color:var(--sub);background:var(--surface);padding:0 8px;border-radius:4px}.mono{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
+.ref pre{margin:8px 0 0}blockquote{margin:10px 0;padding:12px 14px;background:var(--surface);border-radius:6px;font-size:.9rem;color:var(--ink)}.tr-h{font-size:.76rem;font-weight:600;color:var(--sub)}
+@media print{main{padding:0;max-width:none}h2{margin-top:40px}}
+</style>
+</head>
+<body>
+<main>
+<h1>注文管理システム 運用レポート 2026年9月</h1>
+<p>この資料は、2026年9月の注文管理システムの利用状況、応答時間、障害、費用を、開発チームと運用チームに報告します。数値は <code>data/</code> の CSV を集計した値です。</p>
+<h2>今月の結果</h2>
+<p class="claim">注文作成の応答時間だけが目標に届かず、ほかの3つの指標は目標を満たしました。</p>
+<table>
+<thead>
+<tr>
+<th>指標</th>
+<th>目標</th>
+<th>実績</th>
+<th>結果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>成功した要求の割合</td>
+<td>99.9%以上</td>
+<td>99.94%</td>
+<td>達成</td>
+</tr>
+<tr>
+<td>注文作成が500ミリ秒以内に応答した割合</td>
+<td>95%以上</td>
+<td>93.8%</td>
+<td>未達</td>
+</tr>
+<tr>
+<td>障害の件数</td>
+<td>1件以下</td>
+<td>1件</td>
+<td>達成</td>
+</tr>
+<tr>
+<td>費用</td>
+<td>65万円以下</td>
+<td>62万円</td>
+<td>達成</td>
+</tr>
+</tbody>
+</table>
+<p>成功した要求の割合は、全要求496万1,500件のうち、5xx エラーにならなかった要求の割合です。障害は9月17日の1件で、復旧までに29分かかりました。</p>
+<h2>要求数の推移</h2>
+<p class="claim">9月の注文作成は41.2万件で、6か月で最も多くなりました。</p>
+<figure><svg width="100%" role="img" aria-label="注文作成の推移" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 300">
+<rect width="720" height="300" x="0" y="0" fill="none"></rect>
+<path d="M59 268.5L648 268.5" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr0-cls-0"></path>
+<path d="M59 221.5L648 221.5" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr0-cls-0"></path>
+<path d="M59 175.5L648 175.5" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr0-cls-0"></path>
+<path d="M59 129.5L648 129.5" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr0-cls-0"></path>
+<path d="M59 82.5L648 82.5" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr0-cls-0"></path>
+<path d="M59 36.5L648 36.5" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr0-cls-0"></path>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" x="-8" y="-6" transform="translate(59 22)" fill="#5b6673">万件／月</text>
+<path d="M59 268.5L648 268.5" fill="none" pointer-events="visible" stroke="#93a0ad" stroke-linecap="round" class="zr0-cls-0"></path>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(51 268)" fill="#5b6673">0</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(51 221.6)" fill="#5b6673">10</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(51 175.2)" fill="#5b6673">20</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(51 128.8)" fill="#5b6673">30</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(51 82.4)" fill="#5b6673">40</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(51 36)" fill="#5b6673">50</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(59 280)" fill="#5b6673">4月</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(176.8 280)" fill="#5b6673">5月</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(294.6 280)" fill="#5b6673">6月</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(412.4 280)" fill="#5b6673">7月</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(530.2 280)" fill="#5b6673">8月</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(648 280)" fill="#5b6673">9月</text>
+<g clip-path="url(#zr0-c0)">
+<path d="M59 120.4L176.8 112.6L294.6 109.8L412.4 84.3L530.2 90.8L648 76.8" fill="none" pointer-events="visible" stroke="#0f5f8a" stroke-width="2" stroke-linejoin="bevel" class="zr0-cls-2"></path>
+</g>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(4,0,0,4,59,120.448)" fill="#0f5f8a" stroke="#ffffff" stroke-width="0.5" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr0-cls-3"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(4,0,0,4,176.8,112.56)" fill="#0f5f8a" stroke="#ffffff" stroke-width="0.5" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr0-cls-3"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(4,0,0,4,294.6,109.776)" fill="#0f5f8a" stroke="#ffffff" stroke-width="0.5" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr0-cls-3"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(4,0,0,4,412.4,84.256)" fill="#0f5f8a" stroke="#ffffff" stroke-width="0.5" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr0-cls-3"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(4,0,0,4,530.2,90.752)" fill="#0f5f8a" stroke="#ffffff" stroke-width="0.5" ecmeta_series_index="0" ecmeta_data_index="4" ecmeta_ssr_type="chart" class="zr0-cls-3"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(4,0,0,4,648,76.832)" fill="#0f5f8a" stroke="#ffffff" stroke-width="0.5" ecmeta_series_index="0" ecmeta_data_index="5" ecmeta_ssr_type="chart" class="zr0-cls-3"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(656 76.832)" fill="#1c2530">41.2</text>
+<path d="M412.5 268L412.5 36" fill="none" pointer-events="visible" stroke="#5b6673" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" ecmeta_silent="true" class="zr0-cls-0"></path>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="-6" transform="translate(412.4 31)" fill="#5b6673">アプリ版を公開</text>
+<defs >
+<clipPath id="zr0-c0">
+<path d="M57 35l592 0l0 234l-592 0Z" fill="#000" class="zr0-cls-1"></path>
+</clipPath>
+</defs>
+<style ><![CDATA[
+.zr0-cls-0:hover {
+pointer-events:none;
+}
+.zr0-cls-1:hover {
+cursor:pointer;
+fill:rgba(0,0,0,1);
+}
+.zr0-cls-2:hover {
+cursor:pointer;
+}
+.zr0-cls-3:hover {
+cursor:pointer;
+fill:rgba(16,104,151,1);
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>注文作成は、前月から7.9%増えました。注文照会は158万件で、前月から6%増えています。注文1件あたりの照会は約3.8回で、4月の3.7回からほぼ変わっていません。</p>
+<h2>曜日と時間帯ごとの負荷</h2>
+<p class="claim">負荷が最も高いのは日曜の21時台で、平日の同じ時間帯の1.4倍です。</p>
+<figure><svg width="100%" role="img" aria-label="月、火、水、木、金、土、日と0時、3時、6時、9時、12時、15時、18時、21時の組み合わせごとの量" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 282">
+<rect width="720" height="282" x="0" y="0" fill="none"></rect>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 25.2857)" fill="#5b6673">月</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 59.8571)" fill="#5b6673">火</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 94.4286)" fill="#5b6673">水</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 129)" fill="#5b6673">木</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 163.5714)" fill="#5b6673">金</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 198.1429)" fill="#5b6673">土</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(24 232.7143)" fill="#5b6673">日</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(69.425 258)" fill="#5b6673">0時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(144.275 258)" fill="#5b6673">3時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(219.125 258)" fill="#5b6673">6時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(293.975 258)" fill="#5b6673">9時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(368.825 258)" fill="#5b6673">12時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(443.675 258)" fill="#5b6673">15時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(518.525 258)" fill="#5b6673">18時</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(593.375 258)" fill="#5b6673">21時</text>
+<path d="M34.8 7.7L104.1 7.7A3 3 0 0 1 107.1 10.7L107.1 39.8A3 3 0 0 1 104.1 42.8L34.8 42.8A3 3 0 0 1 31.8 39.8L31.8 10.7A3 3 0 0 1 34.8 7.7Z" fill="rgb(197,219,231)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr1-cls-4"></path>
+<path d="M109.6 7.7L179 7.7A3 3 0 0 1 182 10.7L182 39.8A3 3 0 0 1 179 42.8L109.6 42.8A3 3 0 0 1 106.6 39.8L106.6 10.7A3 3 0 0 1 109.6 7.7Z" fill="rgb(214,231,240)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr1-cls-5"></path>
+<path d="M184.5 7.7L253.8 7.7A3 3 0 0 1 256.8 10.7L256.8 39.8A3 3 0 0 1 253.8 42.8L184.5 42.8A3 3 0 0 1 181.5 39.8L181.5 10.7A3 3 0 0 1 184.5 7.7Z" fill="rgb(186,211,225)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr1-cls-6"></path>
+<path d="M259.3 7.7L328.7 7.7A3 3 0 0 1 331.7 10.7L331.7 39.8A3 3 0 0 1 328.7 42.8L259.3 42.8A3 3 0 0 1 256.3 39.8L256.3 10.7A3 3 0 0 1 259.3 7.7Z" fill="rgb(131,174,197)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr1-cls-7"></path>
+<path d="M334.2 7.7L403.5 7.7A3 3 0 0 1 406.5 10.7L406.5 39.8A3 3 0 0 1 403.5 42.8L334.2 42.8A3 3 0 0 1 331.2 39.8L331.2 10.7A3 3 0 0 1 334.2 7.7Z" fill="rgb(96,150,179)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="4" ecmeta_ssr_type="chart" class="zr1-cls-8"></path>
+<path d="M409 7.7L478.4 7.7A3 3 0 0 1 481.4 10.7L481.4 39.8A3 3 0 0 1 478.4 42.8L409 42.8A3 3 0 0 1 406 39.8L406 10.7A3 3 0 0 1 409 7.7Z" fill="rgb(122,168,193)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="5" ecmeta_ssr_type="chart" class="zr1-cls-9"></path>
+<path d="M483.9 7.7L553.2 7.7A3 3 0 0 1 556.2 10.7L556.2 39.8A3 3 0 0 1 553.2 42.8L483.9 42.8A3 3 0 0 1 480.9 39.8L480.9 10.7A3 3 0 0 1 483.9 7.7Z" fill="rgb(93,148,178)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="6" ecmeta_ssr_type="chart" class="zr1-cls-10"></path>
+<path d="M558.7 7.7L628.1 7.7A3 3 0 0 1 631.1 10.7L631.1 39.8A3 3 0 0 1 628.1 42.8L558.7 42.8A3 3 0 0 1 555.7 39.8L555.7 10.7A3 3 0 0 1 558.7 7.7Z" fill="rgb(81,140,172)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="7" ecmeta_ssr_type="chart" class="zr1-cls-11"></path>
+<path d="M34.8 42.3L104.1 42.3A3 3 0 0 1 107.1 45.3L107.1 74.4A3 3 0 0 1 104.1 77.4L34.8 77.4A3 3 0 0 1 31.8 74.4L31.8 45.3A3 3 0 0 1 34.8 42.3Z" fill="rgb(200,221,233)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="8" ecmeta_ssr_type="chart" class="zr1-cls-12"></path>
+<path d="M109.6 42.3L179 42.3A3 3 0 0 1 182 45.3L182 74.4A3 3 0 0 1 179 77.4L109.6 77.4A3 3 0 0 1 106.6 74.4L106.6 45.3A3 3 0 0 1 109.6 42.3Z" fill="rgb(214,231,240)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="9" ecmeta_ssr_type="chart" class="zr1-cls-5"></path>
+<path d="M184.5 42.3L253.8 42.3A3 3 0 0 1 256.8 45.3L256.8 74.4A3 3 0 0 1 253.8 77.4L184.5 77.4A3 3 0 0 1 181.5 74.4L181.5 45.3A3 3 0 0 1 184.5 42.3Z" fill="rgb(188,213,227)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="10" ecmeta_ssr_type="chart" class="zr1-cls-13"></path>
+<path d="M259.3 42.3L328.7 42.3A3 3 0 0 1 331.7 45.3L331.7 74.4A3 3 0 0 1 328.7 77.4L259.3 77.4A3 3 0 0 1 256.3 74.4L256.3 45.3A3 3 0 0 1 259.3 42.3Z" fill="rgb(131,174,197)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="11" ecmeta_ssr_type="chart" class="zr1-cls-7"></path>
+<path d="M334.2 42.3L403.5 42.3A3 3 0 0 1 406.5 45.3L406.5 74.4A3 3 0 0 1 403.5 77.4L334.2 77.4A3 3 0 0 1 331.2 74.4L331.2 45.3A3 3 0 0 1 334.2 42.3Z" fill="rgb(84,142,174)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="12" ecmeta_ssr_type="chart" class="zr1-cls-14"></path>
+<path d="M409 42.3L478.4 42.3A3 3 0 0 1 481.4 45.3L481.4 74.4A3 3 0 0 1 478.4 77.4L409 77.4A3 3 0 0 1 406 74.4L406 45.3A3 3 0 0 1 409 42.3Z" fill="rgb(131,174,197)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="13" ecmeta_ssr_type="chart" class="zr1-cls-7"></path>
+<path d="M483.9 42.3L553.2 42.3A3 3 0 0 1 556.2 45.3L556.2 74.4A3 3 0 0 1 553.2 77.4L483.9 77.4A3 3 0 0 1 480.9 74.4L480.9 45.3A3 3 0 0 1 483.9 42.3Z" fill="rgb(105,156,184)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="14" ecmeta_ssr_type="chart" class="zr1-cls-15"></path>
+<path d="M558.7 42.3L628.1 42.3A3 3 0 0 1 631.1 45.3L631.1 74.4A3 3 0 0 1 628.1 77.4L558.7 77.4A3 3 0 0 1 555.7 74.4L555.7 45.3A3 3 0 0 1 558.7 42.3Z" fill="rgb(73,134,168)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="15" ecmeta_ssr_type="chart" class="zr1-cls-16"></path>
+<path d="M34.8 76.9L104.1 76.9A3 3 0 0 1 107.1 79.9L107.1 109A3 3 0 0 1 104.1 112L34.8 112A3 3 0 0 1 31.8 109L31.8 79.9A3 3 0 0 1 34.8 76.9Z" fill="rgb(197,219,231)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="16" ecmeta_ssr_type="chart" class="zr1-cls-4"></path>
+<path d="M109.6 76.9L179 76.9A3 3 0 0 1 182 79.9L182 109A3 3 0 0 1 179 112L109.6 112A3 3 0 0 1 106.6 109L106.6 79.9A3 3 0 0 1 109.6 76.9Z" fill="rgb(214,231,240)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="17" ecmeta_ssr_type="chart" class="zr1-cls-5"></path>
+<path d="M184.5 76.9L253.8 76.9A3 3 0 0 1 256.8 79.9L256.8 109A3 3 0 0 1 253.8 112L184.5 112A3 3 0 0 1 181.5 109L181.5 79.9A3 3 0 0 1 184.5 76.9Z" fill="rgb(188,213,227)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="18" ecmeta_ssr_type="chart" class="zr1-cls-13"></path>
+<path d="M259.3 76.9L328.7 76.9A3 3 0 0 1 331.7 79.9L331.7 109A3 3 0 0 1 328.7 112L259.3 112A3 3 0 0 1 256.3 109L256.3 79.9A3 3 0 0 1 259.3 76.9Z" fill="rgb(134,176,199)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="19" ecmeta_ssr_type="chart" class="zr1-cls-17"></path>
+<path d="M334.2 76.9L403.5 76.9A3 3 0 0 1 406.5 79.9L406.5 109A3 3 0 0 1 403.5 112L334.2 112A3 3 0 0 1 331.2 109L331.2 79.9A3 3 0 0 1 334.2 76.9Z" fill="rgb(87,144,175)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="20" ecmeta_ssr_type="chart" class="zr1-cls-18"></path>
+<path d="M409 76.9L478.4 76.9A3 3 0 0 1 481.4 79.9L481.4 109A3 3 0 0 1 478.4 112L409 112A3 3 0 0 1 406 109L406 79.9A3 3 0 0 1 409 76.9Z" fill="rgb(122,168,193)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="21" ecmeta_ssr_type="chart" class="zr1-cls-9"></path>
+<path d="M483.9 76.9L553.2 76.9A3 3 0 0 1 556.2 79.9L556.2 109A3 3 0 0 1 553.2 112L483.9 112A3 3 0 0 1 480.9 109L480.9 79.9A3 3 0 0 1 483.9 76.9Z" fill="rgb(99,152,181)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="22" ecmeta_ssr_type="chart" class="zr1-cls-19"></path>
+<path d="M558.7 76.9L628.1 76.9A3 3 0 0 1 631.1 79.9L631.1 109A3 3 0 0 1 628.1 112L558.7 112A3 3 0 0 1 555.7 109L555.7 79.9A3 3 0 0 1 558.7 76.9Z" fill="rgb(76,136,169)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="23" ecmeta_ssr_type="chart" class="zr1-cls-20"></path>
+<path d="M34.8 111.5L104.1 111.5A3 3 0 0 1 107.1 114.5L107.1 143.5A3 3 0 0 1 104.1 146.5L34.8 146.5A3 3 0 0 1 31.8 143.5L31.8 114.5A3 3 0 0 1 34.8 111.5Z" fill="rgb(200,221,233)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="24" ecmeta_ssr_type="chart" class="zr1-cls-12"></path>
+<path d="M109.6 111.5L179 111.5A3 3 0 0 1 182 114.5L182 143.5A3 3 0 0 1 179 146.5L109.6 146.5A3 3 0 0 1 106.6 143.5L106.6 114.5A3 3 0 0 1 109.6 111.5Z" fill="rgb(214,231,240)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="25" ecmeta_ssr_type="chart" class="zr1-cls-5"></path>
+<path d="M184.5 111.5L253.8 111.5A3 3 0 0 1 256.8 114.5L256.8 143.5A3 3 0 0 1 253.8 146.5L184.5 146.5A3 3 0 0 1 181.5 143.5L181.5 114.5A3 3 0 0 1 184.5 111.5Z" fill="rgb(188,213,227)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="26" ecmeta_ssr_type="chart" class="zr1-cls-13"></path>
+<path d="M259.3 111.5L328.7 111.5A3 3 0 0 1 331.7 114.5L331.7 143.5A3 3 0 0 1 328.7 146.5L259.3 146.5A3 3 0 0 1 256.3 143.5L256.3 114.5A3 3 0 0 1 259.3 111.5Z" fill="rgb(134,176,199)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="27" ecmeta_ssr_type="chart" class="zr1-cls-17"></path>
+<path d="M334.2 111.5L403.5 111.5A3 3 0 0 1 406.5 114.5L406.5 143.5A3 3 0 0 1 403.5 146.5L334.2 146.5A3 3 0 0 1 331.2 143.5L331.2 114.5A3 3 0 0 1 334.2 111.5Z" fill="rgb(93,148,178)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="28" ecmeta_ssr_type="chart" class="zr1-cls-10"></path>
+<path d="M409 111.5L478.4 111.5A3 3 0 0 1 481.4 114.5L481.4 143.5A3 3 0 0 1 478.4 146.5L409 146.5A3 3 0 0 1 406 143.5L406 114.5A3 3 0 0 1 409 111.5Z" fill="rgb(131,174,197)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="29" ecmeta_ssr_type="chart" class="zr1-cls-7"></path>
+<path d="M483.9 111.5L553.2 111.5A3 3 0 0 1 556.2 114.5L556.2 143.5A3 3 0 0 1 553.2 146.5L483.9 146.5A3 3 0 0 1 480.9 143.5L480.9 114.5A3 3 0 0 1 483.9 111.5Z" fill="rgb(99,152,181)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="30" ecmeta_ssr_type="chart" class="zr1-cls-19"></path>
+<path d="M558.7 111.5L628.1 111.5A3 3 0 0 1 631.1 114.5L631.1 143.5A3 3 0 0 1 628.1 146.5L558.7 146.5A3 3 0 0 1 555.7 143.5L555.7 114.5A3 3 0 0 1 558.7 111.5Z" fill="rgb(79,138,171)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="31" ecmeta_ssr_type="chart" class="zr1-cls-21"></path>
+<path d="M34.8 146L104.1 146A3 3 0 0 1 107.1 149L107.1 178.1A3 3 0 0 1 104.1 181.1L34.8 181.1A3 3 0 0 1 31.8 178.1L31.8 149A3 3 0 0 1 34.8 146Z" fill="rgb(197,219,231)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="32" ecmeta_ssr_type="chart" class="zr1-cls-4"></path>
+<path d="M109.6 146L179 146A3 3 0 0 1 182 149L182 178.1A3 3 0 0 1 179 181.1L109.6 181.1A3 3 0 0 1 106.6 178.1L106.6 149A3 3 0 0 1 109.6 146Z" fill="rgb(214,231,240)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="33" ecmeta_ssr_type="chart" class="zr1-cls-5"></path>
+<path d="M184.5 146L253.8 146A3 3 0 0 1 256.8 149L256.8 178.1A3 3 0 0 1 253.8 181.1L184.5 181.1A3 3 0 0 1 181.5 178.1L181.5 149A3 3 0 0 1 184.5 146Z" fill="rgb(186,211,225)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="34" ecmeta_ssr_type="chart" class="zr1-cls-6"></path>
+<path d="M259.3 146L328.7 146A3 3 0 0 1 331.7 149L331.7 178.1A3 3 0 0 1 328.7 181.1L259.3 181.1A3 3 0 0 1 256.3 178.1L256.3 149A3 3 0 0 1 259.3 146Z" fill="rgb(136,178,200)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="35" ecmeta_ssr_type="chart" class="zr1-cls-22"></path>
+<path d="M334.2 146L403.5 146A3 3 0 0 1 406.5 149L406.5 178.1A3 3 0 0 1 403.5 181.1L334.2 181.1A3 3 0 0 1 331.2 178.1L331.2 149A3 3 0 0 1 334.2 146Z" fill="rgb(87,144,175)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="36" ecmeta_ssr_type="chart" class="zr1-cls-18"></path>
+<path d="M409 146L478.4 146A3 3 0 0 1 481.4 149L481.4 178.1A3 3 0 0 1 478.4 181.1L409 181.1A3 3 0 0 1 406 178.1L406 149A3 3 0 0 1 409 146Z" fill="rgb(128,172,196)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="37" ecmeta_ssr_type="chart" class="zr1-cls-23"></path>
+<path d="M483.9 146L553.2 146A3 3 0 0 1 556.2 149L556.2 178.1A3 3 0 0 1 553.2 181.1L483.9 181.1A3 3 0 0 1 480.9 178.1L480.9 149A3 3 0 0 1 483.9 146Z" fill="rgb(93,148,178)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="38" ecmeta_ssr_type="chart" class="zr1-cls-10"></path>
+<path d="M558.7 146L628.1 146A3 3 0 0 1 631.1 149L631.1 178.1A3 3 0 0 1 628.1 181.1L558.7 181.1A3 3 0 0 1 555.7 178.1L555.7 149A3 3 0 0 1 558.7 146Z" fill="rgb(76,136,169)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="39" ecmeta_ssr_type="chart" class="zr1-cls-20"></path>
+<path d="M34.8 180.6L104.1 180.6A3 3 0 0 1 107.1 183.6L107.1 212.7A3 3 0 0 1 104.1 215.7L34.8 215.7A3 3 0 0 1 31.8 212.7L31.8 183.6A3 3 0 0 1 34.8 180.6Z" fill="rgb(188,213,227)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="40" ecmeta_ssr_type="chart" class="zr1-cls-13"></path>
+<path d="M109.6 180.6L179 180.6A3 3 0 0 1 182 183.6L182 212.7A3 3 0 0 1 179 215.7L109.6 215.7A3 3 0 0 1 106.6 212.7L106.6 183.6A3 3 0 0 1 109.6 180.6Z" fill="rgb(212,229,239)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="41" ecmeta_ssr_type="chart" class="zr1-cls-24"></path>
+<path d="M184.5 180.6L253.8 180.6A3 3 0 0 1 256.8 183.6L256.8 212.7A3 3 0 0 1 253.8 215.7L184.5 215.7A3 3 0 0 1 181.5 212.7L181.5 183.6A3 3 0 0 1 184.5 180.6Z" fill="rgb(186,211,225)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="42" ecmeta_ssr_type="chart" class="zr1-cls-6"></path>
+<path d="M259.3 180.6L328.7 180.6A3 3 0 0 1 331.7 183.6L331.7 212.7A3 3 0 0 1 328.7 215.7L259.3 215.7A3 3 0 0 1 256.3 212.7L256.3 183.6A3 3 0 0 1 259.3 180.6Z" fill="rgb(128,172,196)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="43" ecmeta_ssr_type="chart" class="zr1-cls-23"></path>
+<path d="M334.2 180.6L403.5 180.6A3 3 0 0 1 406.5 183.6L406.5 212.7A3 3 0 0 1 403.5 215.7L334.2 215.7A3 3 0 0 1 331.2 212.7L331.2 183.6A3 3 0 0 1 334.2 180.6Z" fill="rgb(73,134,168)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="44" ecmeta_ssr_type="chart" class="zr1-cls-16"></path>
+<path d="M409 180.6L478.4 180.6A3 3 0 0 1 481.4 183.6L481.4 212.7A3 3 0 0 1 478.4 215.7L409 215.7A3 3 0 0 1 406 212.7L406 183.6A3 3 0 0 1 409 180.6Z" fill="rgb(110,160,187)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="45" ecmeta_ssr_type="chart" class="zr1-cls-25"></path>
+<path d="M483.9 180.6L553.2 180.6A3 3 0 0 1 556.2 183.6L556.2 212.7A3 3 0 0 1 553.2 215.7L483.9 215.7A3 3 0 0 1 480.9 212.7L480.9 183.6A3 3 0 0 1 483.9 180.6Z" fill="rgb(47,117,154)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="46" ecmeta_ssr_type="chart" class="zr1-cls-26"></path>
+<path d="M558.7 180.6L628.1 180.6A3 3 0 0 1 631.1 183.6L631.1 212.7A3 3 0 0 1 628.1 215.7L558.7 215.7A3 3 0 0 1 555.7 212.7L555.7 183.6A3 3 0 0 1 558.7 180.6Z" fill="rgb(32,107,147)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="47" ecmeta_ssr_type="chart" class="zr1-cls-27"></path>
+<path d="M34.8 215.2L104.1 215.2A3 3 0 0 1 107.1 218.2L107.1 247.3A3 3 0 0 1 104.1 250.3L34.8 250.3A3 3 0 0 1 31.8 247.3L31.8 218.2A3 3 0 0 1 34.8 215.2Z" fill="rgb(188,213,227)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="48" ecmeta_ssr_type="chart" class="zr1-cls-13"></path>
+<path d="M109.6 215.2L179 215.2A3 3 0 0 1 182 218.2L182 247.3A3 3 0 0 1 179 250.3L109.6 250.3A3 3 0 0 1 106.6 247.3L106.6 218.2A3 3 0 0 1 109.6 215.2Z" fill="rgb(214,231,240)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="49" ecmeta_ssr_type="chart" class="zr1-cls-5"></path>
+<path d="M184.5 215.2L253.8 215.2A3 3 0 0 1 256.8 218.2L256.8 247.3A3 3 0 0 1 253.8 250.3L184.5 250.3A3 3 0 0 1 181.5 247.3L181.5 218.2A3 3 0 0 1 184.5 215.2Z" fill="rgb(186,211,225)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="50" ecmeta_ssr_type="chart" class="zr1-cls-6"></path>
+<path d="M259.3 215.2L328.7 215.2A3 3 0 0 1 331.7 218.2L331.7 247.3A3 3 0 0 1 328.7 250.3L259.3 250.3A3 3 0 0 1 256.3 247.3L256.3 218.2A3 3 0 0 1 259.3 215.2Z" fill="rgb(119,166,191)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="51" ecmeta_ssr_type="chart" class="zr1-cls-28"></path>
+<path d="M334.2 215.2L403.5 215.2A3 3 0 0 1 406.5 218.2L406.5 247.3A3 3 0 0 1 403.5 250.3L334.2 250.3A3 3 0 0 1 331.2 247.3L331.2 218.2A3 3 0 0 1 334.2 215.2Z" fill="rgb(81,140,172)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="52" ecmeta_ssr_type="chart" class="zr1-cls-11"></path>
+<path d="M409 215.2L478.4 215.2A3 3 0 0 1 481.4 218.2L481.4 247.3A3 3 0 0 1 478.4 250.3L409 250.3A3 3 0 0 1 406 247.3L406 218.2A3 3 0 0 1 409 215.2Z" fill="rgb(122,168,193)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="53" ecmeta_ssr_type="chart" class="zr1-cls-9"></path>
+<path d="M483.9 215.2L553.2 215.2A3 3 0 0 1 556.2 218.2L556.2 247.3A3 3 0 0 1 553.2 250.3L483.9 250.3A3 3 0 0 1 480.9 247.3L480.9 218.2A3 3 0 0 1 483.9 215.2Z" fill="rgb(47,117,154)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="54" ecmeta_ssr_type="chart" class="zr1-cls-26"></path>
+<path d="M558.7 215.2L628.1 215.2A3 3 0 0 1 631.1 218.2L631.1 247.3A3 3 0 0 1 628.1 250.3L558.7 250.3A3 3 0 0 1 555.7 247.3L555.7 218.2A3 3 0 0 1 558.7 215.2Z" fill="rgb(15,95,138)" stroke="#ffffff" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="55" ecmeta_ssr_type="chart" class="zr1-cls-29"></path>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 25.2857)" fill="#fff">45</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(518.525 25.2857)" fill="#fff">46</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 25.2857)" fill="#fff">50</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 59.8571)" fill="#fff">49</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 59.8571)" fill="#fff">53</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 94.4286)" fill="#fff">48</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(518.525 94.4286)" fill="#fff">44</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 94.4286)" fill="#fff">52</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 129)" fill="#fff">46</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(518.525 129)" fill="#fff">44</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 129)" fill="#fff">51</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 163.5714)" fill="#fff">48</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(518.525 163.5714)" fill="#fff">46</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 163.5714)" fill="#fff">52</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 198.1429)" fill="#fff">53</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(518.525 198.1429)" fill="#fff">62</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 198.1429)" fill="#fff">67</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(368.825 232.7143)" fill="#fff">50</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(518.525 232.7143)" fill="#fff">62</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:600;" transform="translate(593.375 232.7143)" fill="#fff">73</text>
+<path d="M-46.7 -177l79.4 0l0 214l-79.4 0Z" transform="translate(679.28 211)" fill="rgb(0,0,0)" fill-opacity="0" stroke="#cfd2d7" stroke-width="0" class="zr1-cls-30"></path>
+<g clip-path="url(#zr1-c0)">
+<polygon points="0 0 14 0 14 140 0 140" transform="matrix(-1,0,0,-1,679.28,211)" fill="url(#zr1-g0)" class="zr1-cls-32"></polygon>
+<polygon points="0 0 14 0 14 140 0 140" transform="matrix(-1,0,0,-1,679.28,211)" fill="url(#zr1-g1)" class="zr1-cls-33"></polygon>
+</g>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" x="-7" y="16" transform="translate(679.28 211)" fill="#5b6673">0</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" x="-7" y="-156" transform="translate(679.28 211)" fill="#5b6673">73件／分</text>
+<defs >
+<clipPath id="zr1-c0">
+<path d="M3 0L11 0A3 3 0 0 1 14 3L14 137A3 3 0 0 1 11 140L3 140A3 3 0 0 1 0 137L0 3A3 3 0 0 1 3 0Z" transform="matrix(-1,0,0,-1,679.28,211)" fill="#000" class="zr1-cls-31"></path>
+</clipPath>
+<linearGradient gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1" id="zr1-g0">
+<stop offset="0%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="1%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="2%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="3%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="4%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="5%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="6%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="7.000000000000001%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="8%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="9%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="10%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="11%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="12%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="13%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="14.000000000000002%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="15%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="16%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="17%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="18%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="19%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="20%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="21%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="22%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="23%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="24%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="25%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="26%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="27%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="28.000000000000004%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="28.999999999999996%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="30%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="31%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="32%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="33%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="34%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="35%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="36%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="37%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="38%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="39%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="40%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="41%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="42%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="43%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="44%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="45%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="46%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="47%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="48%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="49%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="50%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="51%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="52%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="53%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="54%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="55.00000000000001%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="56.00000000000001%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="56.99999999999999%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="57.99999999999999%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="59%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="60%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="61%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="62%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="63%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="64%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="65%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="66%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="67%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="68%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="69%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="70%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="71%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="72%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="73%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="74%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="75%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="76%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="77%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="78%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="79%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="80%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="81%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="82%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="83%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="84%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="85%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="86%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="87%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="88%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="89%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="90%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="91%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="92%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="93%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="94%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="95%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="96%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="97%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="98%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="99%" stop-color="rgb(207,210,215)"></stop>
+<stop offset="100%" stop-color="rgb(207,210,215)"></stop>
+</linearGradient>
+<linearGradient gradientUnits="objectBoundingBox" x1="0" y1="0" x2="0" y2="1" id="zr1-g1">
+<stop offset="0%" stop-color="rgb(226,239,246)"></stop>
+<stop offset="1%" stop-color="rgb(224,238,245)"></stop>
+<stop offset="2%" stop-color="rgb(222,236,244)"></stop>
+<stop offset="3%" stop-color="rgb(220,235,243)"></stop>
+<stop offset="4%" stop-color="rgb(218,233,242)"></stop>
+<stop offset="5%" stop-color="rgb(215,232,241)"></stop>
+<stop offset="6%" stop-color="rgb(213,230,240)"></stop>
+<stop offset="7.000000000000001%" stop-color="rgb(211,229,238)"></stop>
+<stop offset="8%" stop-color="rgb(209,227,237)"></stop>
+<stop offset="9%" stop-color="rgb(207,226,236)"></stop>
+<stop offset="10%" stop-color="rgb(205,225,235)"></stop>
+<stop offset="11%" stop-color="rgb(203,223,234)"></stop>
+<stop offset="12%" stop-color="rgb(201,222,233)"></stop>
+<stop offset="13%" stop-color="rgb(199,220,232)"></stop>
+<stop offset="14.000000000000002%" stop-color="rgb(196,219,231)"></stop>
+<stop offset="15%" stop-color="rgb(194,217,230)"></stop>
+<stop offset="16%" stop-color="rgb(192,216,229)"></stop>
+<stop offset="17%" stop-color="rgb(190,215,228)"></stop>
+<stop offset="18%" stop-color="rgb(188,213,227)"></stop>
+<stop offset="19%" stop-color="rgb(186,212,225)"></stop>
+<stop offset="20%" stop-color="rgb(184,210,224)"></stop>
+<stop offset="21%" stop-color="rgb(182,209,223)"></stop>
+<stop offset="22%" stop-color="rgb(180,207,222)"></stop>
+<stop offset="23%" stop-color="rgb(177,206,221)"></stop>
+<stop offset="24%" stop-color="rgb(175,204,220)"></stop>
+<stop offset="25%" stop-color="rgb(173,203,219)"></stop>
+<stop offset="26%" stop-color="rgb(171,202,218)"></stop>
+<stop offset="27%" stop-color="rgb(169,200,217)"></stop>
+<stop offset="28.000000000000004%" stop-color="rgb(167,199,216)"></stop>
+<stop offset="28.999999999999996%" stop-color="rgb(165,197,215)"></stop>
+<stop offset="30%" stop-color="rgb(163,196,214)"></stop>
+<stop offset="31%" stop-color="rgb(161,194,213)"></stop>
+<stop offset="32%" stop-color="rgb(158,193,211)"></stop>
+<stop offset="33%" stop-color="rgb(156,191,210)"></stop>
+<stop offset="34%" stop-color="rgb(154,190,209)"></stop>
+<stop offset="35%" stop-color="rgb(152,189,208)"></stop>
+<stop offset="36%" stop-color="rgb(150,187,207)"></stop>
+<stop offset="37%" stop-color="rgb(148,186,206)"></stop>
+<stop offset="38%" stop-color="rgb(146,184,205)"></stop>
+<stop offset="39%" stop-color="rgb(144,183,204)"></stop>
+<stop offset="40%" stop-color="rgb(142,181,203)"></stop>
+<stop offset="41%" stop-color="rgb(139,180,202)"></stop>
+<stop offset="42%" stop-color="rgb(137,179,201)"></stop>
+<stop offset="43%" stop-color="rgb(135,177,200)"></stop>
+<stop offset="44%" stop-color="rgb(133,176,198)"></stop>
+<stop offset="45%" stop-color="rgb(131,174,197)"></stop>
+<stop offset="46%" stop-color="rgb(129,173,196)"></stop>
+<stop offset="47%" stop-color="rgb(127,171,195)"></stop>
+<stop offset="48%" stop-color="rgb(125,170,194)"></stop>
+<stop offset="49%" stop-color="rgb(123,168,193)"></stop>
+<stop offset="50%" stop-color="rgb(121,167,192)"></stop>
+<stop offset="51%" stop-color="rgb(118,166,191)"></stop>
+<stop offset="52%" stop-color="rgb(116,164,190)"></stop>
+<stop offset="53%" stop-color="rgb(114,163,189)"></stop>
+<stop offset="54%" stop-color="rgb(112,161,188)"></stop>
+<stop offset="55.00000000000001%" stop-color="rgb(110,160,187)"></stop>
+<stop offset="56.00000000000001%" stop-color="rgb(108,158,186)"></stop>
+<stop offset="56.99999999999999%" stop-color="rgb(106,157,184)"></stop>
+<stop offset="57.99999999999999%" stop-color="rgb(104,155,183)"></stop>
+<stop offset="59%" stop-color="rgb(102,154,182)"></stop>
+<stop offset="60%" stop-color="rgb(99,153,181)"></stop>
+<stop offset="61%" stop-color="rgb(97,151,180)"></stop>
+<stop offset="62%" stop-color="rgb(95,150,179)"></stop>
+<stop offset="63%" stop-color="rgb(93,148,178)"></stop>
+<stop offset="64%" stop-color="rgb(91,147,177)"></stop>
+<stop offset="65%" stop-color="rgb(89,145,176)"></stop>
+<stop offset="66%" stop-color="rgb(87,144,175)"></stop>
+<stop offset="67%" stop-color="rgb(85,143,174)"></stop>
+<stop offset="68%" stop-color="rgb(83,141,173)"></stop>
+<stop offset="69%" stop-color="rgb(80,140,171)"></stop>
+<stop offset="70%" stop-color="rgb(78,138,170)"></stop>
+<stop offset="71%" stop-color="rgb(76,137,169)"></stop>
+<stop offset="72%" stop-color="rgb(74,135,168)"></stop>
+<stop offset="73%" stop-color="rgb(72,134,167)"></stop>
+<stop offset="74%" stop-color="rgb(70,132,166)"></stop>
+<stop offset="75%" stop-color="rgb(68,131,165)"></stop>
+<stop offset="76%" stop-color="rgb(66,130,164)"></stop>
+<stop offset="77%" stop-color="rgb(64,128,163)"></stop>
+<stop offset="78%" stop-color="rgb(61,127,162)"></stop>
+<stop offset="79%" stop-color="rgb(59,125,161)"></stop>
+<stop offset="80%" stop-color="rgb(57,124,160)"></stop>
+<stop offset="81%" stop-color="rgb(55,122,159)"></stop>
+<stop offset="82%" stop-color="rgb(53,121,157)"></stop>
+<stop offset="83%" stop-color="rgb(51,119,156)"></stop>
+<stop offset="84%" stop-color="rgb(49,118,155)"></stop>
+<stop offset="85%" stop-color="rgb(47,117,154)"></stop>
+<stop offset="86%" stop-color="rgb(45,115,153)"></stop>
+<stop offset="87%" stop-color="rgb(42,114,152)"></stop>
+<stop offset="88%" stop-color="rgb(40,112,151)"></stop>
+<stop offset="89%" stop-color="rgb(38,111,150)"></stop>
+<stop offset="90%" stop-color="rgb(36,109,149)"></stop>
+<stop offset="91%" stop-color="rgb(34,108,148)"></stop>
+<stop offset="92%" stop-color="rgb(32,107,147)"></stop>
+<stop offset="93%" stop-color="rgb(30,105,146)"></stop>
+<stop offset="94%" stop-color="rgb(28,104,144)"></stop>
+<stop offset="95%" stop-color="rgb(26,102,143)"></stop>
+<stop offset="96%" stop-color="rgb(23,101,142)"></stop>
+<stop offset="97%" stop-color="rgb(21,99,141)"></stop>
+<stop offset="98%" stop-color="rgb(19,98,140)"></stop>
+<stop offset="99%" stop-color="rgb(17,96,139)"></stop>
+<stop offset="100%" stop-color="rgb(15,95,138)"></stop>
+</linearGradient>
+</defs>
+<style ><![CDATA[
+.zr1-cls-4:hover {
+cursor:pointer;
+fill:rgba(216,240,254,1);
+}
+.zr1-cls-5:hover {
+cursor:pointer;
+fill:rgba(235,254,255,1);
+}
+.zr1-cls-6:hover {
+cursor:pointer;
+fill:rgba(204,232,247,1);
+}
+.zr1-cls-7:hover {
+cursor:pointer;
+fill:rgba(144,191,216,1);
+}
+.zr1-cls-8:hover {
+cursor:pointer;
+fill:rgba(105,165,196,1);
+}
+.zr1-cls-9:hover {
+cursor:pointer;
+fill:rgba(134,184,212,1);
+}
+.zr1-cls-10:hover {
+cursor:pointer;
+fill:rgba(102,162,195,1);
+}
+.zr1-cls-11:hover {
+cursor:pointer;
+fill:rgba(89,154,189,1);
+}
+.zr1-cls-12:hover {
+cursor:pointer;
+fill:rgba(220,243,255,1);
+}
+.zr1-cls-13:hover {
+cursor:pointer;
+fill:rgba(206,234,249,1);
+}
+.zr1-cls-14:hover {
+cursor:pointer;
+fill:rgba(92,156,191,1);
+}
+.zr1-cls-15:hover {
+cursor:pointer;
+fill:rgba(115,171,202,1);
+}
+.zr1-cls-16:hover {
+cursor:pointer;
+fill:rgba(80,147,184,1);
+}
+.zr1-cls-17:hover {
+cursor:pointer;
+fill:rgba(147,193,218,1);
+}
+.zr1-cls-18:hover {
+cursor:pointer;
+fill:rgba(95,158,192,1);
+}
+.zr1-cls-19:hover {
+cursor:pointer;
+fill:rgba(108,167,199,1);
+}
+.zr1-cls-20:hover {
+cursor:pointer;
+fill:rgba(83,149,185,1);
+}
+.zr1-cls-21:hover {
+cursor:pointer;
+fill:rgba(86,151,188,1);
+}
+.zr1-cls-22:hover {
+cursor:pointer;
+fill:rgba(149,195,220,1);
+}
+.zr1-cls-23:hover {
+cursor:pointer;
+fill:rgba(140,189,215,1);
+}
+.zr1-cls-24:hover {
+cursor:pointer;
+fill:rgba(233,251,255,1);
+}
+.zr1-cls-25:hover {
+cursor:pointer;
+fill:rgba(121,176,205,1);
+}
+.zr1-cls-26:hover {
+cursor:pointer;
+fill:rgba(51,128,169,1);
+}
+.zr1-cls-27:hover {
+cursor:pointer;
+fill:rgba(35,117,161,1);
+}
+.zr1-cls-28:hover {
+cursor:pointer;
+fill:rgba(130,182,210,1);
+}
+.zr1-cls-29:hover {
+cursor:pointer;
+fill:rgba(16,104,151,1);
+}
+.zr1-cls-30:hover {
+pointer-events:none;
+}
+.zr1-cls-31:hover {
+cursor:pointer;
+fill:rgba(0,0,0,1);
+}
+.zr1-cls-32:hover {
+cursor:pointer;
+fill:[object Object];
+}
+.zr1-cls-33:hover {
+cursor:pointer;
+fill:[object Object];
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>値は、その時刻から3時間の、1分あたりの平均の要求数です。日曜の21時台は73件、平日の21時台は平均52件でした。3時台はどの曜日も5件以下なので、DB の保守作業はこの時間帯に行います。</p>
+<h2>応答時間の目標に対する実績</h2>
+<p class="claim">500ミリ秒以内に応答した割合は、注文作成だけが目標の95%を下回りました。</p>
+<figure><svg width="100%" role="img" aria-label="注文照会 99.6%、在庫照会 99.2%、注文取消 97.4%、注文作成 93.8%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 196">
+<rect width="720" height="196" x="0" y="0" fill="none"></rect>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(62 49.75)" fill="#1c2530">注文照会</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(62 89.25)" fill="#1c2530">在庫照会</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(62 128.75)" fill="#1c2530">注文取消</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:700;" transform="translate(62 168.25)" fill="#1c2530">注文作成</text>
+<path d="M76 41.8L656.3 41.8A4 4 0 0 1 660.3 45.8L660.3 53.8A4 4 0 0 1 656.3 57.8L76 57.8L76 41.8Z" fill="#dbe7ef" class="zr2-cls-34"></path>
+<path d="M76 81.3L656.3 81.3A4 4 0 0 1 660.3 85.3L660.3 93.3A4 4 0 0 1 656.3 97.3L76 97.3L76 81.3Z" fill="#dbe7ef" class="zr2-cls-34"></path>
+<path d="M76 120.8L656.3 120.8A4 4 0 0 1 660.3 124.8L660.3 132.8A4 4 0 0 1 656.3 136.8L76 136.8L76 120.8Z" fill="#dbe7ef" class="zr2-cls-34"></path>
+<path d="M76 160.3L656.3 160.3A4 4 0 0 1 660.3 164.3L660.3 172.3A4 4 0 0 1 656.3 176.3L76 176.3L76 160.3Z" fill="#dbe7ef" class="zr2-cls-34"></path>
+<path d="M76 41.8L653.9 41.8A4 4 0 0 1 657.9 45.8L657.9 53.8A4 4 0 0 1 653.9 57.8L76 57.8L76 41.8Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr2-cls-35"></path>
+<path d="M76 81.3L651.6 81.3A4 4 0 0 1 655.6 85.3L655.6 93.3A4 4 0 0 1 651.6 97.3L76 97.3L76 81.3Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr2-cls-35"></path>
+<path d="M76 120.8L641.1 120.8A4 4 0 0 1 645.1 124.8L645.1 132.8A4 4 0 0 1 641.1 136.8L76 136.8L76 120.8Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr2-cls-35"></path>
+<path d="M76 160.3L620 160.3A4 4 0 0 1 624 164.3L624 172.3A4 4 0 0 1 620 176.3L76 176.3L76 160.3Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr2-cls-35"></path>
+<path d="M76 41.8l584.3 0l0 16l-584.2 0Z" fill="none" pointer-events="visible" ecmeta_series_index="1" ecmeta_data_index="0" ecmeta_ssr_type="chart" ecmeta_silent="true" class="zr2-cls-34"></path>
+<path d="M76 81.3l584.3 0l0 16l-584.2 0Z" fill="none" pointer-events="visible" ecmeta_series_index="1" ecmeta_data_index="1" ecmeta_ssr_type="chart" ecmeta_silent="true" class="zr2-cls-34"></path>
+<path d="M76 120.8l584.3 0l0 16l-584.2 0Z" fill="none" pointer-events="visible" ecmeta_series_index="1" ecmeta_data_index="2" ecmeta_ssr_type="chart" ecmeta_silent="true" class="zr2-cls-34"></path>
+<path d="M76 160.3l584.3 0l0 16l-584.2 0Z" fill="none" pointer-events="visible" ecmeta_series_index="1" ecmeta_data_index="3" ecmeta_ssr_type="chart" ecmeta_silent="true" class="zr2-cls-34"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(670.25 49.75)" fill="#1c2530">99.6%</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(670.25 89.25)" fill="#1c2530">99.2%</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(670.25 128.75)" fill="#1c2530">97.4%</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:700;" transform="translate(670.25 168.25)" fill="#1c2530">93.8%</text>
+<path d="M631 30L631 188" fill="none" pointer-events="visible" stroke="#1c2530" stroke-width="2" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" ecmeta_silent="true" class="zr2-cls-34"></path>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:700;" xml:space="preserve" y="-6" transform="translate(631.0375 25)" fill="#1c2530">目標 95%</text>
+<style ><![CDATA[
+.zr2-cls-34:hover {
+pointer-events:none;
+}
+.zr2-cls-35:hover {
+cursor:pointer;
+fill:rgba(16,104,151,1);
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>注文作成は41万2,000件のうち、2万5,544件が500ミリ秒を超えました。注文作成は処理の途中で決済サービスの応答を待つため、ほかの API より応答に時間がかかります。</p>
+<h2>応答時間のばらつき</h2>
+<p class="claim">注文作成の応答時間は、中央値が277ミリ秒で、遅い要求は600ミリ秒を超えます。</p>
+<figure><svg width="100%" role="img" aria-label="注文作成、注文取消、在庫照会、注文照会の値のばらつき" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 280">
+<rect width="720" height="280" x="0" y="0" fill="none"></rect>
+<path d="M76.5 8L76.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M164.5 8L164.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M253.5 8L253.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M341.5 8L341.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M430.5 8L430.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M519.5 8L519.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M607.5 8L607.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<path d="M696.5 8L696.5 228" fill="none" pointer-events="visible" stroke="#e3e7ec" class="zr3-cls-36"></path>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(386 260)" fill="#5b6673">ミリ秒</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(62 35.5)" fill="#1c2530">注文作成</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(62 90.5)" fill="#1c2530">注文取消</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(62 145.5)" fill="#1c2530">在庫照会</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(62 200.5)" fill="#1c2530">注文照会</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(76 236)" fill="#5b6673">0</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(164.5714 236)" fill="#5b6673">100</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(253.1429 236)" fill="#5b6673">200</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(341.7143 236)" fill="#5b6673">300</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(430.2857 236)" fill="#5b6673">400</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(518.8571 236)" fill="#5b6673">500</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(607.4286 236)" fill="#5b6673">600</text>
+<text dominant-baseline="central" text-anchor="middle" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" y="6" transform="translate(696 236)" fill="#5b6673">700</text>
+<path d="M254.3 24.5L254.3 46.5L433.8 46.5L433.8 24.5ZM195.6 35.5L254.3 35.5M635.8 35.5L433.8 35.5M195.6 24.5L195.6 46.5M635.8 24.5L635.8 46.5M321.3 24.5L321.3 46.5" fill="#e2eff6" stroke="#0f5f8a" stroke-width="1.6" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr3-cls-37"></path>
+<path d="M229.9 79.5L229.9 101.5L300.1 101.5L300.1 79.5ZM179.6 90.5L229.9 90.5M405.4 90.5L300.1 90.5M179.6 79.5L179.6 101.5M405.4 79.5L405.4 101.5M257.6 79.5L257.6 101.5" fill="#e2eff6" stroke="#0f5f8a" stroke-width="1.6" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr3-cls-37"></path>
+<path d="M119.2 134.5L119.2 156.5L136.7 156.5L136.7 134.5ZM94.6 145.5L119.2 145.5M162.9 145.5L136.7 145.5M94.6 134.5L94.6 156.5M162.9 134.5L162.9 156.5M128.7 134.5L128.7 156.5" fill="#e2eff6" stroke="#0f5f8a" stroke-width="1.6" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr3-cls-37"></path>
+<path d="M107.7 189.5L107.7 211.5L122.5 211.5L122.5 189.5ZM94.6 200.5L107.7 200.5M144.8 200.5L122.5 200.5M94.6 189.5L94.6 211.5M144.8 189.5L144.8 211.5M113.6 189.5L113.6 211.5" fill="#e2eff6" stroke="#0f5f8a" stroke-width="1.6" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr3-cls-37"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(3.5,0,0,3.5,406.3714,90.5)" fill="#ffffff" fill-opacity="0.8" stroke="#0f5f8a" stroke-width="0.4571428571428572" stroke-opacity="0.8" ecmeta_series_index="1" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr3-cls-38"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(3.5,0,0,3.5,164.5714,145.5)" fill="#ffffff" fill-opacity="0.8" stroke="#0f5f8a" stroke-width="0.4571428571428572" stroke-opacity="0.8" ecmeta_series_index="1" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr3-cls-38"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(3.5,0,0,3.5,165.4571,145.5)" fill="#ffffff" fill-opacity="0.8" stroke="#0f5f8a" stroke-width="0.4571428571428572" stroke-opacity="0.8" ecmeta_series_index="1" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr3-cls-38"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(3.5,0,0,3.5,167.2286,145.5)" fill="#ffffff" fill-opacity="0.8" stroke="#0f5f8a" stroke-width="0.4571428571428572" stroke-opacity="0.8" ecmeta_series_index="1" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr3-cls-38"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(3.5,0,0,3.5,167.2286,145.5)" fill="#ffffff" fill-opacity="0.8" stroke="#0f5f8a" stroke-width="0.4571428571428572" stroke-opacity="0.8" ecmeta_series_index="1" ecmeta_data_index="4" ecmeta_ssr_type="chart" class="zr3-cls-38"></path>
+<path d="M1 0A1 1 0 1 1 1 -0.1A1 1 0 0 1 1 0" transform="matrix(3.5,0,0,3.5,156.6,200.5)" fill="#ffffff" fill-opacity="0.8" stroke="#0f5f8a" stroke-width="0.4571428571428572" stroke-opacity="0.8" ecmeta_series_index="1" ecmeta_data_index="5" ecmeta_ssr_type="chart" class="zr3-cls-38"></path>
+<style ><![CDATA[
+.zr3-cls-36:hover {
+pointer-events:none;
+}
+.zr3-cls-37:hover {
+cursor:pointer;
+fill:rgba(248,255,255,1);
+stroke-width:2;
+}
+.zr3-cls-38:hover {
+cursor:pointer;
+fill:rgba(255,255,255,1);
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>各 API から40件ずつ抜き出した値です。注文作成は、4件に1件が404ミリ秒以上かかっています。注文照会と在庫照会は、最も遅い要求でも103ミリ秒以内でした。</p>
+<h2>注文が成立しなかった理由</h2>
+<p class="claim">注文の要求41万2,000件のうち、91.7%が決済まで成功しました。</p>
+<figure><svg width="100%" role="img" aria-label="注文の要求から受付へ391,400件、注文の要求から在庫不足へ12,360件、注文の要求から入力の誤りへ8,240件、受付から決済に成功へ377,700件、受付からカードの拒否へ11,350件、受付から決済の時間切れへ2,350件" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 280">
+<rect width="720" height="280" x="0" y="0" fill="none"></rect>
+<path d="M14 4.2C144.6 4.2 144.6 7.5 275.2 7.5L275.2 193.7C144.6 193.7 144.6 190.4 14 190.4Z" transform="translate(4 10)" fill="#5b6673" fill-opacity="0.25" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr4-cls-39"></path>
+<path d="M14 190.4C282.2 190.4 282.2 195.7 550.4 195.7L550.4 201.6C282.2 201.6 282.2 196.3 14 196.3Z" transform="translate(4 10)" fill="#5b6673" fill-opacity="0.25" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr4-cls-39"></path>
+<path d="M14 196.3C282.2 196.3 282.2 239 550.4 239L550.4 242.9C282.2 242.9 282.2 200.2 14 200.2Z" transform="translate(4 10)" fill="#5b6673" fill-opacity="0.25" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr4-cls-39"></path>
+<path d="M289.2 7.5C419.8 7.5 419.8 0 550.4 0L550.4 179.7C419.8 179.7 419.8 187.2 289.2 187.2Z" transform="translate(4 10)" fill="#2a78d6" fill-opacity="0.25" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<path d="M289.2 187.2C419.8 187.2 419.8 217.6 550.4 217.6L550.4 223C419.8 223 419.8 192.6 289.2 192.6Z" transform="translate(4 10)" fill="#2a78d6" fill-opacity="0.25" ecmeta_series_index="0" ecmeta_data_index="4" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<path d="M289.2 192.6C419.8 192.6 419.8 258.9 550.4 258.9L550.4 260C419.8 260 419.8 193.7 289.2 193.7Z" transform="translate(4 10)" fill="#2a78d6" fill-opacity="0.25" ecmeta_series_index="0" ecmeta_data_index="5" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<path d="M2 4.2L12 4.2A2 2 0 0 1 14 6.2L14 198.2A2 2 0 0 1 12 200.2L2 200.2A2 2 0 0 1 0 198.2L0 6.2A2 2 0 0 1 2 4.2Z" transform="translate(4 10)" fill="#5b6673" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr4-cls-39"></path>
+<path d="M277.2 7.5L287.2 7.5A2 2 0 0 1 289.2 9.5L289.2 191.7A2 2 0 0 1 287.2 193.7L277.2 193.7A2 2 0 0 1 275.2 191.7L275.2 9.5A2 2 0 0 1 277.2 7.5Z" transform="translate(4 10)" fill="#2a78d6" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<path d="M552.4 195.7L562.4 195.7A2 2 0 0 1 564.4 197.7L564.4 199.6A2 2 0 0 1 562.4 201.6L552.4 201.6A2 2 0 0 1 550.4 199.6L550.4 197.7A2 2 0 0 1 552.4 195.7Z" transform="translate(4 10)" fill="#eb6834" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr4-cls-41"></path>
+<path d="M552.4 239L562.4 239A2 2 0 0 1 564.4 240.9L564.4 240.9A2 2 0 0 1 562.4 242.9L552.4 242.9A2 2 0 0 1 550.4 240.9L550.4 240.9A2 2 0 0 1 552.4 239Z" transform="translate(4 10)" fill="#1baf7a" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr4-cls-42"></path>
+<path d="M552.4 0L562.4 0A2 2 0 0 1 564.4 2L564.4 177.7A2 2 0 0 1 562.4 179.7L552.4 179.7A2 2 0 0 1 550.4 177.7L550.4 2A2 2 0 0 1 552.4 0Z" transform="translate(4 10)" fill="#2a78d6" ecmeta_series_index="0" ecmeta_data_index="4" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<path d="M552.4 217.6L562.4 217.6A2 2 0 0 1 564.4 219.6L564.4 221A2 2 0 0 1 562.4 223L552.4 223A2 2 0 0 1 550.4 221L550.4 219.6A2 2 0 0 1 552.4 217.6Z" transform="translate(4 10)" fill="#2a78d6" ecmeta_series_index="0" ecmeta_data_index="5" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<path d="M551 258.9L563.8 258.9A0.6 0.6 0 0 1 564.4 259.4A0.6 0.6 0 0 1 563.8 260L551 260A0.6 0.6 0 0 1 550.4 259.4A0.6 0.6 0 0 1 551 258.9Z" transform="translate(4 10)" fill="#2a78d6" ecmeta_series_index="0" ecmeta_data_index="6" ecmeta_ssr_type="chart" class="zr4-cls-40"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(23 112.2262)" fill="#1c2530">注文の要求 412,000件</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(298.2 110.5904)" fill="#1c2530">受付 391,400件</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(573.4 208.6225)" fill="#1c2530">在庫不足 12,360件</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(573.4 250.922)" fill="#1c2530">入力の誤り 8,240件</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(573.4 99.8413)" fill="#1c2530">決済に成功 377,700件</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(573.4 230.2623)" fill="#1c2530">カードの拒否 11,350件</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(573.4 269.441)" fill="#1c2530">決済の時間切れ 2,350件</text>
+<style ><![CDATA[
+.zr4-cls-39:hover {
+cursor:pointer;
+fill:rgba(100,112,126,1);
+}
+.zr4-cls-40:hover {
+cursor:pointer;
+fill:rgba(46,132,235,1);
+}
+.zr4-cls-41:hover {
+cursor:pointer;
+fill:rgba(255,114,57,1);
+}
+.zr4-cls-42:hover {
+cursor:pointer;
+fill:rgba(29,192,134,1);
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>成立しなかった理由で最も多いのは在庫不足で、要求の3%です。決済の時間切れは2,350件で、決済サービスが3秒以内に応答しなかった注文です。時間切れの注文は取消になり、利用者は注文をやり直す必要があります。</p>
+<h2>5xx エラーの原因</h2>
+<p class="claim">5xx エラー2,900件のうち、64%は9月17日の障害で発生しました。</p>
+<figure><svg width="100%" role="img" aria-label="DB接続の枯渇 64%（1,860件）、決済サービスの遅延 22%（640件）、デプロイ中の切断 7%（210件）、その他 7%（190件）" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 100">
+<rect width="720" height="100" x="0" y="0" fill="none"></rect>
+<path d="M4.5 68.5L461.3 68.5L461.3 91.5L4.5 91.5A4 4 0 0 1 0.5 87.5L0.5 72.5A4 4 0 0 1 4.5 68.5Z" fill="#2a78d6" stroke="#ffffff" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr5-cls-43"></path>
+<path d="M462.3 68.5l157.9 0l0 23l-157.9 0Z" fill="#eb6834" stroke="#ffffff" ecmeta_series_index="1" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr5-cls-44"></path>
+<path d="M621.2 68.5l51.1 0l0 23l-51.1 0Z" fill="#1baf7a" stroke="#ffffff" ecmeta_series_index="2" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr5-cls-45"></path>
+<path d="M673.3 68.5L715.5 68.5A4 4 0 0 1 719.5 72.5L719.5 87.5A4 4 0 0 1 715.5 91.5L673.3 91.5L673.3 68.5Z" fill="#a8b0b9" stroke="#ffffff" ecmeta_series_index="3" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr5-cls-46"></path>
+<path d="M-5 -5l643 0l0 60l-643 0Z" transform="translate(5 5)" fill="rgb(0,0,0)" fill-opacity="0" stroke="#b7b9be" stroke-width="0" class="zr5-cls-47"></path>
+<path d="M3 0L9 0A3 3 0 0 1 12 3L12 9A3 3 0 0 1 9 12L3 12A3 3 0 0 1 0 9L0 3A3 3 0 0 1 3 0Z" transform="translate(6 6)" fill="#2a78d6" stroke="#ffffff" stroke-width="2" stroke-linecap="butt" stroke-miterlimit="10" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="legend" ecmeta_silent="true" class="zr5-cls-47"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" x="17" y="6" transform="translate(6 6)" fill="#1c2530">DB接続の枯渇 64%（1,860件）</text>
+<path d="M-1 -1l188.4 0l0 14l-188.4 0Z" transform="translate(6 6)" fill="none" pointer-events="visible" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="legend" class="zr5-cls-48"></path>
+<path d="M3 0L9 0A3 3 0 0 1 12 3L12 9A3 3 0 0 1 9 12L3 12A3 3 0 0 1 0 9L0 3A3 3 0 0 1 3 0Z" transform="translate(216.4 6)" fill="#eb6834" stroke="#ffffff" stroke-width="2" stroke-linecap="butt" stroke-miterlimit="10" ecmeta_series_index="1" ecmeta_data_index="1" ecmeta_ssr_type="legend" ecmeta_silent="true" class="zr5-cls-47"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" x="17" y="6" transform="translate(216.4 6)" fill="#1c2530">決済サービスの遅延 22%（640件）</text>
+<path d="M-1 -1l209.6 0l0 14l-209.6 0Z" transform="translate(216.4 6)" fill="none" pointer-events="visible" ecmeta_series_index="1" ecmeta_data_index="1" ecmeta_ssr_type="legend" class="zr5-cls-48"></path>
+<path d="M3 0L9 0A3 3 0 0 1 12 3L12 9A3 3 0 0 1 9 12L3 12A3 3 0 0 1 0 9L0 3A3 3 0 0 1 3 0Z" transform="translate(448.04 6)" fill="#1baf7a" stroke="#ffffff" stroke-width="2" stroke-linecap="butt" stroke-miterlimit="10" ecmeta_series_index="2" ecmeta_data_index="2" ecmeta_ssr_type="legend" ecmeta_silent="true" class="zr5-cls-47"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" x="17" y="6" transform="translate(448.04 6)" fill="#1c2530">デプロイ中の切断 7%（210件）</text>
+<path d="M-1 -1l190.9 0l0 14l-190.9 0Z" transform="translate(448.04 6)" fill="none" pointer-events="visible" ecmeta_series_index="2" ecmeta_data_index="2" ecmeta_ssr_type="legend" class="zr5-cls-48"></path>
+<path d="M3 0L9 0A3 3 0 0 1 12 3L12 9A3 3 0 0 1 9 12L3 12A3 3 0 0 1 0 9L0 3A3 3 0 0 1 3 0Z" transform="translate(6 42)" fill="#a8b0b9" stroke="#ffffff" stroke-width="2" stroke-linecap="butt" stroke-miterlimit="10" ecmeta_series_index="3" ecmeta_data_index="3" ecmeta_ssr_type="legend" ecmeta_silent="true" class="zr5-cls-47"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:12px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" x="17" y="6" transform="translate(6 42)" fill="#1c2530">その他 7%（190件）</text>
+<path d="M-1 -1l130.9 0l0 14l-130.9 0Z" transform="translate(6 42)" fill="none" pointer-events="visible" ecmeta_series_index="3" ecmeta_data_index="3" ecmeta_ssr_type="legend" class="zr5-cls-48"></path>
+<style ><![CDATA[
+.zr5-cls-43:hover {
+cursor:pointer;
+fill:rgba(46,132,235,1);
+}
+.zr5-cls-44:hover {
+cursor:pointer;
+fill:rgba(255,114,57,1);
+}
+.zr5-cls-45:hover {
+cursor:pointer;
+fill:rgba(29,192,134,1);
+}
+.zr5-cls-46:hover {
+cursor:pointer;
+fill:rgba(184,193,203,1);
+}
+.zr5-cls-47:hover {
+pointer-events:none;
+}
+.zr5-cls-48:hover {
+cursor:pointer;
+fill:rgba(0,0,0,0);
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>DB 接続の枯渇による1,860件は、すべて9月17日の20時9分から20時38分の間に発生しました。デプロイ中の切断は、タスクの入れ替えのときに、処理中の要求が打ち切られたものです。</p>
+<h2>9月17日の障害の経過</h2>
+<p class="claim">セールの開始でタスクが6つに増え、DB 接続が上限に達して、29分間エラーが続きました。</p>
+<figure><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 150" width="100%" role="img" aria-label="20時00分 セール開始、20時06分 タスクが6つに、20時09分 5xxエラー発生、20時31分 接続上限を変更、20時38分 復旧"><style>.zk-text{font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;fill:#1c2530;font-size:15px;font-weight:600}.zk-note{font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;fill:#5b6673;font-size:12px}.zk-box{fill:#f3f5f7;stroke:#93a0ad;stroke-width:1.2}.zk-box-em{fill:#e2eff6;stroke:#0f5f8a;stroke-width:1.7999999999999998}.zk-em{fill:#0f5f8a}.zk-band{fill:#ffffff;stroke:#93a0ad;stroke-width:1.2}.zk-line{fill:none;stroke:#5b6673;stroke-width:1.2}.zk-dash{fill:none;stroke:#93a0ad;stroke-width:1.2;stroke-dasharray:4 4}</style><defs><marker id="zk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#5b6673"/></marker></defs><path d="M0 48 L720 48" fill="none" stroke="#93a0ad" stroke-width="2" stroke-linecap="round"/><path d="M72 56 L72 82" fill="none" stroke="#93a0ad" stroke-width="1.2" stroke-linecap="round"/><circle cx="72" cy="48" r="7" fill="#ffffff" stroke="#5b6673" stroke-width="2"/><text class="zk-note" x="72" y="24" text-anchor="middle" style="fill:#5b6673;font-weight:400;font-size:13px;">20時00分</text><rect class="zk-box" x="8" y="82" width="128" height="64" rx="6"/><text class="zk-text" x="72" y="110.4" text-anchor="middle">セール開始</text><text class="zk-note" x="72" y="130.32" text-anchor="middle">要求数が通常の3倍</text><path d="M216 56 L216 82" fill="none" stroke="#93a0ad" stroke-width="1.2" stroke-linecap="round"/><circle cx="216" cy="48" r="7" fill="#ffffff" stroke="#5b6673" stroke-width="2"/><text class="zk-note" x="216" y="24" text-anchor="middle" style="fill:#5b6673;font-weight:400;font-size:13px;">20時06分</text><rect class="zk-box" x="152" y="82" width="128" height="64" rx="6"/><text class="zk-text" x="216" y="110.4" text-anchor="middle">タスクが6つに</text><text class="zk-note" x="216" y="130.32" text-anchor="middle">DB接続が120本に</text><circle cx="268" cy="82" r="10" fill="#0f5f8a"/><text class="zk-note" x="268" y="86.32" text-anchor="middle" style="fill:#fff;font-weight:700">1</text><path d="M360 56 L360 82" fill="none" stroke="#93a0ad" stroke-width="1.2" stroke-linecap="round"/><circle cx="360" cy="48" r="7" fill="#0f5f8a" stroke="#0f5f8a" stroke-width="2"/><text class="zk-note" x="360" y="24" text-anchor="middle" style="fill:#0f5f8a;font-weight:700;font-size:13px;">20時09分</text><rect class="zk-box-em" x="296" y="82" width="128" height="64" rx="6"/><text class="zk-text zk-em" x="360" y="110.4" text-anchor="middle">5xxエラー発生</text><text class="zk-note" x="360" y="130.32" text-anchor="middle">接続の上限に到達</text><circle cx="412" cy="82" r="10" fill="#0f5f8a"/><text class="zk-note" x="412" y="86.32" text-anchor="middle" style="fill:#fff;font-weight:700">2</text><path d="M504 56 L504 82" fill="none" stroke="#93a0ad" stroke-width="1.2" stroke-linecap="round"/><circle cx="504" cy="48" r="7" fill="#ffffff" stroke="#5b6673" stroke-width="2"/><text class="zk-note" x="504" y="24" text-anchor="middle" style="fill:#5b6673;font-weight:400;font-size:13px;">20時31分</text><rect class="zk-box" x="440" y="82" width="128" height="64" rx="6"/><text class="zk-text" x="504" y="110.4" text-anchor="middle">接続上限を変更</text><text class="zk-note" x="504" y="130.32" text-anchor="middle">1タスク12本に</text><path d="M648 56 L648 82" fill="none" stroke="#93a0ad" stroke-width="1.2" stroke-linecap="round"/><circle cx="648" cy="48" r="7" fill="#ffffff" stroke="#5b6673" stroke-width="2"/><text class="zk-note" x="648" y="24" text-anchor="middle" style="fill:#5b6673;font-weight:400;font-size:13px;">20時38分</text><rect class="zk-box" x="584" y="82" width="128" height="64" rx="6"/><text class="zk-text" x="648" y="110.4" text-anchor="middle">復旧</text><text class="zk-note" x="648" y="130.32" text-anchor="middle">エラー率が平常に</text></svg></figure>
+<p>1タスクあたりの接続の上限20本は、タスクが2つの前提で決めた値でした。タスク数の上限を6へ上げた時点で、接続の上限を見直していませんでした。2つの設定は別のリポジトリにあり、片方の変更がもう片方のレビューに現れません。</p>
+<div class="refs"><div class="refs-h">根拠</div><div class="ref" id="ref-1"><div class="ref-head"><span class="num">1</span><span class="tag">コード</span><span class="meta">order-infra（GitHub）</span><a class="mono" href="https://github.com/example-corp/order-infra/blob/46706242ef9f0fe43ef252311010fcf204c0e6cb/lib/api-stack.ts#L38-L40">lib/api-stack.ts</a><span class="meta">38〜40行</span><span class="meta right">コミット 4670624 時点</span></div><p>タスク数の上限を6にしている設定です。order-infra（GitHub）にあります。</p><pre class="shiki github-light" style="background-color:#fff;color:#24292e" tabindex="0"><code><span class="line"><span style="color:#6A737D">// CPU 使用率が60%を超えると、タスクを6つまで増やす。</span></span>
+<span class="line"><span style="color:#D73A49">const</span><span style="color:#005CC5"> scaling</span><span style="color:#D73A49"> =</span><span style="color:#24292E"> service.service.</span><span style="color:#6F42C1">autoScaleTaskCount</span><span style="color:#24292E">({ minCapacity: </span><span style="color:#005CC5">2</span><span style="color:#24292E">, maxCapacity: </span><span style="color:#005CC5">6</span><span style="color:#24292E"> });</span></span>
+<span class="line"><span style="color:#24292E">scaling.</span><span style="color:#6F42C1">scaleOnCpuUtilization</span><span style="color:#24292E">(</span><span style="color:#032F62">'Cpu'</span><span style="color:#24292E">, { targetUtilizationPercent: </span><span style="color:#005CC5">60</span><span style="color:#24292E"> });</span></span></code></pre></div><div class="ref" id="ref-2"><div class="ref-head"><span class="num">2</span><span class="tag">コード</span><span class="meta">order-api（CodeCommit）</span><a class="mono" href="https://ap-northeast-1.console.aws.amazon.com/codesuite/codecommit/repositories/order-api/browse/96548e44b7dfe46255db3d64c3d02c8dff2d6d53/--/src/infra/db.ts?region=ap-northeast-1&amp;lines=5-11">src/infra/db.ts</a><span class="meta">5〜11行</span><span class="meta right">コミット 96548e4 時点</span></div><p>1タスクあたりの接続の上限を20本にしている設定です。order-api（CodeCommit）にあります。</p><pre class="shiki github-light" style="background-color:#fff;color:#24292e" tabindex="0"><code><span class="line"><span style="color:#D73A49">const</span><span style="color:#005CC5"> pool</span><span style="color:#D73A49"> =</span><span style="color:#D73A49"> new</span><span style="color:#6F42C1"> Pool</span><span style="color:#24292E">({</span></span>
+<span class="line"><span style="color:#24292E">  host: process.env.</span><span style="color:#005CC5">DB_HOST</span><span style="color:#24292E">,</span></span>
+<span class="line"><span style="color:#24292E">  database: </span><span style="color:#032F62">'orders'</span><span style="color:#24292E">,</span></span>
+<span class="line"><span style="color:#24292E">  max: </span><span style="color:#005CC5">20</span><span style="color:#24292E">,</span></span>
+<span class="line"><span style="color:#24292E">  idleTimeoutMillis: </span><span style="color:#005CC5">30_000</span><span style="color:#24292E">,</span></span>
+<span class="line"><span style="color:#24292E">  connectionTimeoutMillis: </span><span style="color:#005CC5">2_000</span><span style="color:#24292E">,</span></span>
+<span class="line"><span style="color:#24292E">});</span></span></code></pre></div></div>
+<h2>費用の内訳</h2>
+<p class="claim">9月の費用は62万円で、Aurora と Fargate の2つが全体の64%を占めます。</p>
+<figure><svg width="100%" role="img" aria-label="Aurora 21.5万円、Fargate 18.4万円、CloudFront 6.8万円、NAT Gateway 5.2万円、CloudWatch 4.9万円、ALB 3.1万円、その他 2.1万円" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" baseProfile="full" viewBox="0 0 720 292">
+<rect width="720" height="292" x="0" y="0" fill="none"></rect>
+<path d="M98.5 6L98.5 286" fill="none" pointer-events="visible" stroke="#93a0ad" stroke-linecap="round" class="zr6-cls-49"></path>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(86.65 26)" fill="#1c2530">Aurora</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(86.65 66)" fill="#1c2530">Fargate</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(86.65 106)" fill="#1c2530">CloudFront</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" xml:space="preserve" transform="translate(86.65 146)" fill="#1c2530">NAT Gateway</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(86.65 186)" fill="#1c2530">CloudWatch</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(86.65 226)" fill="#1c2530">ALB</text>
+<text dominant-baseline="central" text-anchor="end" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;" transform="translate(86.65 266)" fill="#1c2530">その他</text>
+<path d="M98.6 16L561.4 16A4 4 0 0 1 565.4 20L565.4 32A4 4 0 0 1 561.4 36L98.6 36L98.6 16Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="0" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<path d="M98.6 56L494.1 56A4 4 0 0 1 498.1 60L498.1 72A4 4 0 0 1 494.1 76L98.6 76L98.6 56Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="1" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<path d="M98.6 96L242.3 96A4 4 0 0 1 246.3 100L246.3 112A4 4 0 0 1 242.3 116L98.6 116L98.6 96Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="2" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<path d="M98.6 136L207.5 136A4 4 0 0 1 211.5 140L211.5 152A4 4 0 0 1 207.5 156L98.6 156L98.6 136Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="3" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<path d="M98.6 176L201 176A4 4 0 0 1 205 180L205 192A4 4 0 0 1 201 196L98.6 196L98.6 176Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="4" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<path d="M98.6 216L162 216A4 4 0 0 1 166 220L166 232A4 4 0 0 1 162 236L98.6 236L98.6 216Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="5" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<path d="M98.6 256L140.2 256A4 4 0 0 1 144.2 260L144.2 272A4 4 0 0 1 140.2 276L98.6 276L98.6 256Z" fill="#0f5f8a" ecmeta_series_index="0" ecmeta_data_index="6" ecmeta_ssr_type="chart" class="zr6-cls-50"></path>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(573.415 26)" fill="#1c2530">21.5万円</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(506.114 66)" fill="#1c2530">18.4万円</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(254.278 106)" fill="#1c2530">6.8万円</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(219.542 146)" fill="#1c2530">5.2万円</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(213.029 186)" fill="#1c2530">4.9万円</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(173.951 226)" fill="#1c2530">3.1万円</text>
+<text dominant-baseline="central" text-anchor="start" style="font-size:13px;font-family:Hiragino Sans, Yu Gothic UI, Noto Sans JP, Noto Sans CJK JP, Meiryo, sans-serif;font-weight:400;" transform="translate(152.241 266)" fill="#1c2530">2.1万円</text>
+<style ><![CDATA[
+.zr6-cls-49:hover {
+pointer-events:none;
+}
+.zr6-cls-50:hover {
+cursor:pointer;
+fill:rgba(16,104,151,1);
+}
+
+]]>
+
+</style>
+</svg></figure>
+<p>その他は、S3 が1.3万円、Lambda が0.6万円、SQS が0.2万円です。CloudWatch の4.9万円は、ログの取り込みが大半を占めます。ログの保存期間と出力量は、10月に見直します。</p>
+<h2>10月の対応</h2>
+<p class="claim">10月は、接続の上限の再発防止と、注文作成の応答時間の改善を優先します。</p>
+<table>
+<thead>
+<tr>
+<th>対応</th>
+<th>目的</th>
+<th>担当</th>
+<th>期限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>接続の上限を、タスク数の上限から計算する</td>
+<td>9月17日の障害の再発防止</td>
+<td>基盤チーム</td>
+<td>10月16日</td>
+</tr>
+<tr>
+<td>DB 接続数が上限の80%を超えたら通知する</td>
+<td>枯渇の前に気づく</td>
+<td>基盤チーム</td>
+<td>10月16日</td>
+</tr>
+<tr>
+<td>決済の時間切れを、利用者の操作なしで再試行する</td>
+<td>注文のやり直しを減らす</td>
+<td>注文チーム</td>
+<td>10月30日</td>
+</tr>
+<tr>
+<td>ログの出力量を減らす</td>
+<td>CloudWatch の費用を下げる</td>
+<td>注文チーム</td>
+<td>10月30日</td>
+</tr>
+</tbody>
+</table>
+<p>接続の上限は、order-infra が環境変数として注文APIへ渡します。この変更で、タスク数と接続の上限を1つのリポジトリで決められます。</p>
+<h2>対応の日程</h2>
+<p class="claim">接続の上限に関する2件は10月16日までに終え、残りの2件は10月30日までに終えます。</p>
+<figure><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 270" width="100%" role="img" aria-label="接続上限を計算で決める 10/5から10/16、接続数の通知 10/12から10/16、決済の再試行 10/13から10/30、ログの削減 10/19から10/30、10月の報告 11/5"><style>.zk-text{font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;fill:#1c2530;font-size:15px;font-weight:600}.zk-note{font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;fill:#5b6673;font-size:12px}.zk-box{fill:#f3f5f7;stroke:#93a0ad;stroke-width:1.2}.zk-box-em{fill:#e2eff6;stroke:#0f5f8a;stroke-width:1.7999999999999998}.zk-em{fill:#0f5f8a}.zk-band{fill:#ffffff;stroke:#93a0ad;stroke-width:1.2}.zk-line{fill:none;stroke:#5b6673;stroke-width:1.2}.zk-dash{fill:none;stroke:#93a0ad;stroke-width:1.2;stroke-dasharray:4 4}</style><defs><marker id="zk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1 L9 5 L1 9 Z" fill="#5b6673"/></marker></defs><rect x="0" y="30" width="720" height="30" fill="#f3f5f7"/><text x="10" y="49.32" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:12px;font-weight:700;fill:#5b6673">基盤チーム</text><rect x="0" y="120" width="720" height="30" fill="#f3f5f7"/><text x="10" y="139.32" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:12px;font-weight:700;fill:#5b6673">注文チーム</text><line x1="171" y1="26" x2="171" y2="240" stroke="#e3e7ec" stroke-width="1"/><text class="zk-note" x="171" y="16" text-anchor="middle">10/5</text><line x1="277.6" y1="26" x2="277.6" y2="240" stroke="#e3e7ec" stroke-width="1"/><text class="zk-note" x="277.6" y="16" text-anchor="middle">10/12</text><line x1="384.20000000000005" y1="26" x2="384.20000000000005" y2="240" stroke="#e3e7ec" stroke-width="1"/><text class="zk-note" x="384.20000000000005" y="16" text-anchor="middle">10/19</text><line x1="490.8" y1="26" x2="490.8" y2="240" stroke="#e3e7ec" stroke-width="1"/><text class="zk-note" x="490.8" y="16" text-anchor="middle">10/26</text><line x1="597.4000000000001" y1="26" x2="597.4000000000001" y2="240" stroke="#e3e7ec" stroke-width="1"/><text class="zk-note" x="597.4000000000001" y="16" text-anchor="middle">11/2</text><line x1="704" y1="26" x2="704" y2="240" stroke="#e3e7ec" stroke-width="1"/><text class="zk-note" x="704" y="16" text-anchor="middle">11/9</text><line x1="171" y1="26" x2="704" y2="26" stroke="#93a0ad" stroke-width="1"/><text x="22" y="79.68" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:13px;fill:#1c2530;font-weight:700">接続上限を計算で決める</text><rect x="171" y="67" width="182.74285714285713" height="16" rx="4" fill="#0f5f8a"/><text class="zk-note" x="361.74285714285713" y="79.32">10/5〜10/16</text><text x="22" y="109.68" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:13px;fill:#1c2530;font-weight:400">接続数の通知</text><rect x="277.6" y="97" width="76.14285714285711" height="16" rx="4" fill="#a8b0b9"/><text class="zk-note" x="361.74285714285713" y="109.32">10/12〜10/16</text><text x="22" y="169.68" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:13px;fill:#1c2530;font-weight:400">決済の再試行</text><rect x="292.8285714285714" y="157" width="274.11428571428576" height="16" rx="4" fill="#a8b0b9"/><text class="zk-note" x="574.9428571428572" y="169.32">10/13〜10/30</text><text x="22" y="199.68" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:13px;fill:#1c2530;font-weight:400">ログの削減</text><rect x="384.20000000000005" y="187" width="182.74285714285713" height="16" rx="4" fill="#a8b0b9"/><text class="zk-note" x="574.9428571428572" y="199.32">10/19〜10/30</text><text x="10" y="229.68" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:13px;fill:#1c2530;font-weight:400">10月の報告</text><path d="M650.7 217 L658.7 225 L650.7 233 L642.7 225 Z" fill="#a8b0b9"/><text class="zk-note" x="664.7" y="229.32">11/5</text><line x1="239.5285714285714" y1="26" x2="239.5285714285714" y2="240" stroke="#1c2530" stroke-width="1.5" stroke-dasharray="4 3"/><rect x="199.0285714285714" y="242" width="80.99999999999999" height="20" rx="10" fill="#1c2530"/><text x="239.5285714285714" y="256.32" text-anchor="middle" style="font-family:'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', 'Noto Sans CJK JP', 'Meiryo', sans-serif;font-size:12px;font-weight:600;fill:#fff">報告日 10/9</text></svg></figure>
+<p>接続の上限の変更は、次のセールが始まる10月23日より前に本番へ出します。決済の再試行は、決済サービスの担当者との確認に1週間を見込んでいます。</p>
+</main>
+<script type="application/json" id="zukai-source">"# 注文管理システム 運用レポート 2026年9月\n\nこの資料は、2026年9月の注文管理システムの利用状況、応答時間、障害、費用を、開発チームと運用チームに報告します。数値は `data/` の CSV を集計した値です。\n\n## 今月の結果\n\n注文作成の応答時間だけが目標に届かず、ほかの3つの指標は目標を満たしました。\n\n| 指標 | 目標 | 実績 | 結果 |\n|---|---|---|---|\n| 成功した要求の割合 | 99.9%以上 | 99.94% | 達成 |\n| 注文作成が500ミリ秒以内に応答した割合 | 95%以上 | 93.8% | 未達 |\n| 障害の件数 | 1件以下 | 1件 | 達成 |\n| 費用 | 65万円以下 | 62万円 | 達成 |\n\n成功した要求の割合は、全要求496万1,500件のうち、5xx エラーにならなかった要求の割合です。障害は9月17日の1件で、復旧までに29分かかりました。\n\n## 要求数の推移\n\n9月の注文作成は41.2万件で、6か月で最も多くなりました。\n\n```yaml figure\ntype: line\nunit: 万件／月\nx: [4月, 5月, 6月, 7月, 8月, 9月]\nseries:\n  - label: 注文作成\n    values: [31.8, 33.5, 34.1, 39.6, 38.2, 41.2]\nmarker:\n  at: 7月\n  label: アプリ版を公開\n```\n\n注文作成は、前月から7.9%増えました。注文照会は158万件で、前月から6%増えています。注文1件あたりの照会は約3.8回で、4月の3.7回からほぼ変わっていません。\n\n## 曜日と時間帯ごとの負荷\n\n負荷が最も高いのは日曜の21時台で、平日の同じ時間帯の1.4倍です。\n\n```yaml figure\ntype: heatmap\nunit: 件／分\nx: [0時, 3時, 6時, 9時, 12時, 15時, 18時, 21時]\ny: [月, 火, 水, 木, 金, 土, 日]\nvalues:\n  - [10, 4, 14, 33, 45, 36, 46, 50]\n  - [9, 4, 13, 33, 49, 33, 42, 53]\n  - [10, 4, 13, 32, 48, 36, 44, 52]\n  - [9, 4, 13, 32, 46, 33, 44, 51]\n  - [10, 4, 14, 31, 48, 34, 46, 52]\n  - [13, 5, 14, 34, 53, 40, 62, 67]\n  - [13, 4, 14, 37, 50, 36, 62, 73]\n```\n\n値は、その時刻から3時間の、1分あたりの平均の要求数です。日曜の21時台は73件、平日の21時台は平均52件でした。3時台はどの曜日も5件以下なので、DB の保守作業はこの時間帯に行います。\n\n## 応答時間の目標に対する実績\n\n500ミリ秒以内に応答した割合は、注文作成だけが目標の95%を下回りました。\n\n```yaml figure\ntype: progress\nunit: \"%\"\nmax: 100\ntarget: 95\nitems:\n  - label: 注文照会\n    value: 99.6\n  - label: 在庫照会\n    value: 99.2\n  - label: 注文取消\n    value: 97.4\n  - label: 注文作成\n    value: 93.8\n    emphasis: true\n```\n\n注文作成は41万2,000件のうち、2万5,544件が500ミリ秒を超えました。注文作成は処理の途中で決済サービスの応答を待つため、ほかの API より応答に時間がかかります。\n\n## 応答時間のばらつき\n\n注文作成の応答時間は、中央値が277ミリ秒で、遅い要求は600ミリ秒を超えます。\n\n```yaml figure\ntype: boxplot\nunit: ミリ秒\nitems:\n  - label: 注文作成\n    values: [135, 137, 138, 164, 182, 183, 188, 193, 195, 199, 202, 207, 214, 226, 236, 260, 263, 267, 271, 273, 281, 288, 288, 290, 330, 339, 354, 366, 374, 402, 410, 410, 418, 447, 448, 457, 459, 498, 554, 632]\n  - label: 注文取消\n    values: [117, 117, 132, 141, 153, 156, 164, 167, 172, 173, 174, 183, 187, 188, 193, 196, 196, 202, 204, 204, 206, 208, 211, 213, 216, 225, 227, 230, 235, 252, 256, 263, 265, 267, 271, 272, 281, 338, 358, 373]\n  - label: 在庫照会\n    values: [21, 30, 36, 41, 46, 46, 46, 47, 47, 48, 49, 50, 50, 52, 55, 57, 57, 58, 59, 59, 60, 61, 61, 64, 64, 65, 66, 66, 67, 68, 70, 70, 71, 75, 96, 98, 100, 101, 103, 103]\n  - label: 注文照会\n    values: [21, 26, 26, 31, 32, 32, 34, 35, 35, 35, 36, 37, 38, 39, 39, 39, 39, 40, 41, 42, 43, 43, 44, 45, 49, 51, 51, 52, 52, 52, 54, 54, 54, 55, 57, 69, 71, 74, 75, 91]\n```\n\n各 API から40件ずつ抜き出した値です。注文作成は、4件に1件が404ミリ秒以上かかっています。注文照会と在庫照会は、最も遅い要求でも103ミリ秒以内でした。\n\n## 注文が成立しなかった理由\n\n注文の要求41万2,000件のうち、91.7%が決済まで成功しました。\n\n```yaml figure\ntype: sankey\nunit: 件\nlinks:\n  - [注文の要求, 受付, 391400]\n  - [注文の要求, 在庫不足, 12360]\n  - [注文の要求, 入力の誤り, 8240]\n  - [受付, 決済に成功, 377700]\n  - [受付, カードの拒否, 11350]\n  - [受付, 決済の時間切れ, 2350]\n```\n\n成立しなかった理由で最も多いのは在庫不足で、要求の3%です。決済の時間切れは2,350件で、決済サービスが3秒以内に応答しなかった注文です。時間切れの注文は取消になり、利用者は注文をやり直す必要があります。\n\n## 5xx エラーの原因\n\n5xx エラー2,900件のうち、64%は9月17日の障害で発生しました。\n\n```yaml figure\ntype: stack\nunit: 件\nitems:\n  - label: DB接続の枯渇\n    value: 1860\n  - label: 決済サービスの遅延\n    value: 640\n  - label: デプロイ中の切断\n    value: 210\n  - label: その他\n    value: 190\n```\n\nDB 接続の枯渇による1,860件は、すべて9月17日の20時9分から20時38分の間に発生しました。デプロイ中の切断は、タスクの入れ替えのときに、処理中の要求が打ち切られたものです。\n\n## 9月17日の障害の経過\n\nセールの開始でタスクが6つに増え、DB 接続が上限に達して、29分間エラーが続きました。\n\n```yaml figure\ntype: timeline\nevents:\n  - date: 20時00分\n    label: セール開始\n    note: 要求数が通常の3倍\n  - date: 20時06分\n    label: タスクが6つに\n    note: DB接続が120本に\n    ref: 1\n  - date: 20時09分\n    label: 5xxエラー発生\n    note: 接続の上限に到達\n    emphasis: true\n    ref: 2\n  - date: 20時31分\n    label: 接続上限を変更\n    note: 1タスク12本に\n  - date: 20時38分\n    label: 復旧\n    note: エラー率が平常に\n```\n\n1タスクあたりの接続の上限20本は、タスクが2つの前提で決めた値でした。タスク数の上限を6へ上げた時点で、接続の上限を見直していませんでした。2つの設定は別のリポジトリにあり、片方の変更がもう片方のレビューに現れません。\n\n```yaml refs\n- code: infra:lib/api-stack.ts#L38-L40\n  note: タスク数の上限を6にしている設定です。order-infra（GitHub）にあります。\n- code: api:src/infra/db.ts#L5-L11\n  note: 1タスクあたりの接続の上限を20本にしている設定です。order-api（CodeCommit）にあります。\n```\n\n## 費用の内訳\n\n9月の費用は62万円で、Aurora と Fargate の2つが全体の64%を占めます。\n\n```yaml figure\ntype: bar\nunit: 万円\nitems:\n  - label: Aurora\n    value: 21.5\n  - label: Fargate\n    value: 18.4\n  - label: CloudFront\n    value: 6.8\n  - label: NAT Gateway\n    value: 5.2\n  - label: CloudWatch\n    value: 4.9\n  - label: ALB\n    value: 3.1\n  - label: その他\n    value: 2.1\n```\n\nその他は、S3 が1.3万円、Lambda が0.6万円、SQS が0.2万円です。CloudWatch の4.9万円は、ログの取り込みが大半を占めます。ログの保存期間と出力量は、10月に見直します。\n\n## 10月の対応\n\n10月は、接続の上限の再発防止と、注文作成の応答時間の改善を優先します。\n\n| 対応 | 目的 | 担当 | 期限 |\n|---|---|---|---|\n| 接続の上限を、タスク数の上限から計算する | 9月17日の障害の再発防止 | 基盤チーム | 10月16日 |\n| DB 接続数が上限の80%を超えたら通知する | 枯渇の前に気づく | 基盤チーム | 10月16日 |\n| 決済の時間切れを、利用者の操作なしで再試行する | 注文のやり直しを減らす | 注文チーム | 10月30日 |\n| ログの出力量を減らす | CloudWatch の費用を下げる | 注文チーム | 10月30日 |\n\n接続の上限は、order-infra が環境変数として注文APIへ渡します。この変更で、タスク数と接続の上限を1つのリポジトリで決められます。\n\n## 対応の日程\n\n接続の上限に関する2件は10月16日までに終え、残りの2件は10月30日までに終えます。\n\n```yaml figure\ntype: gantt\ntasks:\n  - label: 接続上限を計算で決める\n    start: 2026-10-05\n    end: 2026-10-16\n    group: 基盤チーム\n    emphasis: true\n  - label: 接続数の通知\n    start: 2026-10-12\n    end: 2026-10-16\n    group: 基盤チーム\n  - label: 決済の再試行\n    start: 2026-10-13\n    end: 2026-10-30\n    group: 注文チーム\n  - label: ログの削減\n    start: 2026-10-19\n    end: 2026-10-30\n    group: 注文チーム\n  - label: 10月の報告\n    at: 2026-11-05\nmarker:\n  at: 2026-10-09\n  label: 報告日\n```\n\n接続の上限の変更は、次のセールが始まる10月23日より前に本番へ出します。決済の再試行は、決済サービスの担当者との確認に1週間を見込んでいます。\n\n"</script>
+</body>
+</html>

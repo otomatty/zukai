@@ -1,0 +1,9 @@
+出典: OWASP Session Management Cheat Sheet「Idle Timeout」
+https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html#idle-timeout
+ライセンス: CC BY-SA 4.0
+取得日: 2026年10月9日
+以下は、引用の照合に使う抜粋です。
+
+All sessions should implement an idle or inactivity timeout.
+
+Common idle timeouts ranges are 2-5 minutes for high-value applications and 15-30 minutes for low risk applications.

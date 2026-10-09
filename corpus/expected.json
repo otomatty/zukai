@@ -1,0 +1,85 @@
+{
+  "good/login.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "bad/no-figure.md": {
+    "own": [
+      "S004"
+    ]
+  },
+  "bad/structure.md": {
+    "own": [
+      "C001",
+      "S002",
+      "S004",
+      "S005",
+      "S006"
+    ]
+  },
+  "bad/figure.md": {
+    "own": [
+      "F001",
+      "F002"
+    ]
+  },
+  "bad/prose.md": {
+    "own": [
+      "P001",
+      "P002",
+      "P003",
+      "P004",
+      "P005",
+      "P006"
+    ]
+  },
+  "good/metrics.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "bad/chart.md": {
+    "own": [
+      "F001",
+      "F002"
+    ]
+  },
+  "good/charts.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "good/diagrams.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "good/evidence.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "good/diagrams2.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "bad/evidence.md": {
+    "own": [
+      "R001",
+      "R002",
+      "R003",
+      "R005"
+    ]
+  },
+  "good/free.md": {
+    "own": [],
+    "textlintClean": true
+  },
+  "bad/free.md": {
+    "own": [
+      "F001",
+      "F002",
+      "F003"
+    ]
+  },
+  "good/diagrams3.md": {
+    "own": [],
+    "textlintClean": true
+  }
+}

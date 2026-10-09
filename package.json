@@ -1,0 +1,30 @@
+{
+  "name": "zukai",
+  "version": "0.1.0",
+  "description": "図解が主役の日本語資料をAIに書かせ、AIを使わないLintで検査するハーネス",
+  "type": "module",
+  "bin": {
+    "zukai": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "node src/cli.js lint",
+    "build": "node src/cli.js build",
+    "corpus": "node src/cli.js corpus",
+    "stats": "node src/cli.js stats"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
+    "aws-icons": "^3.3.0",
+    "echarts": "^6.1.0",
+    "markdown-it": "^15.0.2",
+    "shiki": "^4.5.0",
+    "textlint": "^15.8.0",
+    "textlint-rule-preset-ja-technical-writing": "^12.0.2",
+    "yaml": "^2.9.1"
+  }
+}

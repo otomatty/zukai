@@ -1,0 +1,12 @@
+{
+  "repos": {
+    "sample": {
+      "host": "github",
+      "org": "example",
+      "name": "sample-app",
+      "path": "fixtures/sample-app",
+      "branch": "main",
+      "pin": false
+    }
+  }
+}
