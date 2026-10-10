@@ -93,13 +93,16 @@ async function openPage(browser, html, plan, L) {
   const context = await browser.newContext({ viewport: { width: plan.width, height: plan.height }, offline: true });
   await context.route('**/*', (r) => r.abort());
   const page = await context.newPage();
+  // ページで捕まえられなかった例外。構文エラーのあるスクリプトは、包んだ関数ごと読めず、zk.__run の中では記録できないため、ここで集める。
+  const pageErrors = [];
+  page.on('pageerror', (e) => pageErrors.push(e.message.split('\n')[0]));
   const close = () => within(3000, context.close(), '').catch(() => {});
   try {
     await within(L.loadTimeoutMs, page.setContent(html, { waitUntil: 'load', timeout: 0 }), `読み込みが${L.loadTimeoutMs / 1000}秒で終わりませんでした。無限ループが無いか確かめてください。`);
     await within(L.loadTimeoutMs, page.evaluate(() => document.fonts.ready), 'フォントの読み込みが終わりませんでした。');
     const init = await within(L.loadTimeoutMs, page.evaluate(() => window.zkInit()), '準備が終わりませんでした。');
     const cdp = await context.newCDPSession(page);
-    return { page, cdp, close, ...init };
+    return { page, cdp, close, pageErrors, ...init };
   } catch (e) {
     await close();
     throw e;
@@ -116,8 +119,10 @@ function run(cmd, args, input) {
     p.stdout.on('data', (d) => out.push(d));
     p.stderr.on('data', (d) => err.push(d));
     p.on('error', (e) => ng(e.code === 'ENOENT' ? new Error(`${cmd} が見つかりません。ffmpeg をインストールして、コマンドのパスに入れてください。`) : e));
-    p.on('close', (code) => (code ? ng(new Error(`${cmd} が失敗しました。${Buffer.concat(err).toString().slice(-500)}`)) : ok(Buffer.concat(out))));
-    if (input) input(p.stdin).catch((e) => (p.kill(), ng(e)));
+    // 入力を作る側が失敗したときは、プロセスを止め、終わるのを待ってから、その失敗を返す。終わる前に撮り直すと、同じ出力のファイルを奪い合うため。
+    let inputError = null;
+    p.on('close', (code) => (inputError ? ng(inputError) : code ? ng(new Error(`${cmd} が失敗しました。${Buffer.concat(err).toString().slice(-500)}`)) : ok(Buffer.concat(out))));
+    if (input) input(p.stdin).catch((e) => ((inputError = e), p.kill()));
   });
 }
 
@@ -163,6 +168,11 @@ async function probe(browser, plan, tokens, L, id) {
     }
     for (const e of p.errors) {
       findings.push({ severity: 'error', rule: 'V002', message: e.message });
+      broken = true;
+    }
+    // 1つのシーンだけを入れたページなので、捕まえられなかった例外（構文エラーなど）は、このシーンのものとして扱う。
+    for (const m of p.pageErrors.splice(0)) {
+      findings.push({ severity: 'error', rule: 'V002', message: `スクリプトを読み込めませんでした。${m}` });
       broken = true;
     }
     const seek = (t) => within(L.frameTimeoutMs, p.page.evaluate((T) => (window.zkSeek(T), window.zkPainted()), sc.start + t), `${t.toFixed(1)}秒のコマが${L.frameTimeoutMs / 1000}秒で描けませんでした。無限ループが無いか確かめてください。`);
@@ -336,7 +346,10 @@ async function render(browsers, plan, prep, { tmp, draft, onProgress }) {
   let done = 0;
   let cues = [];
   const sounds = [];
-  const segments = await Promise.all(
+  // 1つの区間が失敗したら、ほかの区間も止める。撮り直しは、すべての区間が止まって ffmpeg も終わってから始める。
+  // 動いたままの区間が、撮り直しと同じブラウザと seg-N.mp4 を同時に使わないようにするため。
+  let stop = false;
+  const settled = await Promise.allSettled(
     browsers.map(async (browser, w) => {
       const a = w * per;
       const b = Math.min(total, a + per);
@@ -352,20 +365,30 @@ async function render(browsers, plan, prep, { tmp, draft, onProgress }) {
           }
         }
         await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', seg], async (stdin) => {
-          for (let f = a; f < b; f++) {
-            await seekGuarded(p.page, plan, L, f / fps);
-            if (!stdin.write(await shot(p.cdp, plan, scale))) await once(stdin, 'drain');
-            if (++done % 30 === 0) onProgress(done, total);
+          try {
+            for (let f = a; f < b && !stop; f++) {
+              await seekGuarded(p.page, plan, L, f / fps);
+              if (!stdin.write(await shot(p.cdp, plan, scale))) await once(stdin, 'drain');
+              if (++done % 30 === 0) onProgress(done, total);
+            }
+          } catch (e) {
+            stop = true;
+            throw e;
+          } finally {
+            stdin.end();
           }
-          stdin.end();
         });
       } finally {
         await p.close();
       }
+      if (stop) throw new Error('ほかの区間が失敗したため、撮影を止めました。');
       return seg;
     }),
   );
-  return { segments: segments.filter(Boolean), total, cues, sounds };
+  // 暴走による失敗を優先して投げる。makeVideo がそのシーンを差し替えて撮り直すため。
+  const failures = settled.filter((x) => x.status === 'rejected').map((x) => x.reason);
+  if (failures.length) throw failures.find((e) => e.runaway) ?? failures[0];
+  return { segments: settled.map((x) => x.value).filter(Boolean), total, cues, sounds };
 }
 
 // 音声を作って、映像の区間とつなぐ。ナレーション、効果音、AI が作った音、シーンの切り替えの風切り音を足す。
