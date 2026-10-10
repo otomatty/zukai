@@ -54,6 +54,20 @@ test('screenshot の図は、同じターンの中では描き直さず、ター
   expect(calls).toBe(2)
 })
 
+test('ターミナルの図（PNG）も、ターンが終わったら描き直す', async ($, on) => {
+  let calls = 0
+  on('process.run', () => (calls++, { value: fakeCli }))
+  on('turn.complete', () => ({ text: '' }))
+  const text = TEXT.replace('受付', 'ターミナル')
+  const show = () => $.ui.mount({ plugin: 'zukai', surface: 'terminal', component: 'AssistantMessage', props: { text, isFirstOfReply: true }, viewport: { columns: 82, rows: 40 } })
+  await show()
+  await show()
+  expect(calls).toBe(1)
+  await $.turn.complete({ answer: '', durationMs: 0, isAborted: false, turnId: 't2', reason: 'answer' })
+  await show()
+  expect(calls).toBe(2)
+})
+
 test('書いている途中の外側のブロックの中の図は、図として数えない', () => {
   const open = '````markdown\n' + FIG + '\n説明の続き'
   expect(split(open).every(p => !p.isFigure)).toBe(true)

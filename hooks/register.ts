@@ -50,7 +50,8 @@ const cliOf = ($: EngineInterface) => `${$.plugin.root.replaceAll('\\', '/')}/sr
 
 // 同じブロックを描き直さない。返答を書いている間は、同じ図で何度も描画が起きる。
 const cache = new Map<string, Promise<Figure>>()
-// screenshot の図は、画像ファイルが撮り直されることがあるので、ターンが終わったらキャッシュから捨てる。
+// ターンが終わったらキャッシュから捨てる図。screenshot は画像ファイルが撮り直されることがあるため。
+// PNG で描いた図（ターミナル）は、古い PNG を CLI が消すため。次に描くときは、CLI が PNG を書き出し直す。
 const perTurn = new Set<string>()
 
 // Desktop の Svg 要素が受け付ける SVG の長さの上限。これより長い図は描かずに、YAML のまま表示する。
@@ -78,7 +79,7 @@ function draw($: EngineInterface, blocks: string[], png: boolean): Promise<Figur
     cache.set(key(b), one)
     // 失敗した図は、次の描画でもう一度試す。
     // screenshot かどうかは、CLI が YAML を読んだ結果で判定する（type: "screenshot" のような書き方も同じに扱うため）。
-    one.then(f => (f.error ? cache.delete(key(b)) : f.type === 'screenshot' && perTurn.add(key(b))))
+    one.then(f => (f.error ? cache.delete(key(b)) : (png || f.type === 'screenshot') && perTurn.add(key(b))))
   }
   return Promise.all(blocks.map(b => cache.get(key(b))!))
 }

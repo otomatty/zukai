@@ -71,7 +71,9 @@ export function writePngs(figures, dir = FIGURE_DIR) {
   return figures.map((f) => {
     if (!f.svg) return f;
     const file = path.join(dir, `${crypto.createHash('sha256').update(`${pngFont()}\0${f.svg}`).digest('hex').slice(0, 16)}.png`);
-    if (!fs.existsSync(file)) fs.writeFileSync(file, toPng(f.svg).data, { mode: 0o600 });
+    // 使い回した PNG は更新日時を今にして、使っている間は消さない。
+    if (fs.existsSync(file)) fs.utimesSync(file, new Date(), new Date());
+    else fs.writeFileSync(file, toPng(f.svg).data, { mode: 0o600 });
     // 幅と高さは、PNG の先頭（IHDR）から読む。
     const head = fs.readFileSync(file).subarray(16, 24);
     return { ...f, png: file, width: head.readUInt32BE(0), height: head.readUInt32BE(4) };
