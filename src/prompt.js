@@ -3,10 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { types } from './figures/index.js';
 import { root, readJson } from './lint/index.js';
-import { rules, prosePatterns } from './lint/rules.js';
 
-// chat は、資料の代わりにチャットの返答の書き方を返す。type は、型の書き方を取り出すコマンド。
-export function buildPrompt({ full = false, only = null, chat = false, type = 'zukai type' } = {}) {
+// type は、型の書き方を取り出すコマンド。zukai を入れていない環境では、node と CLI のパスを含めて渡す。
+export function buildPrompt({ full = false, only = null, type = 'zukai type' } = {}) {
   const limits = readJson('contract/limits.json');
   const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8').trim();
   const fill = (s) =>
@@ -30,15 +29,6 @@ export function buildPrompt({ full = false, only = null, chat = false, type = 'z
 
 | 型 | こういうデータのとき |\n|---|---|\n${Object.values(types).filter((t) => t.name !== 'free').map((t) => `| ${t.name} | ${t.when} |`).join('\n')}\n| 表（Markdown） | 複数の項目を、複数の観点で比べる。正確な値や文言を読ませたい |\n| free | ${types.free.when} |\n\n使う型を決めたら、\`${type} 型の名前\` を実行して、その型の書き方と上限を確認します。複数の型をまとめて確認できます。`;
   const catalog = `## 図の型\n\n${full ? Object.values(types).map(detail).join('\n\n') : index}`;
-
-  if (chat) {
-    // 文章のルールは、Lint の P ルールの題名と、直し方の1つ目から作る。
-    const prose = Object.entries(rules)
-      .filter(([id]) => id.startsWith('P'))
-      .map(([id, r]) => `- ${r.title}。${prosePatterns.find((p) => p.rule === id).hint}`)
-      .join('\n');
-    return fill(read('prompts/chat.md')).replace('{{prose}}', prose).replace('{{catalog}}', catalog) + '\n';
-  }
 
   // model-notes.md は、見出し「## 指示」より後ろに実際の指示を書く。指示が1つもなければ出力に含めない。
   const notes = read('prompts/model-notes.md').split(/^## 指示\s*$/m)[1]?.trim();
