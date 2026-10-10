@@ -10,6 +10,9 @@ import { esc } from './figures/svg.js';
 import { createHighlighter } from 'shiki';
 import { readJson, knownLang } from './lint/index.js';
 
+// 書き出す HTML で、原稿に書かれたスクリプトやフォームを動かさない。保存したファイルを開いたときも効くように meta で入れる。
+export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'";
+
 const plainLang = (lang) => !(lang && knownLang(lang)) || ['text', 'txt', 'plaintext', 'plain'].includes(lang);
 
 const css = (t) => `
@@ -95,6 +98,7 @@ export async function render(source, file) {
 <html lang="ja">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${CSP}">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(doc.title ?? '資料')}</title>
 <style>${css(tokens)}</style>

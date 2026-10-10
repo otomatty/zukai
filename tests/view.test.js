@@ -21,6 +21,8 @@ test('一覧と資料を返し、置き場所の外と別のホスト名には�
     assert.match(await page.text(), /本文です/);
     // 原稿の中の HTML のスクリプトは動かさない。
     assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
+    // 保存した HTML をファイルとして開いたときも、meta の CSP でスクリプトを止める。
+    assert.match(await (await fetch(`${base}/doc/a.md?download=1`)).text(), /<meta http-equiv="Content-Security-Policy" content="default-src 'none'/);
     assert.equal((await fetch(`${base}/doc/..%2Fsecret.md`)).status, 404);
     // fetch は Host を書き換えられないので、http.get で送る。
     const status = await new Promise((ok, ng) => http.get(`${base}/list`, { headers: { host: 'evil.example' } }, (r) => ok(r.resume().statusCode)).on('error', ng));

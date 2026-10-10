@@ -6,7 +6,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { render } from './render.js';
+import { render, CSP } from './render.js';
 import { lint } from './lint/index.js';
 import { parse } from './parse.js';
 
@@ -68,7 +68,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // render が失敗しても、残った指摘と原稿は読めるようにする。
 const fallback = (source, e) => `<!doctype html>
 <html lang="ja">
-<head><meta charset="utf-8"></head>
+<head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"></head>
 <body>
 <main>
 <p>この資料は HTML にできませんでした。${esc(e.message)}</p>
@@ -78,21 +78,17 @@ const fallback = (source, e) => `<!doctype html>
 </html>
 `;
 
-// 原稿を HTML にし、2回直しても残った Lint の error を本文の上に出す。同じ版の資料は描き直さない。
-const cache = new Map();
+// 原稿を HTML にし、2回直しても残った Lint の error を本文の上に出す。
+// 開くたびに描き直す。根拠（yaml refs）が読むコードやリポジトリの変更も、開き直せば反映される。
 async function doc(dir, name) {
   const file = path.join(dir, name);
   const source = fs.readFileSync(file, 'utf8');
-  const mtime = version(file, source);
-  if (cache.get(name)?.mtime === mtime) return cache.get(name);
   const [html, result] = await Promise.all([render(source, file).catch((e) => fallback(source, e)), lint(source, file)]);
   const errors = result.findings.filter((f) => f.severity === 'error');
   const banner = errors.length
     ? `<aside style="border:1px solid #eb6834;border-radius:8px;padding:12px 16px;margin-bottom:24px"><strong>Lint の指摘が ${errors.length} 件残っています</strong><ul>${errors.map((f) => `<li>L${esc(f.line)} ${esc(f.rule)} ${esc(f.message)}</li>`).join('')}</ul></aside>`
     : '';
-  const entry = { mtime, html, withBanner: html.replace('<main>\n', `<main>\n${banner}`) };
-  cache.set(name, entry);
-  return entry;
+  return { html, withBanner: html.replace('<main>\n', `<main>\n${banner}`) };
 }
 
 const SHELL = `<!doctype html>
@@ -108,6 +104,7 @@ header h1{margin:0;font-size:.9rem;font-weight:600}
 #count{font-size:.8rem;color:#5b6673}
 header .spacer{flex:1}
 .icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:6px;background:none;color:#1c2530;cursor:pointer}
+.icon[hidden]{display:none}
 .icon:hover{background:#f3f5f7}
 .icon:focus-visible{outline:2px solid #0f5f8a;outline-offset:1px}
 .icon svg{width:18px;height:18px}
@@ -246,7 +243,7 @@ export function serve(project, port = portOf(project)) {
         const d = await doc(dir, name);
         // 原稿に書かれた HTML のスクリプトを動かさない。動くと、このページの一覧や資料を読んで外へ送れてしまう。
         // iframe の sandbox 属性は使わない。sandbox の iframe を読み込まないブラウザがあるため、CSP だけで止める。
-        const csp = { 'content-security-policy': "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'" };
+        const csp = { 'content-security-policy': CSP };
         if (url.searchParams.has('download')) return send(res, 200, 'text/html; charset=utf-8', d.html, { ...csp, 'content-disposition': `attachment; filename="${name.replace(/\.md$/, '.html')}"` });
         return send(res, 200, 'text/html; charset=utf-8', d.withBanner, csp);
       }
