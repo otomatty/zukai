@@ -139,6 +139,7 @@ export function scenesOf(source, file) {
     const narrations = s.blocks.filter((b) => b.kind === 'narration' && !b.ending);
     const motions = s.blocks.filter((b) => b.kind === 'motion' && !b.ending);
     const shots = narrations.some((b) => b.role) ? narrations : [narrations[0] ?? null];
+    const extra = narrations.some((b) => b.role) ? [] : narrations.slice(1);
     const used = new Set();
     shots.forEach((nb, k) => {
       const role = nb?.role ?? null;
@@ -159,6 +160,9 @@ export function scenesOf(source, file) {
       }
       out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, whole: !type || WHOLE.has(fig.spec.type), tableHtml, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
     });
+    for (const b of extra) {
+      out.at(-1).findings.push({ severity: 'error', rule: 'V018', message: `L${b.line} の yaml narration は、このセクションの2つ目の役割の無いナレーションなので、動画に入りません。1つにまとめるか、役割（question、answer、example、term）を付けてショットに分けてください。` });
+    }
     for (const m of motions.filter((x) => !used.has(x))) {
       out.at(-1).findings.push({ severity: 'warn', rule: 'V017', message: `L${m.line} の html motion${m.role ? ` ${m.role}` : ''} に、同じ役割の yaml narration がありません。` });
     }

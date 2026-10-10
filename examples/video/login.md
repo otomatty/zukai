@@ -432,7 +432,7 @@ steps:
 ```yaml narration answer
 - ログインすると、{#issue}セッションIDが渡されます。
 - そして、最後に操作したときから、{#clock}時計が動き出します。
-- text: そのまま30分たつと、<short pause>{#expire}セッションIDは消えてしまいます。
+- text: そのまま30分たつと、<short pause>{#expire}サーバーは、そのセッションIDを無効にします。
   style: 少し声を落として
 ```
 
@@ -449,7 +449,9 @@ steps:
 .ex-card small{font-size:32px;font-weight:700;opacity:.75;margin-top:12px;letter-spacing:.08em}
 @keyframes ex-in{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
 @keyframes ex-turn{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-@keyframes ex-gone{40%{transform:translateY(-16px) rotate(4deg)}to{transform:scale(.15) rotate(-20deg);opacity:0}}
+@keyframes ex-gone{40%{transform:translateY(-16px) rotate(4deg)}to{transform:rotate(-4deg);filter:grayscale(1) brightness(.75)}}
+.ex-void{position:absolute;left:1240px;top:400px;padding:8px 34px;border:10px solid #ef4b5f;border-radius:20px;color:#ef4b5f;font:900 64px var(--zk-font);transform:rotate(-12deg);animation:ex-stamp .35s cubic-bezier(.2,.8,.3,1.5) calc(var(--expire) + .6s) both}
+@keyframes ex-stamp{from{transform:rotate(-12deg) scale(2.4);opacity:0}}
 </style>
 <div class="ex-bg"></div>
 <svg class="ex-clock" viewBox="0 0 560 560">
@@ -466,7 +468,8 @@ steps:
     <g class="ex-hand"><rect x="268" y="110" width="24" height="182" rx="12" fill="#ef4b5f"/><circle cx="280" cy="280" r="26" fill="#1c2b52"/></g>
   </g>
 </svg>
-<div class="ex-out" data-sfx="whoosh"><div class="ex-shadow"></div><div class="ex-card" data-sfx="pop">セッションID<small>a3f9-27c1</small></div></div>
+<div class="ex-void" data-sfx="drop">無効</div>
+<div class="ex-out" data-sfx="vanish"><div class="ex-shadow"></div><div class="ex-card" data-sfx="pop">セッションID<small>a3f9-27c1</small></div></div>
 ```
 
 ```yaml narration question
@@ -765,7 +768,7 @@ zk.scene((t, el) => {
 ```yaml narration ending
 - ボタンを押した一瞬に、裏では3つのことが起きていました。
 - '{#p1}パスワードは、入口のゲートウェイを通って、認証サービスが照合します。'
-- '{#p2}ログインしたことを示すセッションIDは、30分で消えるトークンとして、ブラウザが預かります。'
+- '{#p2}セッションIDはブラウザが預かり、サーバーは30分操作が無いと無効にします。'
 - '{#p3}画面は、APIという窓口を通してだけ、保存先にさわります。'
 - 次にログインのボタンを押すときは、この裏側を思い浮かべてみてください。
 ```
@@ -783,6 +786,6 @@ zk.scene((t, el) => {
 <div class="ed-bg"></div>
 <div class="ed-title" data-sfx="chime">まとめ</div>
 <div class="ed-card" data-sfx="pop" style="top:220px;background:var(--zk-cyan);--at:var(--p1)"><div class="ed-num">1</div>受付を通って、認証サービスが照合する</div>
-<div class="ed-card" data-sfx="pop" style="top:400px;background:var(--zk-yellow);--at:var(--p2)"><div class="ed-num">2</div>セッションIDは、30分で消えるトークン</div>
+<div class="ed-card" data-sfx="pop" style="top:400px;background:var(--zk-yellow);--at:var(--p2)"><div class="ed-num">2</div>30分操作が無いと、サーバーが無効にする</div>
 <div class="ed-card" data-sfx="pop" style="top:580px;background:var(--zk-orange);--at:var(--p3)"><div class="ed-num">3</div>画面は、APIを通して保存先にさわる</div>
 ```

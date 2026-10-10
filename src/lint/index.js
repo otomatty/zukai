@@ -142,7 +142,8 @@ function lintTerms(doc, terms) {
       const t = types[b.spec.type];
       for (const x of [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
     }
-    if (b.kind === 'narration' && Array.isArray(b.lines)) for (const l of b.lines) texts.push({ text: typeof l === 'string' ? l : l?.text, line: b.line });
+    // ナレーションは、字幕に出る文だけを調べる。時刻の目印 {#名前} と演技のタグ <short pause> は、読み上げにも字幕にも出ないため外す。
+    if (b.kind === 'narration' && Array.isArray(b.lines)) for (const l of b.lines) texts.push({ text: String((typeof l === 'string' ? l : l?.text) ?? '').replace(/\{#[\w-]+\}|<[^<>]+>/g, ''), line: b.line });
   }
   const out = [];
   const seen = new Set();

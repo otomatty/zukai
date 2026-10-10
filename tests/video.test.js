@@ -48,6 +48,9 @@ test('役割を付けたナレーションごとにショットを作り、長�
   const long = sec(`\`\`\`yaml narration\n${['なぜでしょう？', 'たとえば、一つめ。', 'たとえば、二つめ。', 'たとえば、三つめ。', '四つめです。'].map((l) => `- ${l}`).join('\n')}\n\`\`\`\n`);
   const rules = scenesOf(`# 題名\n\n導入です。\n\n${long}`, file).flatMap((x) => x.findings.map((f) => f.rule));
   assert.ok(rules.includes('V107') && rules.includes('V016'));
+  // 役割の無い yaml narration が2つあると、2つ目は動画に入らないので知らせる。
+  const twice = sec('```yaml narration\n- どうでしょう？\n```\n\n```yaml narration\n- 二つ目です。\n```\n');
+  assert.ok(scenesOf(`# 題名\n\n導入です。\n\n${twice}`, file).some((x) => x.findings.some((f) => f.rule === 'V018')));
 });
 
 test('用語集と違う表記を知らせ、除外する語は知らせない', async () => {
@@ -72,6 +75,10 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   const table = termsTable(withExamples);
   assert.match(table, /## 用語の表記[\s\S]*\| ユーザー \| ユーザ \|/);
   assert.match(table, /## 用語の具体例[\s\S]*\| 認証サービス \| Amazon Cognito \| Amazon Cognito、Auth0 \|/);
+  // ナレーションの時刻の目印と演技のタグは、字幕に出ないので調べない。
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: [{ use: '時計', avoid: ['clock', 'pause'] }] }));
+  const marked = await lint(src.replace('説明です。\n', '説明です。\n\n```yaml narration\n- 時計が{#clock}動きます。<short pause>\n```\n'), file, { textlint: false });
+  assert.ok(!marked.findings.some((f) => f.rule === 'P007'));
 });
 
 test('コード参照は、リポジトリの外のファイルを読まない', async () => {
@@ -86,6 +93,10 @@ test('コード参照は、リポジトリの外のファイルを読まない',
   assert.match(r.findings.find((f) => f.rule === 'R002')?.message ?? '', /外/);
   const ok = await lint(doc('r:a.txt#L1'), path.join(dir, 'a.md'), { textlint: false });
   assert.ok(!ok.findings.some((f) => f.rule === 'R002'));
+  // 「..」で始まるだけの名前は、親ディレクトリへの移動ではないので読める。
+  fs.writeFileSync(path.join(dir, 'repo', '..notes.txt'), 'ok\n');
+  const dots = await lint(doc('r:..notes.txt#L1'), path.join(dir, 'a.md'), { textlint: false });
+  assert.ok(!dots.findings.some((f) => f.rule === 'R002'));
 });
 
 test('init --video は、既存の設定のほかの項目を残して output を video にする', async () => {

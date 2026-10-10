@@ -42,8 +42,12 @@
   const timers = new Map();
   let timerId = 1;
   // タイマーは、作ったシーンを覚えておく。コールバックの例外を、そのシーンのものとして記録するため。
-  window.setTimeout = (cb, ms = 0, ...args) => (timers.set(timerId, { at: now + Math.max(0, +ms || 0), cb, args, every: 0, scene: running }), timerId++);
-  window.setInterval = (cb, ms = 0, ...args) => (timers.set(timerId, { at: now + Math.max(1, +ms || 0), cb, args, every: Math.max(1, +ms || 0), scene: running }), timerId++);
+  // 読み込みの間（zkInit の前）にシーンのスクリプトが作ったタイマーは、そのシーンの始まりを0として数える。
+  // 時計は読み込みの間は0なので、そのままだと後のシーンのタイマーが動画の最初に動いてしまうため。
+  let loading = true;
+  const base = () => (loading && running != null ? plan.scenes[running].start * 1000 : now);
+  window.setTimeout = (cb, ms = 0, ...args) => (timers.set(timerId, { at: base() + Math.max(0, +ms || 0), cb, args, every: 0, scene: running }), timerId++);
+  window.setInterval = (cb, ms = 0, ...args) => (timers.set(timerId, { at: base() + Math.max(1, +ms || 0), cb, args, every: Math.max(1, +ms || 0), scene: running }), timerId++);
   window.clearTimeout = window.clearInterval = (id) => timers.delete(id);
   function runTimers() {
     for (let n = 0; ; n++) {
@@ -210,6 +214,7 @@
   let sceneEls = [];
   // ページを読み終えた後に、エンジンが1回だけ呼ぶ。効果音のきっかけと、読み込み中の例外を返す。
   window.zkInit = () => {
+    loading = false;
     sceneEls = [...document.querySelectorAll('.zk-scene')];
     for (const el of sceneEls) {
       const sc = plan.scenes[+el.dataset.id];

@@ -59,7 +59,7 @@ function resolveCode(ref, config) {
   // 抜粋は資料と動画にそのまま載るので、原稿を書いた人が読めるだけのファイルを、共有する生成物に混ぜないため。
   const inside = (base, p) => {
     const r = path.relative(base, p);
-    return Boolean(r) && !r.startsWith('..') && !path.isAbsolute(r);
+    return Boolean(r) && r !== '..' && !r.startsWith('..' + path.sep) && !path.isAbsolute(r);
   };
   const outside = { rule: 'R002', error: `ファイル「${file}」は「${alias}」のリポジトリの外を指しています。リポジトリの中のパスを書いてください。` };
   if (path.isAbsolute(file) || /^[a-z]:/i.test(file) || !inside(dir, path.resolve(dir, file))) return outside;
