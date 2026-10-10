@@ -102,27 +102,45 @@ const SHELL = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>zukai の資料</title>
 <style>
-body{margin:0;display:flex;height:100vh;font-family:system-ui,"Yu Gothic UI","Hiragino Sans",sans-serif;color:#1c2530;background:#fff}
-nav{width:280px;flex:none;overflow:auto;border-right:1px solid #dfe4ea;background:#f3f5f7}
-nav .top{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:.8rem;color:#5b6673;border-bottom:1px solid #dfe4ea}
-nav .top a{color:#0f5f8a}
-#toggle{flex:none;width:28px;height:28px;border:1px solid #dfe4ea;border-radius:6px;background:#fff;color:#1c2530;font-size:1rem;line-height:1;cursor:pointer}
-/* たたんだときは、開くボタンだけを残す。 */
-body.collapsed nav{width:48px;overflow:hidden}
-body.collapsed #head,body.collapsed #list{display:none}
-body.collapsed #toggle.new{border-color:#0f5f8a;background:#e2eff6;color:#0f5f8a;font-weight:700}
+body{margin:0;display:grid;grid-template-rows:auto 1fr;grid-template-columns:auto 1fr;height:100vh;font-family:system-ui,"Yu Gothic UI","Hiragino Sans",sans-serif;color:#1c2530;background:#fff}
+header{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #dfe4ea;background:#fff}
+header h1{margin:0;font-size:.9rem;font-weight:600}
+#count{font-size:.8rem;color:#5b6673}
+header .spacer{flex:1}
+.icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:6px;background:none;color:#1c2530;cursor:pointer}
+.icon:hover{background:#f3f5f7}
+.icon:focus-visible{outline:2px solid #0f5f8a;outline-offset:1px}
+.icon svg{width:18px;height:18px}
+/* たたんでいる間に新着があれば、開閉ボタンに点を付ける。 */
+body.collapsed #toggle.new::before{content:"";position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:#0f5f8a}
+/* ツールチップ。マウスを乗せたときと、キーボードで選んだときに出す。 */
+[data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;top:calc(100% + 6px);left:0;z-index:10;white-space:nowrap;padding:4px 8px;border-radius:4px;background:#1c2530;color:#fff;font-size:.75rem;font-weight:400;pointer-events:none}
+.end[data-tip]:hover::after,.end[data-tip]:focus-visible::after{left:auto;right:0}
+nav{width:280px;overflow:auto;border-right:1px solid #dfe4ea;background:#f3f5f7}
+body.collapsed nav{display:none}
 #list button{display:block;width:100%;text-align:left;padding:10px 14px;border:0;border-bottom:1px solid #e3e7ec;background:none;font:inherit;color:inherit;cursor:pointer}
 #list button.on{background:#e2eff6;font-weight:600}
 #list button small{display:block;font-size:.75rem;color:#5b6673;font-weight:400}
 #list button.new small::after{content:" 新着";color:#0f5f8a;font-weight:600}
-iframe{flex:1;border:0;height:100%}
-#empty{flex:1;padding:40px;color:#5b6673}
+main{grid-column:2;display:flex;min-height:0}
+body.collapsed main{grid-column:1/-1}
+iframe{flex:1;border:0}
+#empty{margin:0;padding:40px;color:#5b6673}
 </style>
 </head>
 <body>
-<nav><div class="top"><button id="toggle" type="button" aria-controls="list" aria-expanded="true" title="一覧をたたむ">«</button><span id="head">資料はまだありません</span></div><div id="list"></div></nav>
+<header>
+<button id="toggle" class="icon" type="button" aria-controls="list" aria-expanded="true" aria-label="一覧をたたむ" data-tip="一覧をたたむ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg></button>
+<h1>zukai の資料</h1>
+<span id="count"></span>
+<span class="spacer"></span>
+<a id="save" class="icon end" aria-label="HTML を保存" data-tip="HTML を保存" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg></a>
+</header>
+<nav><div id="list"></div></nav>
+<main>
 <iframe id="doc" title="資料" hidden></iframe>
 <p id="empty">資料はまだありません。AI ツールが .zukai/answers に原稿を保存すると、ここに表示します。</p>
+</main>
 <script>
 let shown = null, follow = true, known = new Set(), drawn = '';
 const $ = (id) => document.getElementById(id);
@@ -131,6 +149,8 @@ function show(item) {
   $('doc').src = '/doc/' + encodeURIComponent(item.name) + '?v=' + item.mtime;
   $('doc').hidden = false;
   $('empty').hidden = true;
+  $('save').href = '/doc/' + encodeURIComponent(item.name) + '?download=1';
+  $('save').hidden = false;
 }
 async function tick() {
   let items;
@@ -144,7 +164,9 @@ async function tick() {
       $('doc').hidden = true;
       $('doc').removeAttribute('src');
       $('empty').hidden = false;
-      $('head').textContent = '資料はまだありません';
+      $('save').hidden = true;
+      $('save').removeAttribute('href');
+      $('count').textContent = '';
       $('list').replaceChildren();
       $('toggle').classList.remove('new');
     }
@@ -160,13 +182,13 @@ async function tick() {
   if (follow && (!shown || items[0].name !== shown.name || items[0].mtime !== shown.mtime)) show(items[0]);
   else if (current && current.mtime !== shown.mtime) show(current);
   if (follow) known = new Set(items.map((i) => i.name));
-  // たたんでいる間も新着に気づけるように、開くボタンに印を付ける。
+  // たたんでいる間も新着に気づけるように、開閉ボタンに印を付ける。
   $('toggle').classList.toggle('new', items.some((i) => !known.has(i.name)));
   // 一覧は、中身が変わったときだけ作り直す。毎回作り直すと、クリックの途中でボタンが入れ替わり、選んだ資料が開かない。
   const key = JSON.stringify([items, shown && shown.name, [...known]]);
   if (key === drawn) return;
   drawn = key;
-  $('head').innerHTML = '資料 ' + items.length + ' 件' + (shown ? '　<a href="/doc/' + encodeURIComponent(shown.name) + '?download=1">HTML を保存</a>' : '');
+  $('count').textContent = items.length + ' 件';
   $('list').replaceChildren(...items.map((item, n) => {
     const b = document.createElement('button');
     b.className = (shown && item.name === shown.name ? 'on' : '') + (known.has(item.name) ? '' : ' new');
@@ -181,8 +203,9 @@ async function tick() {
 // 一覧をたたむかどうかは、この閲覧者のブラウザにだけ覚える。保存できない環境では、毎回開いた状態で始める。
 function fold(on) {
   document.body.classList.toggle('collapsed', on);
-  $('toggle').textContent = on ? '»' : '«';
-  $('toggle').title = on ? '一覧を開く' : '一覧をたたむ';
+  const label = on ? '一覧を開く' : '一覧をたたむ';
+  $('toggle').setAttribute('aria-label', label);
+  $('toggle').dataset.tip = label;
   $('toggle').setAttribute('aria-expanded', String(!on));
   try { localStorage.setItem('zukai-collapsed', on ? '1' : ''); } catch {}
 }
