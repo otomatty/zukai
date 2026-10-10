@@ -3,7 +3,7 @@ import { Resvg } from '@resvg/resvg-js';
 
 // PNG に変換するときの日本語フォント。SVG のフォント指定の先頭が PC に無い場合に使われる。
 // OS ごとに標準で入っているものを選ぶ。変えたいときは環境変数 ZUKAI_PNG_FONT で指定する。
-const pngFont = () => process.env.ZUKAI_PNG_FONT ?? { darwin: 'Hiragino Sans', win32: 'Yu Gothic UI' }[process.platform] ?? 'Noto Sans CJK JP';
+export const pngFont = () => process.env.ZUKAI_PNG_FONT ?? { darwin: 'Hiragino Sans', win32: 'Yu Gothic UI' }[process.platform] ?? 'Noto Sans CJK JP';
 
 // 表示幅の2倍の解像度で書き出す。フォントは実行した PC に入っているものを使う。
 export function toPng(svg) {

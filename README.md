@@ -97,7 +97,7 @@ Desktop アプリと VS Code 拡張では、`~/.claude/settings.json` の `env` 
 
 VS Code 拡張は、図を `code -r` で開きます。Cursor も `code` コマンドを入れます。別のコマンドで開くときは、環境変数 `ZUKAI_EDITOR` に指定します。PNG は一時フォルダの `zukai-figures` に書き出します。
 
-`zukai figures` は、返答を標準入力から読み、図ごとの行の範囲、SVG、PNG のパスを JSON で返します。mod はこのコマンドだけを呼びます。
+`zukai figures` は、返答を標準入力から読み、図ごとの行の範囲と SVG を JSON で返します。`--png` か `--open` を指定したときは、SVG の代わりに PNG のパスと大きさを返します。mod はこのコマンドだけを呼びます。
 
 ## 原稿の形
 

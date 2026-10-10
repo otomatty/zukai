@@ -27,3 +27,11 @@ test('Desktop は図を SVG で、ターミナルは画像で描く', async ($, 
   const terminal = await $.ui.mount({ plugin: 'zukai', surface: 'terminal', component: 'AssistantMessage', props: { text: TEXT, isFirstOfReply: true }, viewport: { columns: 82, rows: 40 } })
   expect(await terminal.find({ type: 'Image' })).toBeDefined()
 })
+
+test('CLI の出力が切れたときは、図を描かずに文章のまま表示する', async ($, on) => {
+  on('process.run', () => ({ value: { ...fakeCli, stdout: '[{"alt":', isStdoutTruncated: true } }))
+  const text = TEXT.replace('受付', '切れる')
+  const ui = await $.ui.mount({ plugin: 'zukai', surface: 'desktop', component: 'AssistantMessage', props: { text, isFirstOfReply: true } })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.findAll({ type: 'Markdown' })).toHaveLength(3)
+})

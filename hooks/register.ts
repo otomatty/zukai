@@ -51,15 +51,22 @@ async function draw($: EngineInterface, blocks: string[], png: boolean): Promise
   const key = (b: string) => `${png}:${b}`
   const todo = [...new Set(blocks.filter(b => !cache.has(key(b))))]
   if (todo.length) {
+    // CLI の失敗、時間切れ、長すぎて切れた出力は、どれも図の error にする。error の図は YAML のまま表示される。
+    const fail = (message: string) => todo.map(() => ({ error: message }))
     const run = $.process
       .run(['node', cliOf($), 'figures', ...(png ? ['--png'] : [])], { stdin: todo.join('\n\n') })
-      .then(r => (r.exitCode === 0 ? (JSON.parse(r.stdout) as Figure[]) : todo.map(() => ({ error: r.stderr }))))
+      .then(r => {
+        if (r.exitCode !== 0) return fail(r.stderr)
+        if (r.isStdoutTruncated) return fail('図の出力が長すぎます。')
+        return JSON.parse(r.stdout) as Figure[]
+      })
+      .catch((err: unknown) => fail(String(err)))
     todo.forEach((b, i) => {
       const one = run.then(list => list[i] ?? { error: '図を描けませんでした。' })
       cache.set(key(b), one)
       // 失敗した図は、次の描画でもう一度試す。screenshot は画像ファイルが撮り直されることがあるので、描き終えたら毎回捨てる。
       const once = /^\s*type:\s*screenshot\b/m.test(b)
-      one.then(f => (once || f.error) && cache.delete(key(b)), () => cache.delete(key(b)))
+      one.then(f => (once || f.error) && cache.delete(key(b)))
     })
   }
   return Promise.all(blocks.map(b => cache.get(key(b))!))
@@ -70,9 +77,13 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const cli = cliOf($)
-    const r = await $.process.run(['node', cli, 'prompt', '--chat', `--type-command=node "${cli}" type`])
-    chatPrompt = r.exitCode === 0 ? r.stdout : ''
-    if (!chatPrompt) $.ui.log(`zukai: 返答の書き方を読めませんでした。${r.stderr.slice(0, 200)}`)
+    try {
+      const r = await $.process.run(['node', cli, 'prompt', '--chat', `--type-command=node "${cli}" type`])
+      chatPrompt = r.exitCode === 0 ? r.stdout : ''
+      if (!chatPrompt) $.ui.log(`zukai: 返答の書き方を読めませんでした。${r.stderr.slice(0, 200)}`)
+    } catch (err) {
+      $.ui.log(`zukai: 返答の書き方を読めませんでした。${String(err).slice(0, 200)}`)
+    }
     return next(e)
   })
 
@@ -122,8 +133,12 @@ export const register: Register = on => {
     if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) !== 'claude-vscode') return done
     const blocks = split(e.answer).filter(p => p.isFigure).map(p => p.text)
     if (!blocks.length) return done
-    const r = await $.process.run(['node', cliOf($), 'figures', '--open'], { stdin: blocks.join('\n\n') })
-    if (r.exitCode !== 0) $.ui.log(`zukai: 図を開けませんでした。${r.stderr.slice(0, 200)}`)
+    try {
+      const r = await $.process.run(['node', cliOf($), 'figures', '--open'], { stdin: blocks.join('\n\n') })
+      if (r.exitCode !== 0) $.ui.log(`zukai: 図を開けませんでした。${r.stderr.slice(0, 200)}`)
+    } catch (err) {
+      $.ui.log(`zukai: 図を開けませんでした。${String(err).slice(0, 200)}`)
+    }
     return done
   })
 }

@@ -43,7 +43,8 @@ if (cmd === 'prompt') {
   // チャットの返答を標準入力から読み、図を描いて JSON で返す。mod と VS Code の表示が使う。
   const { figuresOf, writePngs, openInEditor } = await import('./chat.js');
   let figures = figuresOf(fs.readFileSync(0, 'utf8'), process.cwd());
-  if (flags.has('--png') || flags.has('--open')) figures = writePngs(figures);
+  // PNG を書き出したときは SVG を出力しない。screenshot の SVG は画像を埋め込むので大きく、mod が読める出力の上限を超えるため。
+  if (flags.has('--png') || flags.has('--open')) figures = writePngs(figures).map(({ svg, ...f }) => f);
   if (flags.has('--open')) {
     const pngs = figures.filter((f) => f.png).map((f) => f.png);
     try {

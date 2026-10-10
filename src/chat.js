@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { parse } from './parse.js';
 import { types } from './figures/index.js';
 import { readJson } from './lint/index.js';
-import { toPng } from './png.js';
+import { toPng, pngFont } from './png.js';
 
 const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
@@ -22,7 +22,9 @@ export function figuresOf(text, baseDir) {
     .filter((b) => b.kind === 'figure')
     .map((b) => {
       const at = { start: b.line - 1, end: b.endLine };
-      const type = types[b.spec?.type];
+      // 型の名前は types 自身のキーだけを受け付ける。constructor のような継承した名前を型として使わない。
+      const name = b.spec?.type;
+      const type = typeof name === 'string' && Object.hasOwn(types, name) ? types[name] : undefined;
       if (b.parseError) return { ...at, error: `YAML を読めません。${b.parseError}` };
       if (!type) return { ...at, error: `type「${b.spec?.type}」は使えません。` };
       // 返答の screenshot は、作業フォルダの中の画像だけを読む。返答に書かれたパスから、ほかの場所の画像を表示しない。
@@ -39,12 +41,12 @@ export function figuresOf(text, baseDir) {
     });
 }
 
-// PNG を一時フォルダに書き出す。名前は SVG の内容から決めるので、同じ図は2回書かない。
+// PNG を一時フォルダに書き出す。名前は SVG の内容とフォントから決めるので、同じ図は2回書かない。
 export function writePngs(figures, dir = path.join(os.tmpdir(), 'zukai-figures')) {
   fs.mkdirSync(dir, { recursive: true });
   return figures.map((f) => {
     if (!f.svg) return f;
-    const file = path.join(dir, `${crypto.createHash('sha1').update(f.svg).digest('hex').slice(0, 16)}.png`);
+    const file = path.join(dir, `${crypto.createHash('sha256').update(`${pngFont()}\0${f.svg}`).digest('hex').slice(0, 16)}.png`);
     if (!fs.existsSync(file)) fs.writeFileSync(file, toPng(f.svg).data);
     // 幅と高さは、PNG の先頭（IHDR）から読む。
     const head = fs.readFileSync(file).subarray(16, 24);
