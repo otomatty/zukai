@@ -97,8 +97,9 @@ async function lintRefs(section, ctx, limits) {
       if (it.kind === 'code') out.push(...lintProse([{ kind: 'paragraph', text: it.note, line: blocks[0].line }]));
     }
   }
-  for (const b of section.blocks.filter((x) => x.kind === 'figure' && !x.parseError)) {
-    const used = types[b.spec?.type]?.refs?.(b.spec) ?? [];
+  // 図の根拠の番号は、仕様の検証に通った図からだけ読む。書きかけの図は F001 で知らせ、ここで例外を出さない。
+  for (const b of section.blocks.filter((x) => x.kind === 'figure' && !x.parseError && types[x.spec?.type] && !types[x.spec.type].validate(x.spec, limits, ctx).length)) {
+    const used = types[b.spec.type].refs?.(b.spec) ?? [];
     const bad = used.filter((n) => !Number.isInteger(n) || n < 1 || n > count);
     if (bad.length) out.push(finding('R001', b.line, count ? `図の番号 ${bad.join('、')} に対応する根拠がありません。根拠は${count}件です。` : `図に番号 ${bad.join('、')} がありますが、根拠のブロック（yaml refs）がありません。`));
   }
