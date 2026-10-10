@@ -15,7 +15,7 @@ const opt = (name) => rest.find((a) => a.startsWith(`--${name}=`))?.split('=').s
 const files = rest.filter((a) => !a.startsWith('--'));
 
 const usage = `使い方:
-  zukai prompt [--full] [--type-command=コマンド]  AI に渡す指示を出力する。図の型は一覧だけを含む（--full ですべての書き方を含む）
+  zukai prompt [--full] [--video] [--type-command=コマンド]  AI に渡す指示を出力する。図の型は一覧だけを含む（--full ですべての書き方、--video か設定の output: video で動画の書き方を含む）
   zukai type <型...>                   指定した型の書き方と上限を出力する
   zukai lint <file.md...> [--json] [--model=名前] [--no-log] [--no-textlint]
   zukai build <file.md> [--out=file.html]                       1枚の HTML を書き出す（原稿を中に埋め込む）
@@ -24,11 +24,35 @@ const usage = `使い方:
   zukai capture <file.md>                                       原稿の screenshot の URL を撮影し、枠の位置を記録する
   zukai extract <file.html> [--out=file.md]                     HTML に埋め込んだ原稿を取り出す
   zukai view [--no-open]               .zukai/answers の資料を読むページを起動し、URL を出力する（動いていれば URL だけ）
-  zukai init [フォルダ] [--global]      返答を資料にするスキルを .claude/skills と .agents/skills に書き出す（--global でホームの下）
+  zukai init [フォルダ] [--global] [--video]  返答を資料にするスキルを .claude/skills と .agents/skills に書き出し、.zukai/settings.json を作る（--video で動画も出す）
+  zukai init --api-key                 Gemini の API キーを入力させ、~/.zukai/settings.json に保存する
+  zukai video <file.md> [--out=file.mp4] [--draft]  原稿から解説動画を作る（--draft は 960×540、15fps）
+  zukai frames <file.md> [--at=秒,秒...] [--sheet] [--scene=番号]  動画のガードレールで検査し、指定した時刻のコマか、シーンごとのコマの一覧（--sheet）を PNG に書き出す
   zukai corpus                         corpus/ の原稿で、期待したルールが発火するか確認する
   zukai stats                          ルールごとの発火・修正・抑制の実績を表示する
   zukai rules                          自作ルールの一覧を表示する
   zukai icons [語]                     図に使えるアイコンの名前を探す`;
+
+// 入力した文字を画面に出さずに1行読む。端末でないとき（パイプ）は、標準入力をそのまま読む。
+async function readSecret(question) {
+  const readline = await import('node:readline');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
+  if (process.stdin.isTTY) {
+    process.stdout.write(question);
+    rl._writeToOutput = () => {};
+  }
+  const answer = await new Promise((ok) => rl.once('line', ok).once('close', () => ok('')));
+  rl.close();
+  if (process.stdin.isTTY) process.stdout.write('\n');
+  return answer.trim();
+}
+
+// 動画のガードレールの結果。シーンごとに、error と warn を出す。
+function printChecks(results) {
+  const all = results.flatMap((r) => r.findings.map((f) => ({ ...f, r })));
+  console.log(`動画の検査  error ${all.filter((f) => f.severity === 'error').length} / warn ${all.filter((f) => f.severity === 'warn').length}`);
+  for (const f of all) console.log(`  シーン${f.r.id}「${f.r.heading}」  ${f.severity.padEnd(5)}  ${f.rule}  ${f.message}`);
+}
 
 function print(result) {
   const errors = result.findings.filter((f) => f.severity === 'error').length;
@@ -38,7 +62,10 @@ function print(result) {
 }
 
 if (cmd === 'prompt') {
-  process.stdout.write(buildPrompt({ full: flags.has('--full'), type: opt('type-command') }));
+  // 動画の書き方は、--video を付けたときと、設定の output が video のときに含める。
+  const { loadSettings } = await import('./settings.js');
+  const video = flags.has('--video') || loadSettings(process.cwd()).settings.output === 'video';
+  process.stdout.write(buildPrompt({ full: flags.has('--full'), type: opt('type-command'), video }));
 } else if (cmd === 'type' && files.length) {
   process.stdout.write(buildPrompt({ only: files }));
 } else if (cmd === 'lint' && files.length) {
@@ -124,9 +151,21 @@ if (cmd === 'prompt') {
       process.exit(1);
     }
   }
+} else if (cmd === 'init' && flags.has('--api-key')) {
+  // キーは引数で受け取らない。シェルの履歴に残るため。画面では入力した文字を表示しない。
+  const { writeApiKey } = await import('./settings.js');
+  const key = await readSecret('Gemini の API キー: ');
+  if (!key) {
+    console.error('キーが空です。保存しませんでした。');
+    process.exit(1);
+  }
+  console.log(`${writeApiKey(key)} に API キーを保存しました。`);
 } else if (cmd === 'init') {
   // 返答を資料にするスキルを、Claude Code が読む .claude/skills と、ほかのツールが読む .agents/skills に書く。
   const base = flags.has('--global') ? (await import('node:os')).homedir() : path.resolve(files[0] ?? '.');
+  const { writeProjectSettings } = await import('./settings.js');
+  const s = writeProjectSettings(base, flags.has('--video') ? 'video' : 'document');
+  console.log(s.written ? `${s.file} を書き出しました。` : `${s.file} はすでにあるので、変えていません。`);
   const cli = path.join(root, 'src/cli.js').replaceAll('\\', '/');
   const skill = fs.readFileSync(path.join(root, 'prompts/answer-skill.md'), 'utf8').replaceAll('{{cli}}', cli);
   for (const d of ['.claude/skills', '.agents/skills']) {
@@ -134,6 +173,34 @@ if (cmd === 'prompt') {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'SKILL.md'), skill);
     console.log(`${path.join(dir, 'SKILL.md')} を書き出しました。`);
+  }
+} else if (cmd === 'video' && files.length === 1) {
+  try {
+    const { makeVideo } = await import('./video/encode.js');
+    const r = await makeVideo(files[0], { out: opt('out'), draft: flags.has('--draft'), onProgress: (d, n) => process.stderr.write(`\r${d}/${n} コマ`) });
+    process.stderr.write('\n');
+    r.warnings.forEach((w) => console.error(w));
+    if (r.silentReason) console.log(`音声なしで作りました。${r.silentReason}`);
+    printChecks(r.results);
+    console.log(`${r.file} を書き出しました。${r.duration.toFixed(1)}秒、${r.frames}コマ、効果音のきっかけ ${r.cues} 件。`);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+} else if (cmd === 'frames' && files.length === 1 && (opt('at') || flags.has('--sheet'))) {
+  try {
+    const { frames } = await import('./video/encode.js');
+    const scene = opt('scene') === undefined ? null : Number(opt('scene'));
+    const r = await frames(files[0], { times: opt('at') ? opt('at').split(',').map(Number) : [], sheet: flags.has('--sheet'), scene });
+    if (r.silentReason) console.log(`音声なしの時間割です。${r.silentReason}`);
+    console.log(`動画の長さ ${r.duration.toFixed(1)}秒`);
+    for (const s of r.scenes) console.log(`  シーン${s.id}  ${s.kind.padEnd(5)}  ${s.start.toFixed(1)}〜${s.end.toFixed(1)}秒  ${s.heading}${Object.keys(s.markers).length ? `  目印 ${Object.entries(s.markers).map(([k, v]) => `${k}=${v.toFixed(2)}秒`).join(' ')}` : ''}`);
+    printChecks(r.results);
+    r.files.forEach((f) => console.log(f));
+    process.exit(r.results.some((x) => x.findings.some((f) => f.severity === 'error')) ? 1 : 0);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
   }
 } else if (cmd === 'corpus') {
   const expected = JSON.parse(fs.readFileSync(path.join(root, 'corpus/expected.json'), 'utf8'));

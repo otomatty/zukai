@@ -34,6 +34,11 @@ export const sentences = (text) => {
 export const isFreeFigure = (info) => /^svg\s+figure\b/.test(info.trim());
 export const isFigure = (info) => /^ya?ml\s+figure\b/.test(info.trim()) || isFreeFigure(info);
 export const isRefs = (info) => /^ya?ml\s+refs\b/.test(info.trim());
+// 動画のナレーション。話し言葉の文を、字幕1枚ずつの配列で書く。資料には表示しない。
+export const isNarration = (info) => /^ya?ml\s+narration\b/.test(info.trim());
+// 動画のシーンを AI が自由に書くブロック。HTML、SVG、CSS、JS をブラウザの中で動かす。資料には表示しない。
+export const isMotion = (info) => /^html\s+motion\b/.test(info.trim());
+export const isVideoOnly = (info) => isNarration(info) || isMotion(info);
 
 export function parse(source) {
   const tokens = md.parse(source, {});
@@ -69,6 +74,17 @@ export function parse(source) {
           block.parseError = e.message.split('\n')[0];
         }
         push(block);
+      } else if (isNarration(tk.info)) {
+        // ending を付けたブロックは、動画の最後のまとめのシーンに使う。
+        const block = { kind: 'narration', line, endLine, ending: /\bending\b/.test(tk.info) };
+        try {
+          block.lines = YAML.parse(tk.content);
+        } catch (e) {
+          block.parseError = e.message.split('\n')[0];
+        }
+        push(block);
+      } else if (isMotion(tk.info)) {
+        push({ kind: 'motion', line, endLine, html: tk.content, ending: /\bending\b/.test(tk.info) });
       } else if (isRefs(tk.info)) {
         const block = { kind: 'refs', line, endLine };
         try {

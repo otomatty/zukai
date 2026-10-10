@@ -3,7 +3,7 @@
 // - renderConfluence: Confluence のストレージ形式の本文と、図の SVG の一覧。
 import path from 'node:path';
 import MarkdownIt from 'markdown-it';
-import { parse, isFigure, isRefs } from './parse.js';
+import { parse, isFigure, isRefs, isVideoOnly } from './parse.js';
 import { resolveRefs, refsHtml, refsStorage } from './refs.js';
 import { types } from './figures/index.js';
 import { esc } from './figures/svg.js';
@@ -76,6 +76,7 @@ export async function render(source, file) {
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tks, i, opts, env, self) => {
     const tk = tks[i];
+    if (isVideoOnly(tk.info)) return '';
     if (isRefs(tk.info)) return refsHtml(refs.get(tk.map[0] + 1) ?? [], highlight);
     if (!isFigure(tk.info)) {
       const lang = tk.info.trim().split(/\s+/)[0];
@@ -137,6 +138,7 @@ export async function renderConfluence(source, sourceName) {
   const md = new MarkdownIt({ html: false, xhtmlOut: true });
   md.renderer.rules.fence = (tks, i) => {
     const tk = tks[i];
+    if (isVideoOnly(tk.info)) return '';
     if (isRefs(tk.info)) return refsStorage(refs.get(tk.map[0] + 1) ?? []);
     if (!isFigure(tk.info)) {
       const lang = tk.info.trim().split(/\s+/)[0];

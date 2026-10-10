@@ -104,6 +104,37 @@ node src/cli.js init --global           # ホームの ~/.claude/skills と ~/.a
 
 `.zukai` の中に `.gitignore` を置くので、資料は Git の管理に入りません。
 
+## 動画
+
+同じ原稿から、解説動画（MP4、1920×1080、30fps）も作れます。動画の絵と動きは、AI が1シーンずつ HTML、SVG、CSS、JS で自由に書きます。zukai は背景もキャラクターも描かず、時刻の制御、ナレーション、字幕、シーンの切り替え、効果音、書き出しと、壊れた動画を出さないための検査（ガードレール）だけを受け持ちます。動画の品質は、AI の書くものでそのまま決まります。
+
+```bash
+node src/cli.js init /path/to/project --video  # .zukai/settings.json に "output": "video" を書く
+node src/cli.js init --api-key                 # Gemini の API キーを ~/.zukai/settings.json に保存する
+node src/cli.js prompt --video                 # 動画の書き方を含めた指示を出力する
+node src/cli.js frames 原稿.md --sheet          # 検査し、シーンごとに6つの時刻のコマを並べた画像を書き出す
+node src/cli.js video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960×540、15fps）
+```
+
+| 原稿のブロック | 内容 |
+|---|---|
+| `yaml narration` | 話し言葉のナレーション。1要素が字幕1枚。行ごとの語り口（`style`）、例の印（`example: true`）、読み上げの指示のタグ（`<short pause>`）、時刻の目印（`{#名前}`）を書ける。資料には出ない |
+| `yaml narration ending`、`html motion ending` | 動画の最後のまとめのシーン。資料には出ない |
+| `html motion` | シーンの絵と動き。目印の時刻は CSS 変数で、`zk.scene((t, root) => …)` で毎コマの JS を書ける。資料には出ない |
+
+台本は、1人の語り手がていねいに説明する形にします。オープニングでテーマと答える疑問を示し、各シーンでは疑問を投げかけ、原稿の根拠をもとに答え、身近な例で確かめ、エンディングで要点をまとめます。シーンは `zk.refs()` で、Lint と同じ方法で確かめた根拠（コードの抜粋と引用）を読み、画面に出典を示せます。例ではない行の数値が原稿に無いとき（V013）と、シーンが疑問から始まらないとき（V014）は、検査が知らせます。書き方の全体は `prompts/video.md` にあります。完全な例は `examples/video/login.md` です。
+
+| ガードレール | 内容 |
+|---|---|
+| サンドボックス | AI のコードは、ヘッドレスの Chromium の中だけで動かす。ネットワークの要求はすべて拒否し、Node では動かさない |
+| 時刻と乱数 | `Date`、タイマー、`requestAnimationFrame`、`Math.random` を、エンジンの時刻と種を固定した乱数に置き換える |
+| 暴走と例外 | 読み込みと1コマの時間に上限を設ける。超えたシーンと、読み込みで例外を出したシーンは、主張文と図だけの簡素な動きに差し替える |
+| 見た目 | 文字のはみ出し、字幕の帯との重なり、文字の大きさ、要素の数、シーンより長いアニメーション、同じ時刻のコマが一致するか、音割れを調べる |
+
+ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（`gemini-3.8-flash-tts`、声は `Kore`）で読み上げ、`.zukai/cache/tts` に保存します。API キーは環境変数 `GEMINI_API_KEY` か `~/.zukai/settings.json` に置き、プロジェクトの設定には置きません。キーが無いときは、字幕だけの無音の動画になります。無料枠のキーでは、送った文が Google の製品改善に使われます。
+
+動画を作るには、Playwright と Chromium（`npm install playwright`、`npx playwright install chromium`）と、コマンドのパスに入った ffmpeg が必要です。
+
 ## Claude Code のプラグイン
 
 このリポジトリは、Claude Code のプラグインとしても読み込めます。読み込むと、資料を作る `zukai` スキルが使えます。

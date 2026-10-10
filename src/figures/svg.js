@@ -54,7 +54,8 @@ export function box(t, x, y, w, h, label, { note, emphasis, ref } = {}) {
   if (ref !== undefined) {
     out.push(`<circle cx="${x + w - 12}" cy="${y}" r="10" fill="${t.color.accent}"/><text class="zk-note" x="${x + w - 12}" y="${mid(y, 12)}" text-anchor="middle" style="fill:#fff;font-weight:700">${esc(ref)}</text>`);
   }
-  return out.join('');
+  // 箱1つを1つの g にまとめる。動画では、この単位で現れる。
+  return `<g>${out.join('')}</g>`;
 }
 
 export const arrow = (d, dashed = false) =>
