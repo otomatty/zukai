@@ -67,18 +67,23 @@ const SHELL = `<!doctype html>
 <style>
 body{margin:0;display:flex;height:100vh;font-family:system-ui,"Yu Gothic UI","Hiragino Sans",sans-serif;color:#1c2530;background:#fff}
 nav{width:280px;flex:none;overflow:auto;border-right:1px solid #dfe4ea;background:#f3f5f7}
-nav header{padding:12px 14px;font-size:.8rem;color:#5b6673;border-bottom:1px solid #dfe4ea}
-nav header a{color:#0f5f8a}
-nav button{display:block;width:100%;text-align:left;padding:10px 14px;border:0;border-bottom:1px solid #e3e7ec;background:none;font:inherit;color:inherit;cursor:pointer}
-nav button.on{background:#e2eff6;font-weight:600}
-nav button small{display:block;font-size:.75rem;color:#5b6673;font-weight:400}
-nav button.new small::after{content:" 新着";color:#0f5f8a;font-weight:600}
+nav .top{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:.8rem;color:#5b6673;border-bottom:1px solid #dfe4ea}
+nav .top a{color:#0f5f8a}
+#toggle{flex:none;width:28px;height:28px;border:1px solid #dfe4ea;border-radius:6px;background:#fff;color:#1c2530;font-size:1rem;line-height:1;cursor:pointer}
+/* たたんだときは、開くボタンだけを残す。 */
+body.collapsed nav{width:48px;overflow:hidden}
+body.collapsed #head,body.collapsed #list{display:none}
+body.collapsed #toggle.new{border-color:#0f5f8a;background:#e2eff6;color:#0f5f8a;font-weight:700}
+#list button{display:block;width:100%;text-align:left;padding:10px 14px;border:0;border-bottom:1px solid #e3e7ec;background:none;font:inherit;color:inherit;cursor:pointer}
+#list button.on{background:#e2eff6;font-weight:600}
+#list button small{display:block;font-size:.75rem;color:#5b6673;font-weight:400}
+#list button.new small::after{content:" 新着";color:#0f5f8a;font-weight:600}
 iframe{flex:1;border:0;height:100%}
 #empty{flex:1;padding:40px;color:#5b6673}
 </style>
 </head>
 <body>
-<nav><header id="head">資料はまだありません</header><div id="list"></div></nav>
+<nav><div class="top"><button id="toggle" type="button" aria-controls="list" aria-expanded="true" title="一覧をたたむ">«</button><span id="head">資料はまだありません</span></div><div id="list"></div></nav>
 <iframe id="doc" title="資料" hidden></iframe>
 <p id="empty">資料はまだありません。AI ツールが .zukai/answers に原稿を保存すると、ここに表示します。</p>
 <script>
@@ -99,6 +104,8 @@ async function tick() {
   if (follow && (!shown || items[0].name !== shown.name || items[0].mtime !== shown.mtime)) show(items[0]);
   else if (current && current.mtime !== shown.mtime) show(current);
   if (follow) known = new Set(items.map((i) => i.name));
+  // たたんでいる間も新着に気づけるように、開くボタンに印を付ける。
+  $('toggle').classList.toggle('new', items.some((i) => !known.has(i.name)));
   // 一覧は、中身が変わったときだけ作り直す。毎回作り直すと、クリックの途中でボタンが入れ替わり、選んだ資料が開かない。
   const key = JSON.stringify([items, shown && shown.name, [...known]]);
   if (key === drawn) return;
@@ -115,6 +122,16 @@ async function tick() {
     return b;
   }));
 }
+// 一覧をたたむかどうかは、この閲覧者のブラウザにだけ覚える。保存できない環境では、毎回開いた状態で始める。
+function fold(on) {
+  document.body.classList.toggle('collapsed', on);
+  $('toggle').textContent = on ? '»' : '«';
+  $('toggle').title = on ? '一覧を開く' : '一覧をたたむ';
+  $('toggle').setAttribute('aria-expanded', String(!on));
+  try { localStorage.setItem('zukai-collapsed', on ? '1' : ''); } catch {}
+}
+$('toggle').onclick = () => fold(!document.body.classList.contains('collapsed'));
+try { if (localStorage.getItem('zukai-collapsed')) fold(true); } catch {}
 tick();
 setInterval(tick, 1000);
 </script>
