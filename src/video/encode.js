@@ -170,11 +170,15 @@ async function probe(browser, plan, tokens, L, id) {
       findings.push({ severity: 'error', rule: 'V002', message: e.message });
       broken = true;
     }
-    // 1つのシーンだけを入れたページなので、捕まえられなかった例外（構文エラーなど）は、このシーンのものとして扱う。
-    for (const m of p.pageErrors.splice(0)) {
-      findings.push({ severity: 'error', rule: 'V002', message: `スクリプトを読み込めませんでした。${m}` });
-      broken = true;
-    }
+    // 1つのシーンだけを入れたページなので、捕まえられなかった例外は、このシーンのものとして扱う。
+    // 読み込みのとき（構文エラーなど）と、コマを進めている間（Promise の中の例外など）の両方で集める。
+    const drainPageErrors = (when) => {
+      for (const m of p.pageErrors.splice(0)) {
+        findings.push({ severity: 'error', rule: 'V002', message: `${when}${m}` });
+        broken = true;
+      }
+    };
+    drainPageErrors('スクリプトを読み込めませんでした。');
     const seek = (t) => within(L.frameTimeoutMs, p.page.evaluate((T) => (window.zkSeek(T), window.zkPainted()), sc.start + t), `${t.toFixed(1)}秒のコマが${L.frameTimeoutMs / 1000}秒で描けませんでした。無限ループが無いか確かめてください。`);
     const settled = Math.max(0, dur - 0.25);
     // 0.2秒ごとに進める。暴走と例外を、撮る前に見つけるため。
@@ -198,6 +202,7 @@ async function probe(browser, plan, tokens, L, id) {
     if (sound && sound.peak > 1) findings.push({ severity: 'warn', rule: 'V301', message: `zk.sound の音の最大値が ${sound.peak.toFixed(2)} で、音が割れます。1以下にしてください。` });
     // frame の中の例外は、その時刻だけの問題のことがあるので warn にとどめる。
     for (const e of await p.page.evaluate(() => window.zkErrors())) findings.push({ severity: 'warn', rule: 'V002', message: e.message });
+    drainPageErrors('コマを進めている間に、捕まえられない例外が起きました。');
   } catch (e) {
     if (!(e instanceof Runaway)) throw e;
     findings.push({ severity: 'error', rule: 'V001', message: e.message });

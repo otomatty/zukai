@@ -205,7 +205,8 @@ test('無限ループと例外のシーンは、自動の動きに差し替え�
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-video-'));
   const file = path.join(dir, 'bad.md');
   const section = (title, html) => `## ${title}\n\n${title}のシーンです。\n\n\`\`\`yaml figure\ntype: flow\nsteps:\n  - label: 入口\n  - label: 出口\n\`\`\`\n\n説明です。\n\n\`\`\`html motion\n${html}\n\`\`\`\n`;
-  fs.writeFileSync(file, `# 確認\n\n確認の原稿です。\n\n${section('止まる', '<script>zk.scene((t) => { if (t > 1) for (;;) {} });</script>')}\n${section('例外', '<script>missing();</script>')}\n${section('正常', '<div style="position:absolute;left:100px;top:300px;font-size:60px;color:#fff;animation:a 1s both">正常</div><style>@keyframes a{from{opacity:0}}</style>')}\n${section('音とタイマー', '<script>zk.sound(() => { throw new Error("bad sound"); }); setTimeout(() => { throw new Error("bad timer"); }, 500);</script>')}\n${section('構文エラー', '<script>let = ;</script>')}`);
+  fs.writeFileSync(file, `# 確認\n\n確認の原稿です。\n\n${section('止まる', '<script>zk.scene((t) => { if (t > 1) for (;;) {} });</script>')}\n${section('例外', '<script>missing();</script>')}\n${section('正常', '<div style="position:absolute;left:100px;top:300px;font-size:60px;color:#fff;animation:a 1s both">正常</div><style>@keyframes a{from{opacity:0}}</style>')}\n${section('音とタイマー', '<script>zk.sound(() => { throw new Error("bad sound"); }); setTimeout(() => { throw new Error("bad timer"); }, 500);</script>')}\n${section('構文エラー', '<script>let = ;</script>')}
+${section('非同期の例外', '<script>zk.scene((t) => { if (t > 1) queueMicrotask(() => { throw new Error("async bad"); }); });</script>')}`);
   const r = await frames(file, { project: dir });
   const rules = (i) => r.results[i].findings.map((f) => f.rule);
   assert.ok(rules(1).includes('V001') && rules(1).includes('V000'));
@@ -217,5 +218,7 @@ test('無限ループと例外のシーンは、自動の動きに差し替え�
   assert.ok(soundAndTimer.every((f) => f.severity === 'warn'));
   // 構文エラーのスクリプトは包んだ関数ごと読めないので、ページのエラーとして捕まえて差し替える。
   assert.ok(rules(5).includes('V002') && rules(5).includes('V000'));
-  assert.deepEqual(r.scenes.map((s) => s.kind), ['title', 'auto', 'auto', 'free', 'free', 'auto']);
+  // コマを進めている間に、捕まえられない例外（microtask の中など）が起きたシーンも差し替える。
+  assert.ok(r.results[6].findings.some((f) => f.rule === 'V002' && f.severity === 'error' && /async bad/.test(f.message)));
+  assert.deepEqual(r.scenes.map((s) => s.kind), ['title', 'auto', 'auto', 'free', 'free', 'auto', 'auto']);
 });
