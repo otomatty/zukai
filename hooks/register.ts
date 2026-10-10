@@ -10,6 +10,7 @@ type Figure = { alt?: string; svg?: string; png?: string; width?: number; height
 type Part = { text: string; isFigure: boolean }
 
 // 返答を、Markdown の部分と図のブロックに分ける。閉じていないブロック（書いている途中）は Markdown のまま残す。
+// ほかのコードブロック（```` で囲んだ書き方の例など）の中は読み飛ばす。図として数えるのは、行頭から始まる図のブロックだけ。
 export function split(text: string): Part[] {
   const lines = text.split('\n')
   const parts: Part[] = []
@@ -20,13 +21,20 @@ export function split(text: string): Part[] {
   }
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? ''
-    const end = /^```\s*(ya?ml|svg)\s+figure\b/.test(line) ? lines.findIndex((l, j) => j > i && /^```\s*$/.test(l)) : -1
-    if (end < 0) {
+    const open = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line)
+    // 閉じる行は、開いた記号と同じ文字で、同じ数以上並んだ行。
+    const end = open ? lines.findIndex((l, j) => j > i && new RegExp(`^ {0,3}${open[2]![0]}{${open[2]!.length},}\\s*$`).test(l)) : -1
+    if (!open || end < 0) {
       buf.push(line)
       continue
     }
-    flush()
-    parts.push({ text: lines.slice(i, end + 1).join('\n'), isFigure: true })
+    const isFigure = open[1] === '' && open[2]![0] === '`' && /^\s*(ya?ml|svg)\s+figure\b/.test(open[3]!)
+    if (isFigure) {
+      flush()
+      parts.push({ text: lines.slice(i, end + 1).join('\n'), isFigure: true })
+    } else {
+      buf.push(...lines.slice(i, end + 1))
+    }
     i = end
   }
   flush()
@@ -49,8 +57,9 @@ async function draw($: EngineInterface, blocks: string[], png: boolean): Promise
     todo.forEach((b, i) => {
       const one = run.then(list => list[i] ?? { error: '図を描けませんでした。' })
       cache.set(key(b), one)
-      // 失敗した図は、次の描画でもう一度試す。
-      one.then(f => f.error && cache.delete(key(b)), () => cache.delete(key(b)))
+      // 失敗した図は、次の描画でもう一度試す。screenshot は画像ファイルが撮り直されることがあるので、描き終えたら毎回捨てる。
+      const once = /^\s*type:\s*screenshot\b/m.test(b)
+      one.then(f => (once || f.error) && cache.delete(key(b)), () => cache.delete(key(b)))
     })
   }
   return Promise.all(blocks.map(b => cache.get(key(b))!))

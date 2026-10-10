@@ -12,6 +12,10 @@ test('返答を、文章と、閉じた図のブロックに分ける', () => {
   expect(split(TEXT)[1]?.text).toBe(FIG)
   // 書いている途中の図は、文章のまま残す。
   expect(split('前\n```yaml figure\ntype: flow').every(p => !p.isFigure)).toBe(true)
+  // ```` で囲んだ書き方の例の中の図は、図として数えない。
+  const example = `\`\`\`\`markdown\n${FIG}\n\`\`\`\``
+  expect(split(`${example}\n\n${FIG}`).map(p => p.isFigure)).toEqual([false, true])
+  expect(split(`${example}\n\n${FIG}`)[0]?.text).toBe(`${example}\n`)
 })
 
 test('Desktop は図を SVG で、ターミナルは画像で描く', async ($, on) => {

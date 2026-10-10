@@ -25,6 +25,11 @@ export function figuresOf(text, baseDir) {
       const type = types[b.spec?.type];
       if (b.parseError) return { ...at, error: `YAML を読めません。${b.parseError}` };
       if (!type) return { ...at, error: `type「${b.spec?.type}」は使えません。` };
+      // 返答の screenshot は、作業フォルダの中の画像だけを読む。返答に書かれたパスから、ほかの場所の画像を表示しない。
+      if (b.spec.type === 'screenshot') {
+        const rel = path.relative(baseDir, path.resolve(baseDir, String(b.spec.image)));
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return { ...at, error: `画像「${b.spec.image}」は作業フォルダの外にあります。` };
+      }
       const errors = type.validate(b.spec, limits, ctx);
       if (errors.length) return { ...at, error: errors.join(' ') };
       const svg = type.render(b.spec, tokens, ctx);
