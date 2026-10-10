@@ -6,7 +6,7 @@
 // 図の描画は Node で動く zukai の CLI に任せる。mod の実行環境には Node がないため。
 import type { Register, EngineInterface } from 'claude-code'
 
-type Figure = { alt?: string; svg?: string; png?: string; width?: number; height?: number; error?: string }
+type Figure = { type?: string; alt?: string; svg?: string; png?: string; width?: number; height?: number; error?: string }
 type Part = { text: string; isFigure: boolean }
 
 // 返答を、Markdown の部分と図のブロックに分ける。閉じていないブロック（書いている途中）は Markdown のまま残す。
@@ -62,11 +62,11 @@ async function draw($: EngineInterface, blocks: string[], png: boolean): Promise
       })
       .catch((err: unknown) => fail(String(err)))
     todo.forEach((b, i) => {
-      const one = run.then(list => list[i] ?? { error: '図を描けませんでした。' })
+      const one: Promise<Figure> = run.then(list => list[i] ?? { error: '図を描けませんでした。' })
       cache.set(key(b), one)
       // 失敗した図は、次の描画でもう一度試す。screenshot は画像ファイルが撮り直されることがあるので、描き終えたら毎回捨てる。
-      const once = /^\s*type:\s*screenshot\b/m.test(b)
-      one.then(f => (once || f.error) && cache.delete(key(b)))
+      // 型は CLI が YAML を読んだ結果で判定する（type: "screenshot" のような書き方も同じに扱うため）。
+      one.then(f => (f.type === 'screenshot' || f.error) && cache.delete(key(b)))
     })
   }
   return Promise.all(blocks.map(b => cache.get(key(b))!))

@@ -37,7 +37,7 @@ export function figuresOf(text, baseDir) {
       const svg = type.render(b.spec, tokens, ctx);
       const label = svg.match(/aria-label="([^"]*)"/)?.[1];
       const alt = (b.spec.type === 'free' ? types.free.title(b.spec) : label && unesc(label)) || `${b.spec.type} の図`;
-      return { ...at, alt, svg };
+      return { ...at, type: name, alt, svg };
     });
 }
 

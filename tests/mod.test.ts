@@ -35,3 +35,15 @@ test('CLI の出力が切れたときは、図を描かずに文章のまま表�
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   expect(await ui.findAll({ type: 'Markdown' })).toHaveLength(3)
 })
+
+test('screenshot の図は、キャッシュに残さず毎回描く', async ($, on) => {
+  let calls = 0
+  const shot = { ...fakeCli, stdout: JSON.stringify([{ type: 'screenshot', alt: '画面', svg: '<svg viewBox="0 0 720 56"></svg>' }]) }
+  on('process.run', () => (calls++, { value: shot }))
+  const text = '```yaml figure\ntype: "screenshot"\nimage: shots/a.png\n```'
+  for (let i = 0; i < 2; i++) {
+    const ui = await $.ui.mount({ plugin: 'zukai', surface: 'desktop', component: 'AssistantMessage', props: { text, isFirstOfReply: true } })
+    expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  }
+  expect(calls).toBe(2)
+})
