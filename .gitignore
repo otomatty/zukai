@@ -2,3 +2,6 @@ node_modules/
 logs/*.jsonl
 dist/
 .zukai-cache/
+examples/video/*.mp4
+examples/video/*.sheet-*.png
+examples/video/*.frame-*.png

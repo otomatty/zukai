@@ -55,6 +55,14 @@ function resolveCode(ref, config) {
   if (!repo) return { rule: 'R002', error: `リポジトリの別名「${alias}」が zukai.config.json にありません。` };
   if (from < 1 || to < from) return { rule: 'R001', error: `code「${ref.code}」の行の範囲が正しくありません。` };
   const dir = path.resolve(config.dir, repo.path ?? '.');
+  // リポジトリの外のファイルは読まない。../ や絶対パスと、リポジトリの外を指すシンボリックリンクを断る。
+  // 抜粋は資料と動画にそのまま載るので、原稿を書いた人が読めるだけのファイルを、共有する生成物に混ぜないため。
+  const inside = (base, p) => {
+    const r = path.relative(base, p);
+    return Boolean(r) && r !== '..' && !r.startsWith('..' + path.sep) && !path.isAbsolute(r);
+  };
+  const outside = { rule: 'R002', error: `ファイル「${file}」は「${alias}」のリポジトリの外を指しています。リポジトリの中のパスを書いてください。` };
+  if (path.isAbsolute(file) || /^[a-z]:/i.test(file) || !inside(dir, path.resolve(dir, file))) return outside;
   let remote = {};
   if (!repo.host || !repo.name) {
     try {
@@ -69,6 +77,7 @@ function resolveCode(ref, config) {
   if (repo.pin === false) {
     // コミットを固定しない設定。作業中のファイルを読み、リンクはブランチを指す。
     if (!fs.existsSync(path.join(dir, file))) return { rule: 'R002', error: `ファイル「${file}」が「${alias}」にありません。` };
+    if (!inside(fs.realpathSync(dir), fs.realpathSync(path.join(dir, file)))) return outside;
     text = fs.readFileSync(path.join(dir, file), 'utf8');
   } else {
     try {

@@ -109,5 +109,17 @@
     "maxTasks": 12,
     "maxGroups": 4,
     "maxDays": 400
+  },
+  "video": {
+    "loadTimeoutMs": 15000,
+    "frameTimeoutMs": 5000,
+    "maxElements": 4000,
+    "minFontPx": 24,
+    "maxLineChars": 40,
+    "maxShotLines": 4,
+    "maxShotSeconds": 15,
+    "maxSameLead": 2,
+    "maxSceneSeconds": 40,
+    "maxTotalSeconds": 300
   }
 }

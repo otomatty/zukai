@@ -34,6 +34,11 @@ export const sentences = (text) => {
 export const isFreeFigure = (info) => /^svg\s+figure\b/.test(info.trim());
 export const isFigure = (info) => /^ya?ml\s+figure\b/.test(info.trim()) || isFreeFigure(info);
 export const isRefs = (info) => /^ya?ml\s+refs\b/.test(info.trim());
+// 動画のナレーション。話し言葉の文を、字幕1枚ずつの配列で書く。資料には表示しない。
+export const isNarration = (info) => /^ya?ml\s+narration\b/.test(info.trim());
+// 動画のシーンを AI が自由に書くブロック。HTML、SVG、CSS、JS をブラウザの中で動かす。資料には表示しない。
+export const isMotion = (info) => /^html\s+motion\b/.test(info.trim());
+export const isVideoOnly = (info) => isNarration(info) || isMotion(info);
 
 export function parse(source) {
   const tokens = md.parse(source, {});
@@ -52,6 +57,7 @@ export function parse(source) {
       const title = plain(tokens[i + 1].content);
       if (level === 1) {
         doc.title = title;
+        doc.titleLine = line;
       } else {
         current = { level, title, line, blocks: [], ignores: [] };
         doc.sections.push(current);
@@ -69,6 +75,19 @@ export function parse(source) {
           block.parseError = e.message.split('\n')[0];
         }
         push(block);
+      } else if (isNarration(tk.info)) {
+        // 3つ目の語は役割。ending はまとめのシーン、question、answer、example、term はセクションの中のショットに使う。
+        const role = tk.info.trim().split(/\s+/)[2] ?? null;
+        const block = { kind: 'narration', line, endLine, role, ending: role === 'ending' };
+        try {
+          block.lines = YAML.parse(tk.content);
+        } catch (e) {
+          block.parseError = e.message.split('\n')[0];
+        }
+        push(block);
+      } else if (isMotion(tk.info)) {
+        const role = tk.info.trim().split(/\s+/)[2] ?? null;
+        push({ kind: 'motion', line, endLine, html: tk.content, role, ending: role === 'ending' });
       } else if (isRefs(tk.info)) {
         const block = { kind: 'refs', line, endLine };
         try {

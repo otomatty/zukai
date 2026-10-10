@@ -8,6 +8,7 @@ import { widthOf } from '../figures/svg.js';
 import { bundledLanguages } from 'shiki';
 import { rules, prosePatterns } from './rules.js';
 import { resolveRefs } from '../refs.js';
+import { termsOf, findAvoided } from '../terms.js';
 
 // ハイライトできる言語名。出力やログのように言語がないものは text と書く。
 export const knownLang = (lang) => ['text', 'txt', 'plaintext', 'plain', 'ansi'].includes(lang) || lang in bundledLanguages;
@@ -96,8 +97,9 @@ async function lintRefs(section, ctx, limits) {
       if (it.kind === 'code') out.push(...lintProse([{ kind: 'paragraph', text: it.note, line: blocks[0].line }]));
     }
   }
-  for (const b of section.blocks.filter((x) => x.kind === 'figure' && !x.parseError)) {
-    const used = types[b.spec?.type]?.refs?.(b.spec) ?? [];
+  // 図の根拠の番号は、仕様の検証に通った図からだけ読む。書きかけの図は F001 で知らせ、ここで例外を出さない。
+  for (const b of section.blocks.filter((x) => x.kind === 'figure' && !x.parseError && types[x.spec?.type] && !types[x.spec.type].validate(x.spec, limits, ctx).length)) {
+    const used = types[b.spec.type].refs?.(b.spec) ?? [];
     const bad = used.filter((n) => !Number.isInteger(n) || n < 1 || n > count);
     if (bad.length) out.push(finding('R001', b.line, count ? `図の番号 ${bad.join('、')} に対応する根拠がありません。根拠は${count}件です。` : `図に番号 ${bad.join('、')} がありますが、根拠のブロック（yaml refs）がありません。`));
   }
@@ -124,6 +126,54 @@ function lintProse(blocks) {
         seen.add(p.rule);
         out.push({ ...finding(p.rule, b.line, `「${m[0]}」 ${p.hint}`), ...(p.severity ? { severity: p.severity } : {}) });
       }
+    }
+  }
+  return out;
+}
+
+// 用語集の表記。見出し、本文、図のラベルと補足、ナレーションを調べる。
+function lintTerms(doc, terms, source, limits, ctx) {
+  if (!terms.length) return [];
+  const rows = source.split('\n');
+  const texts = [];
+  if (doc.title) texts.push({ text: doc.title, line: doc.titleLine ?? 1 });
+  for (const s of doc.sections) texts.push({ text: s.title, line: s.line });
+  for (const b of [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]) {
+    if (b.kind === 'paragraph' || b.kind === 'list') texts.push({ text: b.text, line: b.line });
+    // 図のラベルと補足は、仕様の検証に通った図からだけ取り出す。書きかけの図は F001 で知らせ、ここでは読まない。
+    if (b.kind === 'figure' && b.spec && types[b.spec.type] && !b.parseError && !types[b.spec.type].validate(b.spec, limits, ctx).length) {
+      const t = types[b.spec.type];
+      for (const x of [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
+    }
+    // 表は、資料にも動画にも出るので、セルの文字を行ごとに調べる。区切りの行（|---|）は飛ばす。
+    if (b.kind === 'table') {
+      for (let i = b.line; i <= b.endLine; i++) {
+        const row = rows[i - 1] ?? '';
+        if (/^\s*\|?[\s:|-]+\|?\s*$/.test(row)) continue;
+        texts.push({ text: row.replace(/\|/g, ' '), line: i });
+      }
+    }
+    // ナレーションは、字幕に出る文だけを調べる。時刻の目印 {#名前} と演技のタグ <short pause> は、読み上げにも字幕にも出ないため外す。
+    if (b.kind === 'narration' && Array.isArray(b.lines)) {
+      // 行番号は、ブロックの中でその行の文が書かれている行にする。見つからなければブロックの先頭の行にする。
+      let from = b.line;
+      for (const l of b.lines) {
+        const raw = String((typeof l === 'string' ? l : l?.text) ?? '');
+        const key = raw.slice(0, 12);
+        const at = key ? rows.findIndex((r, i) => i + 1 > from && i + 1 <= b.endLine && r.includes(key)) : -1;
+        if (at >= 0) from = at + 1;
+        texts.push({ text: raw.replace(/\{#[\w-]+\}|<[^<>]+>/g, ''), line: at >= 0 ? at + 1 : b.line });
+      }
+    }
+  }
+  const out = [];
+  const seen = new Set();
+  for (const { text, line } of texts) {
+    for (const hit of findAvoided(text, terms)) {
+      const key = `${line}:${hit.avoid}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(finding('P007', line, `「${hit.avoid}」は、用語集では「${hit.use}」と書きます。`));
     }
   }
   return out;
@@ -156,6 +206,7 @@ export async function lint(source, file, { textlint = true } = {}) {
     section.blocks.filter((b) => b.kind === 'figure').forEach((b) => findings.push(...lintFigure(b, limits, tokens, ctx)));
     findings.push(...lintProse(section.blocks), ...lintCode(section.blocks), ...(await lintRefs(section, ctx, limits)));
   }
+  findings.push(...lintTerms(doc, termsOf(ctx.baseDir), source, limits, ctx));
   if (textlint) findings.push(...(await lintWithTextlint(source, file, limits.textlint.warnOnly)));
 
   // 抑制。セクション内に <!-- zukai-ignore ルールID 理由 --> を書くと、そのセクションでそのルールを外す。理由は必須。
