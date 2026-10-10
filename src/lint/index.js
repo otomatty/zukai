@@ -131,7 +131,7 @@ function lintProse(blocks) {
 }
 
 // 用語集の表記。見出し、本文、図のラベルと補足、ナレーションを調べる。
-function lintTerms(doc, terms, source) {
+function lintTerms(doc, terms, source, limits, ctx) {
   if (!terms.length) return [];
   const rows = source.split('\n');
   const texts = [];
@@ -139,9 +139,18 @@ function lintTerms(doc, terms, source) {
   for (const s of doc.sections) texts.push({ text: s.title, line: s.line });
   for (const b of [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]) {
     if (b.kind === 'paragraph' || b.kind === 'list') texts.push({ text: b.text, line: b.line });
-    if (b.kind === 'figure' && b.spec && types[b.spec.type] && !b.parseError) {
+    // 図のラベルと補足は、仕様の検証に通った図からだけ取り出す。書きかけの図は F001 で知らせ、ここでは読まない。
+    if (b.kind === 'figure' && b.spec && types[b.spec.type] && !b.parseError && !types[b.spec.type].validate(b.spec, limits, ctx).length) {
       const t = types[b.spec.type];
       for (const x of [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
+    }
+    // 表は、資料にも動画にも出るので、セルの文字を行ごとに調べる。区切りの行（|---|）は飛ばす。
+    if (b.kind === 'table') {
+      for (let i = b.line; i <= b.endLine; i++) {
+        const row = rows[i - 1] ?? '';
+        if (/^\s*\|?[\s:|-]+\|?\s*$/.test(row)) continue;
+        texts.push({ text: row.replace(/\|/g, ' '), line: i });
+      }
     }
     // ナレーションは、字幕に出る文だけを調べる。時刻の目印 {#名前} と演技のタグ <short pause> は、読み上げにも字幕にも出ないため外す。
     if (b.kind === 'narration' && Array.isArray(b.lines)) {
@@ -196,7 +205,7 @@ export async function lint(source, file, { textlint = true } = {}) {
     section.blocks.filter((b) => b.kind === 'figure').forEach((b) => findings.push(...lintFigure(b, limits, tokens, ctx)));
     findings.push(...lintProse(section.blocks), ...lintCode(section.blocks), ...(await lintRefs(section, ctx, limits)));
   }
-  findings.push(...lintTerms(doc, termsOf(ctx.baseDir), source));
+  findings.push(...lintTerms(doc, termsOf(ctx.baseDir), source, limits, ctx));
   if (textlint) findings.push(...(await lintWithTextlint(source, file, limits.textlint.warnOnly)));
 
   // 抑制。セクション内に <!-- zukai-ignore ルールID 理由 --> を書くと、そのセクションでそのルールを外す。理由は必須。

@@ -83,6 +83,14 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   const third = await lint(src.replace('説明です。\n', '説明です。\n\n```yaml narration\n- 一つ目です。\n- 二つ目です。\n- clock が動きます。\n```\n'), file, { textlint: false });
   const narrLine = third.findings.find((f) => f.rule === 'P007')?.line;
   assert.equal(narrLine, src.split('\n').indexOf('説明です。') + 1 + 5);
+  // 書きかけの図（検証に通らない flow）があっても、用語の検査で止まらず、F001 を返す。
+  const broken = await lint(src.replace('steps:\n  - label: 矢印\n  - label: 出口\n', ''), file, { textlint: false });
+  assert.ok(broken.findings.some((f) => f.rule === 'F001'));
+  // 表のセルの用語も、その行で知らせる。
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: [{ use: 'トークン', avoid: ['印'], except: ['矢印'] }] }));
+  const tableSrc = '# 題名\n\n導入です。\n\n## 比べる\n\n主張です。\n\n| 項目 | 値 |\n|---|---|\n| 渡す物 | 印 |\n\n説明です。\n';
+  const tabled = await lint(tableSrc, file, { textlint: false });
+  assert.deepEqual(tabled.findings.filter((f) => f.rule === 'P007').map((f) => f.line), [11]);
   // terms が配列でなければ、設定の誤りとして止める。
   fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: { use: '時計' } }));
   await assert.rejects(() => lint(src, file, { textlint: false }), /terms は、配列/);
