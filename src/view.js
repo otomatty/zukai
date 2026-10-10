@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { render } from './render.js';
 import { lint } from './lint/index.js';
+import { parse } from './parse.js';
 
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
 const IDLE_MS = 30 * 60 * 1000;
@@ -26,29 +27,65 @@ export function ensureDir(project) {
   return dir;
 }
 
+// 資料の版。原稿と、原稿が読む screenshot の画像と枠の記録（.json）のうち、最も新しい更新時刻にする。
+// capture で撮り直しても原稿は変わらないので、原稿の更新時刻だけでは古い画面が残る。
+function version(file, source) {
+  const doc = parse(source);
+  const deps = [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]
+    .filter((b) => b.kind === 'figure' && b.spec?.type === 'screenshot' && typeof b.spec.image === 'string')
+    .flatMap((b) => {
+      const image = path.resolve(path.dirname(file), b.spec.image);
+      return [image, `${image}.json`];
+    });
+  return Math.max(
+    ...[file, ...deps].map((p) => {
+      try {
+        return fs.statSync(p).mtimeMs;
+      } catch {
+        return 0;
+      }
+    }),
+  );
+}
+
 // 新しい順の一覧。名前は英数字、ハイフン、ドット、下線だけを受け付ける。
-// ponytail: 読み直しのたびに全原稿の先頭を読む。資料が数百件を超えて遅くなったら mtime でキャッシュする。
+// シンボリックリンクは入れない。リンク先の、置き場所の外のファイルを読ませないため。
+// ponytail: 読み直しのたびに全原稿を読んで解析する。資料が数百件を超えて遅くなったら、原稿の mtime でキャッシュする。
 export function list(dir) {
   return fs
     .readdirSync(dir)
-    .filter((n) => /^[\w.-]+\.md$/.test(n))
+    .filter((n) => /^[\w.-]+\.md$/.test(n) && fs.lstatSync(path.join(dir, n)).isFile())
     .map((name) => {
       const file = path.join(dir, name);
-      return { name, title: fs.readFileSync(file, 'utf8').match(/^# (.+)$/m)?.[1] ?? name, mtime: fs.statSync(file).mtimeMs };
+      const source = fs.readFileSync(file, 'utf8');
+      return { name, title: source.match(/^# (.+)$/m)?.[1] ?? name, mtime: version(file, source) };
     })
     .sort((a, b) => b.mtime - a.mtime);
 }
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// 原稿を HTML にし、2回直しても残った Lint の error を本文の上に出す。同じ版の原稿は描き直さない。
+// render が失敗しても、残った指摘と原稿は読めるようにする。
+const fallback = (source, e) => `<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"></head>
+<body>
+<main>
+<p>この資料は HTML にできませんでした。${esc(e.message)}</p>
+<pre>${esc(source)}</pre>
+</main>
+</body>
+</html>
+`;
+
+// 原稿を HTML にし、2回直しても残った Lint の error を本文の上に出す。同じ版の資料は描き直さない。
 const cache = new Map();
 async function doc(dir, name) {
   const file = path.join(dir, name);
-  const mtime = fs.statSync(file).mtimeMs;
-  if (cache.get(name)?.mtime === mtime) return cache.get(name);
   const source = fs.readFileSync(file, 'utf8');
-  const [html, result] = await Promise.all([render(source, file), lint(source, file)]);
+  const mtime = version(file, source);
+  if (cache.get(name)?.mtime === mtime) return cache.get(name);
+  const [html, result] = await Promise.all([render(source, file).catch((e) => fallback(source, e)), lint(source, file)]);
   const errors = result.findings.filter((f) => f.severity === 'error');
   const banner = errors.length
     ? `<aside style="border:1px solid #eb6834;border-radius:8px;padding:12px 16px;margin-bottom:24px"><strong>Lint の指摘が ${errors.length} 件残っています</strong><ul>${errors.map((f) => `<li>L${f.line} ${f.rule} ${esc(f.message)}</li>`).join('')}</ul></aside>`
@@ -98,7 +135,26 @@ function show(item) {
 async function tick() {
   let items;
   try { items = await (await fetch('/list')).json(); } catch { return; }
-  if (!items.length) return;
+  // 資料がなくなったら、最初の表示に戻す。
+  if (!items.length) {
+    if (drawn !== 'empty') {
+      shown = null;
+      follow = true;
+      drawn = 'empty';
+      $('doc').hidden = true;
+      $('doc').removeAttribute('src');
+      $('empty').hidden = false;
+      $('head').textContent = '資料はまだありません';
+      $('list').replaceChildren();
+      $('toggle').classList.remove('new');
+    }
+    return;
+  }
+  // 読んでいた資料が消えたら、最新の資料に戻る。
+  if (shown && !items.some((i) => i.name === shown.name)) {
+    shown = null;
+    follow = true;
+  }
   // 最新の資料を見ているときは、新しい資料に切り替える。古い資料を読んでいる間は切り替えず、新着の印を付ける。
   const current = shown && items.find((i) => i.name === shown.name);
   if (follow && (!shown || items[0].name !== shown.name || items[0].mtime !== shown.mtime)) show(items[0]);
@@ -165,8 +221,11 @@ export function serve(project, port = portOf(project)) {
       // 一覧にある名前だけを読む。パスを含む名前で、置き場所の外のファイルを読ませない。
       if (name && list(dir).some((i) => i.name === name)) {
         const d = await doc(dir, name);
-        if (url.searchParams.has('download')) return send(res, 200, 'text/html; charset=utf-8', d.html, { 'content-disposition': `attachment; filename="${name.replace(/\.md$/, '.html')}"` });
-        return send(res, 200, 'text/html; charset=utf-8', d.withBanner);
+        // 原稿に書かれた HTML のスクリプトを動かさない。動くと、このページの一覧や資料を読んで外へ送れてしまう。
+        // iframe の sandbox 属性は使わない。sandbox の iframe を読み込まないブラウザがあるため、CSP だけで止める。
+        const csp = { 'content-security-policy': "default-src 'none'; img-src data: 'self'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'" };
+        if (url.searchParams.has('download')) return send(res, 200, 'text/html; charset=utf-8', d.html, { ...csp, 'content-disposition': `attachment; filename="${name.replace(/\.md$/, '.html')}"` });
+        return send(res, 200, 'text/html; charset=utf-8', d.withBanner, csp);
       }
       send(res, 404, 'text/plain; charset=utf-8', '見つかりません。');
     } catch (e) {
