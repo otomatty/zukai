@@ -59,3 +59,8 @@ test('書いている途中の外側のブロックの中の図は、図とし�
   expect(split(open).every(p => !p.isFigure)).toBe(true)
   expect(split(open).map(p => p.text).join('\n')).toBe(open)
 })
+
+test('~~~ で囲んだ図のブロックも図として数える', () => {
+  const tilde = '~~~yaml figure\ntype: flow\nsteps:\n  - label: 受付\n~~~'
+  expect(split(`前\n\n${tilde}`).map(p => p.isFigure)).toEqual([false, true])
+})

@@ -33,7 +33,7 @@ export function split(text: string): Part[] {
       buf.push(...lines.slice(i))
       break
     }
-    const isFigure = open[1] === '' && open[2]![0] === '`' && /^\s*(ya?ml|svg)\s+figure\b/.test(open[3]!)
+    const isFigure = open[1] === '' && /^\s*(ya?ml|svg)\s+figure\b/.test(open[3]!)
     if (isFigure) {
       flush()
       parts.push({ text: lines.slice(i, end + 1).join('\n'), isFigure: true })
@@ -56,28 +56,29 @@ const perTurn = new Set<string>()
 // Desktop の Svg 要素が受け付ける SVG の長さの上限。これより長い図は描かずに、YAML のまま表示する。
 const SVG_MAX = 131072
 
-// まだ描いていない図をまとめて1回の CLI 呼び出しで描く。結果は、図のブロックの順に返る。
-async function draw($: EngineInterface, blocks: string[], png: boolean): Promise<Figure[]> {
-  const key = (b: string) => `${png}:${b}`
-  const todo = [...new Set(blocks.filter(b => !cache.has(key(b))))]
-  if (todo.length) {
-    // CLI の失敗、時間切れ、長すぎて切れた出力は、どれも図の error にする。error の図は YAML のまま表示される。
-    const fail = (message: string) => todo.map(() => ({ error: message }))
-    const run = $.process
-      .run(['node', cliOf($), 'figures', png ? '--png' : `--max-svg=${SVG_MAX}`], { stdin: todo.join('\n\n') })
-      .then(r => {
-        if (r.exitCode !== 0) return fail(r.stderr)
-        if (r.isStdoutTruncated) return fail('図の出力が長すぎます。')
-        return JSON.parse(r.stdout) as Figure[]
-      })
-      .catch((err: unknown) => fail(String(err)))
-    todo.forEach((b, i) => {
-      const one: Promise<Figure> = run.then(list => list[i] ?? { error: '図を描けませんでした。' })
-      cache.set(key(b), one)
-      // 失敗した図は、次の描画でもう一度試す。
-      // screenshot かどうかは、CLI が YAML を読んだ結果で判定する（type: "screenshot" のような書き方も同じに扱うため）。
-      one.then(f => (f.error ? cache.delete(key(b)) : f.type === 'screenshot' && perTurn.add(key(b))))
+// 図を1つずつ CLI で描く。1回の出力は図1つ分（SVG は SVG_MAX 字まで）なので、出力の上限を超えない。
+function drawOne($: EngineInterface, block: string, png: boolean): Promise<Figure> {
+  // CLI の失敗、時間切れ、長すぎて切れた出力は、どれも図の error にする。error の図は YAML のまま表示される。
+  return $.process
+    .run(['node', cliOf($), 'figures', png ? '--png' : `--max-svg=${SVG_MAX}`], { stdin: block })
+    .then((r): Figure => {
+      if (r.exitCode !== 0) return { error: r.stderr }
+      if (r.isStdoutTruncated) return { error: '図の出力が長すぎます。' }
+      return (JSON.parse(r.stdout) as Figure[])[0] ?? { error: '図を描けませんでした。' }
     })
+    .catch((err: unknown) => ({ error: String(err) }))
+}
+
+// まだ描いていない図を描く。結果は、図のブロックの順に返る。
+function draw($: EngineInterface, blocks: string[], png: boolean): Promise<Figure[]> {
+  const key = (b: string) => `${png}:${b}`
+  for (const b of blocks) {
+    if (cache.has(key(b))) continue
+    const one = drawOne($, b, png)
+    cache.set(key(b), one)
+    // 失敗した図は、次の描画でもう一度試す。
+    // screenshot かどうかは、CLI が YAML を読んだ結果で判定する（type: "screenshot" のような書き方も同じに扱うため）。
+    one.then(f => (f.error ? cache.delete(key(b)) : f.type === 'screenshot' && perTurn.add(key(b))))
   }
   return Promise.all(blocks.map(b => cache.get(key(b))!))
 }
