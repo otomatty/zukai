@@ -5,7 +5,14 @@
 // 用語を説明するときの具体例（examples）と、このシステムが実際に使っているもの（actual）を AI に渡す。
 import { loadConfig } from './refs.js';
 
-export const termsOf = (baseDir) => (loadConfig(baseDir).terms ?? []).filter((t) => typeof t?.use === 'string' && t.use);
+// terms が無いときは空にする。配列でないときは、書き間違いを黙って無視しないよう、設定の誤りとして止める。
+export function termsOf(baseDir) {
+  const config = loadConfig(baseDir);
+  const terms = config.terms;
+  if (terms == null) return [];
+  if (!Array.isArray(terms)) throw new Error(`${config.dir} の zukai.config.json の terms は、配列で書いてください。`);
+  return terms.filter((t) => typeof t?.use === 'string' && t.use);
+}
 
 // 文の中の、避ける表記を返す。使う表記と except の語の中に現れたものは数えない。
 export function findAvoided(text, terms) {

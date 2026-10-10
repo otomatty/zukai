@@ -131,8 +131,9 @@ function lintProse(blocks) {
 }
 
 // 用語集の表記。見出し、本文、図のラベルと補足、ナレーションを調べる。
-function lintTerms(doc, terms) {
+function lintTerms(doc, terms, source) {
   if (!terms.length) return [];
+  const rows = source.split('\n');
   const texts = [];
   if (doc.title) texts.push({ text: doc.title, line: doc.titleLine ?? 1 });
   for (const s of doc.sections) texts.push({ text: s.title, line: s.line });
@@ -143,7 +144,17 @@ function lintTerms(doc, terms) {
       for (const x of [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
     }
     // ナレーションは、字幕に出る文だけを調べる。時刻の目印 {#名前} と演技のタグ <short pause> は、読み上げにも字幕にも出ないため外す。
-    if (b.kind === 'narration' && Array.isArray(b.lines)) for (const l of b.lines) texts.push({ text: String((typeof l === 'string' ? l : l?.text) ?? '').replace(/\{#[\w-]+\}|<[^<>]+>/g, ''), line: b.line });
+    if (b.kind === 'narration' && Array.isArray(b.lines)) {
+      // 行番号は、ブロックの中でその行の文が書かれている行にする。見つからなければブロックの先頭の行にする。
+      let from = b.line;
+      for (const l of b.lines) {
+        const raw = String((typeof l === 'string' ? l : l?.text) ?? '');
+        const key = raw.slice(0, 12);
+        const at = key ? rows.findIndex((r, i) => i + 1 > from && i + 1 <= b.endLine && r.includes(key)) : -1;
+        if (at >= 0) from = at + 1;
+        texts.push({ text: raw.replace(/\{#[\w-]+\}|<[^<>]+>/g, ''), line: at >= 0 ? at + 1 : b.line });
+      }
+    }
   }
   const out = [];
   const seen = new Set();
@@ -185,7 +196,7 @@ export async function lint(source, file, { textlint = true } = {}) {
     section.blocks.filter((b) => b.kind === 'figure').forEach((b) => findings.push(...lintFigure(b, limits, tokens, ctx)));
     findings.push(...lintProse(section.blocks), ...lintCode(section.blocks), ...(await lintRefs(section, ctx, limits)));
   }
-  findings.push(...lintTerms(doc, termsOf(ctx.baseDir)));
+  findings.push(...lintTerms(doc, termsOf(ctx.baseDir), source));
   if (textlint) findings.push(...(await lintWithTextlint(source, file, limits.textlint.warnOnly)));
 
   // 抑制。セクション内に <!-- zukai-ignore ルールID 理由 --> を書くと、そのセクションでそのルールを外す。理由は必須。

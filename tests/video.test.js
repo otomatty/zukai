@@ -79,6 +79,13 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: [{ use: '時計', avoid: ['clock', 'pause'] }] }));
   const marked = await lint(src.replace('説明です。\n', '説明です。\n\n```yaml narration\n- 時計が{#clock}動きます。<short pause>\n```\n'), file, { textlint: false });
   assert.ok(!marked.findings.some((f) => f.rule === 'P007'));
+  // ナレーションの用語は、ブロックの先頭ではなく、その文が書かれている行で知らせる。
+  const third = await lint(src.replace('説明です。\n', '説明です。\n\n```yaml narration\n- 一つ目です。\n- 二つ目です。\n- clock が動きます。\n```\n'), file, { textlint: false });
+  const narrLine = third.findings.find((f) => f.rule === 'P007')?.line;
+  assert.equal(narrLine, src.split('\n').indexOf('説明です。') + 1 + 5);
+  // terms が配列でなければ、設定の誤りとして止める。
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: { use: '時計' } }));
+  await assert.rejects(() => lint(src, file, { textlint: false }), /terms は、配列/);
 });
 
 test('コード参照は、リポジトリの外のファイルを読まない', async () => {
