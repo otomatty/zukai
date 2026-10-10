@@ -1,6 +1,9 @@
 {
   "terms": [
     { "use": "トークン", "avoid": ["印"], "except": ["矢印", "目印", "印刷"] },
-    { "use": "バージョン", "avoid": ["版"], "except": ["初版", "改訂版"] }
+    { "use": "バージョン", "avoid": ["版"], "except": ["初版", "改訂版"] },
+    { "use": "ゲートウェイ", "examples": ["Amazon API Gateway", "NGINX"] },
+    { "use": "認証サービス", "examples": ["Amazon Cognito", "Auth0"] },
+    { "use": "ブラウザ", "examples": ["Chrome", "Safari", "Edge"] }
   ]
 }

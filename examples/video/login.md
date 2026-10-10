@@ -138,14 +138,17 @@ zk.cue('whoosh', sec('gw') - 0.9, { dur: 0.9 });
 zk.cue('whoosh', sec('auth') - 0.8, { dur: 0.8 });
 zk.cue('whoosh', sec('db'), { dur: 0.9 });
 zk.scene((t, el) => {
-  const gw = sec('gw'), auth = sec('auth'), db = sec('db');
+  const gw = sec('gw'), auth = sec('auth'), check = sec('check'), db = sec('db');
   const x = path(t, [[gw - 0.9, -160], [gw, 420], [auth - 0.8, 420], [auth, 960]]);
+  // パスワードの手紙は、認証サービスが照合し終えた（チェックの印が出た）後に、盾の中へしぼんで消える。
+  const gone = clamp((t - check - 0.5) / 0.5);
   const env = el.querySelector('.fl-env');
-  env.style.transform = `translate(${x - 50}px, ${470 + Math.sin(t * 7) * 6}px) rotate(${Math.sin(t * 7) * 4}deg)`;
-  env.style.opacity = t < db ? 1 : 0;
+  env.style.transform = `translate(${x - 50}px, ${470 + Math.sin(t * 7) * 6 * (1 - gone)}px) rotate(${Math.sin(t * 7) * 4 * (1 - gone)}deg) scale(${1 - gone * 0.8})`;
+  env.style.opacity = String(1 - gone);
+  // ログインしたことを示すチップは、セッションDBに着いたら、DB の上に残る。
   const p = clamp((t - db) / 0.9);
   const chip = el.querySelector('.fl-chip');
-  chip.style.opacity = p > 0 && p < 1 ? 1 : 0;
+  chip.style.opacity = String(p > 0 ? 1 : 0);
   chip.style.transform = `translate(${960 + 540 * ease(p) - 55}px, ${450 - Math.sin(Math.PI * p) * 180}px)`;
 });
 </script>
@@ -153,6 +156,7 @@ zk.scene((t, el) => {
 
 ```yaml narration term
 - ゲートウェイとは、外からの要求をまとめて受け付ける窓口のことです。
+- '{#ex}たとえば Amazon API Gateway や NGINX のようなソフトが、この役をします。'
 ```
 
 ```html motion term
@@ -162,12 +166,34 @@ zk.scene((t, el) => {
 .fltt-card{position:absolute;left:460px;top:250px;width:1000px;height:420px;border-radius:40px;background:#f5f7ff;box-shadow:22px 22px 0 #0c1330;animation:fltt-in .6s cubic-bezier(.2,.8,.3,1.3) .2s both}
 .fltt-tag{position:absolute;left:60px;top:50px;padding:6px 26px;border-radius:30px;background:var(--zk-purple);color:#fff;font:800 32px var(--zk-font)}
 .fltt-word{position:absolute;left:60px;top:130px;color:#1c2b52;font:900 96px var(--zk-font)}
-.fltt-mean{position:absolute;left:64px;top:280px;color:#5b6673;font:700 42px var(--zk-font);animation:fltt-fade .5s ease-out .9s both}
+.fltt-mean{position:absolute;left:64px;top:250px;color:#5b6673;font:700 42px var(--zk-font);animation:fltt-fade .5s ease-out .9s both}
+.fltt-ex{position:absolute;left:64px;top:325px;padding:6px 22px;border-radius:24px;background:#e3e9f8;color:#1c2b52;font:700 32px var(--zk-font);animation:fltt-fade .5s ease-out var(--ex) both}
 @keyframes fltt-in{from{transform:translateY(80px);opacity:0}}
 @keyframes fltt-fade{from{opacity:0}}
 </style>
 <div class="fltt-bg"></div>
-<div class="fltt-card" data-sfx="appear"><div class="fltt-tag">用語</div><div class="fltt-word">ゲートウェイ</div><div class="fltt-mean">外からの要求を受け付ける窓口</div></div>
+<div class="fltt-card" data-sfx="appear"><div class="fltt-tag">用語</div><div class="fltt-word">ゲートウェイ</div><div class="fltt-mean">外からの要求を受け付ける窓口</div><div class="fltt-ex" data-sfx="click">例: Amazon API Gateway、NGINX</div></div>
+```
+
+```yaml narration term
+- 認証サービスとは、パスワードを確かめて、本人かどうかを判断する係です。
+- '{#ex}たとえば Amazon Cognito や Auth0 のようなサービスがあります。'
+```
+
+```html motion term
+<zk-options transition="cut"></zk-options>
+<style>
+.flt2-bg{position:absolute;inset:0;background:linear-gradient(#18233f,#24365f)}
+.flt2-card{position:absolute;left:460px;top:250px;width:1000px;height:420px;border-radius:40px;background:#f5f7ff;box-shadow:22px 22px 0 #0c1330;animation:flt2-in .6s cubic-bezier(.2,.8,.3,1.3) .2s both}
+.flt2-tag{position:absolute;left:60px;top:50px;padding:6px 26px;border-radius:30px;background:var(--zk-purple);color:#fff;font:800 32px var(--zk-font)}
+.flt2-word{position:absolute;left:60px;top:130px;color:#1c2b52;font:900 96px var(--zk-font)}
+.flt2-mean{position:absolute;left:64px;top:250px;color:#5b6673;font:700 42px var(--zk-font);animation:flt2-fade .5s ease-out .9s both}
+.flt2-ex{position:absolute;left:64px;top:325px;padding:6px 22px;border-radius:24px;background:#e3e9f8;color:#1c2b52;font:700 32px var(--zk-font);animation:flt2-fade .5s ease-out var(--ex) both}
+@keyframes flt2-in{from{transform:translateY(80px);opacity:0}}
+@keyframes flt2-fade{from{opacity:0}}
+</style>
+<div class="flt2-bg"></div>
+<div class="flt2-card" data-sfx="appear"><div class="flt2-tag">用語</div><div class="flt2-word">認証サービス</div><div class="flt2-mean">本人かどうかを確かめる係</div><div class="flt2-ex" data-sfx="click">例: Amazon Cognito、Auth0</div></div>
 ```
 
 ```yaml narration example
@@ -273,28 +299,38 @@ Cookieには、セッションIDだけを入れます。
 <div class="sq-msg" id="sq-id" style="background:#f5f7ff;color:#1c2b52">IDとパスワード</div>
 <div class="sq-msg" id="sq-sid" style="background:var(--zk-yellow);color:#1c2b52">セッションID</div>
 <svg class="sq-msg" id="sq-cookie" style="padding:0" width="110" height="110" viewBox="0 0 110 110"><circle cx="55" cy="55" r="52" fill="#d9a066"/><circle cx="55" cy="55" r="52" fill="none" stroke="#b97f45" stroke-width="8"/><circle cx="35" cy="40" r="9" fill="#5b3a1e"/><circle cx="70" cy="35" r="7" fill="#5b3a1e"/><circle cx="62" cy="72" r="10" fill="#5b3a1e"/><circle cx="32" cy="74" r="6" fill="#5b3a1e"/></svg>
+<svg class="sq-msg" id="sq-idok" style="padding:0" width="80" height="80" viewBox="0 0 80 80"><circle cx="40" cy="40" r="40" fill="#3cc48a"/><path d="M22 42 L35 55 L59 28" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
 <svg class="sq-done" viewBox="0 0 100 100" data-sfx="chime"><circle cx="50" cy="50" r="50" fill="#3cc48a"/><path d="M27 52 L44 68 L74 34" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>
 <script>
 const root = document.currentScript.closest('.zk-scene');
 const sec = (n) => parseFloat(getComputedStyle(root).getPropertyValue('--' + n));
 const ease = (p) => (p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2);
 const clamp = (v) => Math.max(0, Math.min(1, v));
+// [要素, 目印, 出発の x, 着く x, 着く y, 着いた後]。
+// IDとパスワードは、認証サービスが確かめて終わるので、チェックの印が付いてから消える。
+// セッションIDは DB にしまわれ、クッキーはブラウザが預かるので、着いた場所に残る。
 const flights = [
-  ['#sq-id', 'send', 360, 960],
-  ['#sq-sid', 'store', 960, 1560],
-  ['#sq-cookie', 'cookie', 960, 360],
+  ['#sq-id', 'send', 360, 960, 300, 'checked'],
+  ['#sq-sid', 'store', 960, 1560, 390, 'keep'],
+  ['#sq-cookie', 'cookie', 960, 620, 470, 'keep'],
 ];
 for (const [, at] of flights) zk.cue('whoosh', sec(at), { dur: 1 });
+zk.cue('success', sec('send') + 1.4);
 zk.scene((t, el) => {
-  // 手紙は、弧を描いて相手のところへ飛び、着いたら消える。
-  for (const [sel, at, x0, x1] of flights) {
+  for (const [sel, at, x0, x1, y1, after] of flights) {
     const m = el.querySelector(sel);
     const p = clamp((t - sec(at)) / 1);
     const x = x0 + (x1 - x0) * ease(p);
-    const y = 300 - Math.sin(Math.PI * p) * 120;
-    m.style.opacity = p > 0 && p < 1 ? 1 : 0;
-    m.style.transform = `translate(calc(${x}px - 50%), ${y}px) rotate(${(x1 > x0 ? 1 : -1) * Math.sin(Math.PI * p) * 8}deg)`;
+    const y = 300 + (y1 - 300) * ease(p) - Math.sin(Math.PI * p) * 120;
+    const gone = after === 'checked' ? clamp((t - sec(at) - 1.6) / 0.4) : 0;
+    m.style.opacity = String(p > 0 ? 1 - gone : 0);
+    m.style.transform = `translate(calc(${x}px - 50%), ${y}px) rotate(${(x1 > x0 ? 1 : -1) * Math.sin(Math.PI * p) * 8}deg) scale(${1 - gone * 0.7})`;
   }
+  // 確かめ終わった印。IDとパスワードが消える前に、認証サービスの頭の上に出る。
+  const ok = el.querySelector('#sq-idok');
+  const okP = clamp((t - sec('send') - 1.4) / 0.3);
+  ok.style.opacity = String(okP);
+  ok.style.transform = `translate(1060px, 230px) scale(${0.4 + 0.6 * okP})`;
   // まばたき。3体がそれぞれの間隔で目を閉じる。
   el.querySelectorAll('.sq-eyes').forEach((g, i) => {
     const ph = (t * (0.31 + i * 0.07) + i * 0.4) % 1;

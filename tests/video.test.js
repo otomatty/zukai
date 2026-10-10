@@ -65,6 +65,13 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   assert.equal(findAvoided('ユーザが使う', user).length, 1);
   const titled = await lint(src.replace('# 題名', '# 印の渡し方'), file, { textlint: false });
   assert.ok(titled.findings.some((f) => f.rule === 'P007' && f.line === 1));
+  // 具体例だけを書いた用語は、表記の検査をせず、指示の「用語の具体例」の表に入る。
+  const { termsTable } = await import('../src/terms.js');
+  const withExamples = [...user, { use: '認証サービス', examples: ['Amazon Cognito', 'Auth0'], actual: 'Amazon Cognito' }];
+  assert.deepEqual(findAvoided('認証サービスです', withExamples), []);
+  const table = termsTable(withExamples);
+  assert.match(table, /## 用語の表記[\s\S]*\| ユーザー \| ユーザ \|/);
+  assert.match(table, /## 用語の具体例[\s\S]*\| 認証サービス \| Amazon Cognito \| Amazon Cognito、Auth0 \|/);
 });
 
 test('コード参照は、リポジトリの外のファイルを読まない', async () => {
