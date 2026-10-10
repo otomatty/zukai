@@ -25,6 +25,7 @@ export const rules = {
   P004: { severity: 'error', title: '比喩的な動詞', basis: 'ushitora 2章 比喩的な動作表現、yomiyasu 原則4' },
   P005: { severity: 'warn', title: '抽象語', basis: 'ushitora 2章 具体性の不足' },
   P006: { severity: 'warn', title: '指示語だけで対象を示している', basis: 'ushitora 5章 不適切な省略、yomiyasu 原則1' },
+  P007: { severity: 'error', title: '用語集と違う表記', basis: 'zukai.config.json の terms。チームで決めた表記にそろえる' },
 };
 
 // 文章ルールのパターン。辞書を増やす前に、stats で発火と修正の実績を確認する。

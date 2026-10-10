@@ -8,6 +8,7 @@ import { widthOf } from '../figures/svg.js';
 import { bundledLanguages } from 'shiki';
 import { rules, prosePatterns } from './rules.js';
 import { resolveRefs } from '../refs.js';
+import { termsOf, findAvoided } from '../terms.js';
 
 // ハイライトできる言語名。出力やログのように言語がないものは text と書く。
 export const knownLang = (lang) => ['text', 'txt', 'plaintext', 'plain', 'ansi'].includes(lang) || lang in bundledLanguages;
@@ -129,6 +130,32 @@ function lintProse(blocks) {
   return out;
 }
 
+// 用語集の表記。見出し、本文、図のラベルと補足、ナレーションを調べる。
+function lintTerms(doc, terms) {
+  if (!terms.length) return [];
+  const texts = [];
+  for (const s of doc.sections) texts.push({ text: s.title, line: s.line });
+  for (const b of [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]) {
+    if (b.kind === 'paragraph' || b.kind === 'list') texts.push({ text: b.text, line: b.line });
+    if (b.kind === 'figure' && b.spec && types[b.spec.type] && !b.parseError) {
+      const t = types[b.spec.type];
+      for (const x of [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
+    }
+    if (b.kind === 'narration' && Array.isArray(b.lines)) for (const l of b.lines) texts.push({ text: typeof l === 'string' ? l : l?.text, line: b.line });
+  }
+  const out = [];
+  const seen = new Set();
+  for (const { text, line } of texts) {
+    for (const hit of findAvoided(text, terms)) {
+      const key = `${line}:${hit.avoid}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(finding('P007', line, `「${hit.avoid}」は、用語集では「${hit.use}」と書きます。`));
+    }
+  }
+  return out;
+}
+
 // textlint の提案型ルールは warn に落とす。対象は contract/limits.json の textlint.warnOnly に書く。
 async function lintWithTextlint(source, file, warnOnly) {
   const { createLinter, loadTextlintrc } = await import('textlint');
@@ -156,6 +183,7 @@ export async function lint(source, file, { textlint = true } = {}) {
     section.blocks.filter((b) => b.kind === 'figure').forEach((b) => findings.push(...lintFigure(b, limits, tokens, ctx)));
     findings.push(...lintProse(section.blocks), ...lintCode(section.blocks), ...(await lintRefs(section, ctx, limits)));
   }
+  findings.push(...lintTerms(doc, termsOf(ctx.baseDir)));
   if (textlint) findings.push(...(await lintWithTextlint(source, file, limits.textlint.warnOnly)));
 
   // 抑制。セクション内に <!-- zukai-ignore ルールID 理由 --> を書くと、そのセクションでそのルールを外す。理由は必須。

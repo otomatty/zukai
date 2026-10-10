@@ -87,7 +87,11 @@
     scene(frame) {
       hooks.push({ id: running, frame });
     },
-    // 用意した効果音（pop、whoosh、draw、chime）を、シーンの at 秒に鳴らす。
+    // 名前の付いた効果音（appear、whoosh、chime など。一覧は prompts/video.md）を、シーンの at 秒に鳴らす。
+    // ZzFX の数値で作った音を、シーンの at 秒に鳴らす。
+    zzfx(at, ...params) {
+      cues.push({ scene: running, t: at, kind: 'zzfx', params: params.map((v) => (v === undefined ? null : v)) });
+    },
     cue(kind, at, opts = {}) {
       cues.push({ scene: running, t: at, kind, ...opts });
     },
@@ -216,6 +220,11 @@
           if (!w.hasAttribute('data-manual')) animateFigure(sc, w, parts);
         });
         // data-sfx を付けた要素は、最初のアニメーションが始まる時刻に音を鳴らす。2つ目からは、浮く動きのような続きの動きとみなす。
+        // data-zzfx には ZzFX の数値を、カンマ区切りで書く。空の値は既定値になる。
+        el.querySelectorAll('[data-zzfx]').forEach((x) => {
+          const a = x.getAnimations()[0];
+          if (a) cues.push({ scene: sc.id, t: (a.effect.getTiming().delay ?? 0) / 1000, kind: 'zzfx', params: x.dataset.zzfx.split(',').map((v) => (v.trim() === '' ? null : Number(v))) });
+        });
         el.querySelectorAll('[data-sfx]').forEach((x) => {
           const a = x.getAnimations()[0];
           if (a) cues.push({ scene: sc.id, t: (a.effect.getTiming().delay ?? 0) / 1000, kind: x.dataset.sfx });

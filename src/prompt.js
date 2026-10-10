@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { types } from './figures/index.js';
 import { root, readJson } from './lint/index.js';
+import { termsTable } from './terms.js';
 
 // type は、型の書き方を取り出すコマンド。zukai を入れていない環境では、node と CLI のパスを含めて渡す。
-// video を true にすると、動画の書き方（prompts/video.md）を足す。
-export function buildPrompt({ full = false, only = null, type = 'zukai type', video = false } = {}) {
+// video を true にすると、動画の書き方（prompts/video.md）を足す。terms は用語集（zukai.config.json の terms）。
+export function buildPrompt({ full = false, only = null, type = 'zukai type', video = false, terms = [] } = {}) {
   const limits = readJson('contract/limits.json');
   const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8').trim();
   const fill = (s) =>
@@ -38,11 +39,14 @@ export function buildPrompt({ full = false, only = null, type = 'zukai type', vi
     read('prompts/video.md')
       .replaceAll('{{cli}}', type.replace(/\s+type$/, ''))
       .replaceAll('{{lineMax}}', v.maxLineChars)
+      .replaceAll('{{shotLines}}', v.maxShotLines)
+      .replaceAll('{{shotSec}}', v.maxShotSeconds)
+      .replaceAll('{{sameLead}}', v.maxSameLead)
       .replaceAll('{{loadSec}}', v.loadTimeoutMs / 1000)
       .replaceAll('{{frameSec}}', v.frameTimeoutMs / 1000)
       .replaceAll('{{minFont}}', v.minFontPx)
       .replaceAll('{{maxElements}}', v.maxElements)
       .replaceAll('{{maxScene}}', v.maxSceneSeconds)
       .replaceAll('{{maxTotal}}', v.maxTotalSeconds);
-  return [fill(read('prompts/base.md')), catalog, video ? videoGuide() : '', notes ? `## 追加の指示\n\n${notes}` : ''].filter(Boolean).join('\n\n') + '\n';
+  return [fill(read('prompts/base.md')), termsTable(terms), catalog, video ? videoGuide() : '', notes ? `## 追加の指示\n\n${notes}` : ''].filter(Boolean).join('\n\n') + '\n';
 }

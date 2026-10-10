@@ -14,7 +14,8 @@ export const defaults = () => ({
     voice: 'Kore',
     style: '落ち着いた声で、好奇心をくすぐるように語る',
     bgm: null,
-    sfx: { enabled: true, volume: 0.5, files: { pop: null, whoosh: null, draw: null, chime: null } },
+    // files は、名前の付いた効果音を手元の音のファイルに差し替えるときに書く。例: { "appear": "sounds/pop.wav" }
+    sfx: { enabled: true, volume: 0.5, files: {} },
   },
 });
 

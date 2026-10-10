@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { synth, mix, wav16, rng, RATE } from '../../src/video/sfx.js';
+import { mix, wav16, rng, RATE } from '../../src/video/sfx.js';
 
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +15,7 @@ const out = path.join(here, 'out');
 // 動画で使いそうな動きと、それぞれの案の音。
 // zzfx は ZzFX の引数（音量, ばらつき, 周波数, attack, sustain, release, 波形, 波形の曲がり, slide, deltaSlide, 音程の跳び, 跳ぶ時刻, 繰り返し, ノイズ, 変調, ビット落とし, ディレイ, sustain の音量, decay, トレモロ, フィルタ）。
 // ばらつきは0にして、毎回同じ音にする。filter は負の値がローパス、正の値がハイパスで、区切りの周波数は値の2倍になる。
-// kenney は素材のファイル。current は今の合成音（src/video/sfx.js）の種類。無い動きは null。
+// kenney は素材のファイル。このスパイクの結果、ZzFX を採用し、zzfx の値を src/video/sfx.js の PRESETS に移した。
 const EVENTS = [
   { id: 'appear', name: '部品が現れる', zzfx: [1, 0, 520, 0.005, 0.02, 0.08, 0, 1.6, 18], kenney: 'interface/Audio/drop_002.ogg', current: { kind: 'pop', freq: 520 } },
   { id: 'bubble', name: '吹き出しが出る', zzfx: [0.8, 0, 700, 0.01, 0.03, 0.1, 0, 1, 0, 0, 300, 0.04], kenney: 'interface/Audio/pluck_001.ogg', current: null },
@@ -79,7 +79,6 @@ function kenneySounds(dir) {
   );
 }
 
-const currentSounds = () => Object.fromEntries(EVENTS.filter((e) => e.current).map((e) => [e.id, synth(e.current.kind, { ...e.current, seed: 1 })]));
 
 const zzfxPath = arg('zzfx');
 const kenneyDir = arg('kenney');
@@ -91,7 +90,6 @@ if (!zzfxPath || !kenneyDir) {
 const sets = {
   zzfx: { title: 'ZzFX（MIT）', sounds: await zzfxSounds(zzfxPath) },
   kenney: { title: 'Kenney（CC0）', sounds: kenneySounds(kenneyDir) },
-  current: { title: '今の合成音', sounds: currentSounds() },
 };
 
 fs.rmSync(out, { recursive: true, force: true });
@@ -112,7 +110,7 @@ const cell = (key, id) => (rows[id]?.[key] ? `<audio controls preload="none" src
 const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><title>効果音のスパイク</title>
 <style>body{font:15px/1.6 system-ui,sans-serif;margin:24px;color:#1c2530}table{border-collapse:collapse}th,td{border-bottom:1px solid #dfe4ea;padding:8px 12px;text-align:left;vertical-align:top}th{border-bottom:2px solid #1c2530}audio{height:32px;width:220px}.m{font-size:12px;color:#5b6673}</style>
 <h1>効果音のスパイク</h1>
-<p>音の大きさは、平均の大きさ（RMS）を -16dB に合わせ、最大値が -1dB を超えないようにそろえています。下の「1シーン分の流れ」は、部品が3つ現れ、線が伸び、強調し、吹き出しが出て、数を数え、正解で終わり、場面が移る流れです。</p>
+<p>このスパイクの結果、ZzFX を採用しました。採用前の合成音は、本体から削除しています。音の大きさは、平均の大きさ（RMS）を -16dB に合わせ、最大値が -1dB を超えないようにそろえています。下の「1シーン分の流れ」は、部品が3つ現れ、線が伸び、強調し、吹き出しが出て、数を数え、正解で終わり、場面が移る流れです。</p>
 <table><tr><th>動き</th>${Object.values(sets).map((s) => `<th>${s.title}</th>`).join('')}</tr>
 <tr><td><b>1シーン分の流れ</b></td>${Object.keys(sets).map((k) => `<td><audio controls preload="none" src="${k}/sequence.wav"></audio></td>`).join('')}</tr>
 ${EVENTS.map((e) => `<tr><td>${e.name}<div class="m">${e.id}${e.kenney ? ` / ${e.kenney.split('/').pop()}` : ''}</div></td>${Object.keys(sets).map((k) => `<td>${cell(k, e.id)}</td>`).join('')}</tr>`).join('\n')}

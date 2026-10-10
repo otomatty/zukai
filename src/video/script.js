@@ -67,8 +67,8 @@ export function checkLines(lines, source, { needQuestion }) {
 export const videoTokens = (t) => ({ ...t, color: { ...t.color, ...t.video.figure.color }, chart: { ...t.chart, ...t.video.figure.chart } });
 
 // <zk-options ...> を読み、HTML から外す。知らない名前や値は、検査の結果として返す。
-export function readOptions(html) {
-  const options = { ...DEFAULT_OPTIONS };
+export function readOptions(html, defaults = DEFAULT_OPTIONS) {
+  const options = { ...defaults };
   const findings = [];
   const out = html.replace(/<zk-options\b([^>]*)>(\s*<\/zk-options>)?/gi, (_, attrs) => {
     for (const [, k, v] of attrs.matchAll(/([\w-]+)\s*=\s*"([^"]*)"/g)) {
@@ -93,6 +93,9 @@ const narrationOf = (blocks, ending = false) => {
 };
 const motionOf = (blocks, ending = false) => blocks.find((b) => b.kind === 'motion' && Boolean(b.ending) === ending);
 
+// セクションの中のショットの役割。yaml narration と html motion の3つ目の語に書く。
+export const ROLE_NAMES = { question: '疑問', answer: '答え', example: '例', term: '用語' };
+
 // 台本は、オープニングでテーマと疑問を示し、各シーンで疑問を投げかけて根拠と例で答え、エンディングでまとめる。
 export function scenesOf(source, file) {
   const doc = parse(source);
@@ -116,30 +119,42 @@ export function scenesOf(source, file) {
   const opening = leadLines.length ? checkLines(leadLines, whole, { needQuestion: 'any' }) : [{ severity: 'error', rule: 'V004', message: 'オープニングのナレーションがありません。題名の直後の段落の後ろに yaml narration を置き、この動画のテーマと、動画で答える疑問を示してください。' }];
   const out = [{ opening: true, kind: lead.html == null ? 'title' : 'free', title: doc.title ?? '', heading: doc.title ?? '', claim: doc.title ?? '', figureSvg: null, whole: true, motionHtml: lead.html, options: lead.options, findings: [...opening, ...lead.findings], lines: leadLines, refsBlock: null }];
 
+  const L = limits.video;
   for (const s of doc.sections) {
     if (s.container) continue;
     const fig = s.blocks.find((b) => b.kind === 'figure' && b.spec);
-    const motion = motionOf(s.blocks);
     const claim = s.blocks[0]?.kind === 'paragraph' ? s.blocks[0].text : s.title;
-    // ナレーションが無いセクションは、説明文を読み上げる。書き言葉のままになるので、代わりの手段にとどめる。
-    const written = narrationOf(s.blocks);
-    const lines = linesOf(written ?? sentences(s.blocks.slice(1).filter((b) => b.kind === 'paragraph').map((b) => b.text).join('')));
     const type = types[fig?.spec?.type];
     const figureSvg = type && !type.validate(fig.spec, limits, ctx).length ? type.render(fig.spec, tokens, ctx) : null;
-    const opt = sceneOf(motion);
-    const checks = written ? checkLines(lines, textOf(s.line, s.endLine), { needQuestion: 'first' }) : [];
-    out.push({
-      kind: motion ? 'free' : 'auto',
-      heading: s.title,
-      claim,
-      figureSvg,
-      whole: !type || WHOLE.has(fig.spec.type),
-      motionHtml: opt.html,
-      options: opt.options,
-      findings: [...opt.findings, ...checks],
-      lines,
-      refsBlock: s.blocks.find((b) => b.kind === 'refs') ?? null,
+    const refsBlock = s.blocks.find((b) => b.kind === 'refs') ?? null;
+    const sectionText = textOf(s.line, s.endLine);
+    // 役割を付けたナレーションがあれば、ナレーション1つを1ショット（シーン）にする。無ければセクション全体で1シーン。
+    const narrations = s.blocks.filter((b) => b.kind === 'narration' && !b.ending);
+    const motions = s.blocks.filter((b) => b.kind === 'motion' && !b.ending);
+    const shots = narrations.some((b) => b.role) ? narrations : [narrations[0] ?? null];
+    const used = new Set();
+    shots.forEach((nb, k) => {
+      const role = nb?.role ?? null;
+      const findings = [];
+      if (role && !ROLE_NAMES[role]) findings.push({ severity: 'warn', rule: 'V017', message: `役割「${role}」はありません。使える役割は ${Object.keys(ROLE_NAMES).join('、')} です。` });
+      const motion = motions.find((m) => !used.has(m) && (m.role ?? null) === role);
+      if (motion) used.add(motion);
+      // 同じセクションの2つ目からのショットは、既定で切り替えの動きを付けずにつなぐ。
+      const base = k > 0 ? { ...DEFAULT_OPTIONS, transition: 'cut' } : DEFAULT_OPTIONS;
+      const opt = motion ? readOptions(motion.html, base) : { html: null, options: { ...base }, findings: [missing] };
+      // ナレーションが無いセクションは、説明文を読み上げる。書き言葉のままになるので、代わりの手段にとどめる。
+      const written = nb && Array.isArray(nb.lines) ? nb.lines : null;
+      let lines = linesOf(written ?? (k === 0 ? sentences(s.blocks.slice(1).filter((b) => b.kind === 'paragraph').map((b) => b.text).join('')) : []));
+      if (role === 'example') lines = lines.map((l) => ({ ...l, example: true }));
+      if (written) findings.push(...checkLines(lines, sectionText, { needQuestion: k === 0 ? 'first' : null }));
+      if (written && lines.length > L.maxShotLines) {
+        findings.push({ severity: 'warn', rule: 'V107', message: role ? `このショットは${lines.length}行あります。目安は${L.maxShotLines}行までです。ショットを分けてください。` : `このシーンは${lines.length}行あります。目安は${L.maxShotLines}行までです。疑問（question）、答え（answer）、例（example）、用語（term）のショットに分けてください。` });
+      }
+      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, whole: !type || WHOLE.has(fig.spec.type), motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
     });
+    for (const m of motions.filter((x) => !used.has(x))) {
+      out.at(-1).findings.push({ severity: 'warn', rule: 'V017', message: `L${m.line} の html motion${m.role ? ` ${m.role}` : ''} に、同じ役割の yaml narration がありません。` });
+    }
   }
 
   // エンディング。原稿のどこに置いてもよいが、最後に置くと読みやすい。
@@ -149,6 +164,15 @@ export function scenesOf(source, file) {
     out.push({ ending: true, kind: opt.html == null ? 'title' : 'free', title: 'まとめ', heading: 'まとめ', claim: 'まとめ', figureSvg: null, whole: true, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...checkLines(endLines, whole, {})], lines: endLines, refsBlock: null });
   } else {
     out[0].findings.push({ severity: 'error', rule: 'V005', message: 'エンディングがありません。原稿の最後に yaml narration ending と html motion ending を置き、動画の要点をまとめてください。' });
+  }
+  // 同じ書き出し（読点までの語）が多いと、聞いていて単調になる。動画全体で数える。
+  const leads = {};
+  out.forEach((sc, i) => sc.lines.forEach((l) => {
+    const m = l.text.match(/^([^、。？！]{1,8})、/);
+    if (m) (leads[m[1]] ??= []).push(i);
+  }));
+  for (const [w, ids] of Object.entries(leads)) {
+    if (ids.length > L.maxSameLead) out[ids[0]].findings.push({ severity: 'warn', rule: 'V016', message: `「${w}、」で始まる行が${ids.length}回あります。${L.maxSameLead}回までにして、ほかは言い回しを変えるか、前置きなしで始めてください。` });
   }
   // 読めなかったナレーションは、そのシーンが黙って無音になるので、必ず知らせる。
   for (const b of all.filter((x) => x.kind === 'narration' && (x.parseError || !Array.isArray(x.lines)))) {

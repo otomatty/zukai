@@ -116,6 +116,9 @@
     "maxElements": 4000,
     "minFontPx": 24,
     "maxLineChars": 40,
+    "maxShotLines": 4,
+    "maxShotSeconds": 15,
+    "maxSameLead": 2,
     "maxSceneSeconds": 40,
     "maxTotalSeconds": 300
   }

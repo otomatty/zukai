@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { parseLine, readOptions, wrapScripts, timeline, estimateVoice, scenesOf, checkLines, numbersIn, TIMING } from '../src/video/script.js';
 import { lineTimes } from '../src/video/tts.js';
-import { synth, thin, mix } from '../src/video/sfx.js';
+import { synth, synthParams, thin, mix, PRESETS, checkParams } from '../src/video/sfx.js';
 
 test('ナレーションの行から、目印とタグを外して字幕と読み上げの文を作る', () => {
   const l = parseLine({ text: 'そのまま<short pause>30分たつと、{#expire}消えます。', style: '残念そうに' });
@@ -34,6 +34,30 @@ test('オープニングとエンディングが無ければ知らせ、あれ�
   const scenes = scenesOf(full, file);
   assert.equal(scenes.at(-1).ending, true);
   assert.deepEqual(scenes[0].findings.map((f) => f.rule).sort(), ['V003', 'V012']);
+});
+
+test('役割を付けたナレーションごとにショットを作り、長いシーンと同じ書き出しの多用を知らせる', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-shot-'));
+  const file = path.join(dir, 'a.md');
+  const sec = (narr) => `## 節\n\n主張です。\n\n\`\`\`yaml figure\ntype: flow\nsteps:\n  - label: 入口\n  - label: 出口\n\`\`\`\n\n説明です。\n\n${narr}`;
+  const shots = sec('```yaml narration question\n- どうなるのでしょう？\n```\n\n```html motion question\n<div></div>\n```\n\n```yaml narration example\n- たとえば、100人で使うと遅くなります。\n```\n\n```html motion example\n<div></div>\n```\n');
+  const s = scenesOf(`# 題名\n\n導入です。\n\n${shots}`, file);
+  assert.deepEqual(s.slice(1, 3).map((x) => [x.role, x.kind, x.options.transition]), [['question', 'free', 'pan'], ['example', 'free', 'cut']]);
+  // 例のショットの数値は、原稿と照らし合わせない。
+  assert.ok(!s[2].findings.some((f) => f.rule === 'V013'));
+  const long = sec(`\`\`\`yaml narration\n${['なぜでしょう？', 'たとえば、一つめ。', 'たとえば、二つめ。', 'たとえば、三つめ。', '四つめです。'].map((l) => `- ${l}`).join('\n')}\n\`\`\`\n`);
+  const rules = scenesOf(`# 題名\n\n導入です。\n\n${long}`, file).flatMap((x) => x.findings.map((f) => f.rule));
+  assert.ok(rules.includes('V107') && rules.includes('V016'));
+});
+
+test('用語集と違う表記を知らせ、除外する語は知らせない', async () => {
+  const { lint } = await import('../src/lint/index.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-terms-'));
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: [{ use: 'トークン', avoid: ['印'], except: ['矢印'] }] }));
+  const file = path.join(dir, 'a.md');
+  const src = '# 題名\n\n導入です。\n\n## 渡し方\n\nログインした印を、矢印の先へ渡します。\n\n```yaml figure\ntype: flow\nsteps:\n  - label: 矢印\n  - label: 出口\n```\n\n説明です。\n';
+  const r = await lint(src, file, { textlint: false });
+  assert.deepEqual(r.findings.filter((f) => f.rule === 'P007').map((f) => f.line), [7]);
 });
 
 test('シーンの設定を読み、使えない値を知らせ、スクリプトをシーンごとに包む', () => {
@@ -67,8 +91,16 @@ test('音声の無音の区間から、文の切れ目を見つける', () => {
   assert.ok(Math.abs(t[0].end - 1.4) < 0.05, `切れ目 ${t[0].end}`);
 });
 
-test('効果音は割れず、鳴りすぎを間引く', () => {
-  for (const k of ['pop', 'whoosh', 'draw', 'chime']) assert.ok(Math.max(...synth(k).map(Math.abs)) <= 1);
+test('名前の付いた効果音と ZzFX の数値から音を作り、鳴りすぎを間引く', async () => {
+  for (const k of [...Object.keys(PRESETS), 'pop']) {
+    const s = await synth(k);
+    assert.ok(s.length > 100 && s.every(Number.isFinite), k);
+  }
+  // ばらつきのある ZzFX の音も、種が同じなら同じ音になる。
+  const p = [1, 0.5, 440, 0, 0.1, 0.1];
+  assert.deepEqual(await synthParams(p, 3), await synthParams(p, 3));
+  assert.match(checkParams([1, 'x']), /x/);
+  assert.equal(checkParams([1, null, 440]), null);
   const many = Array.from({ length: 10 }, (_, i) => ({ t: i * 0.1, kind: 'pop' }));
   assert.equal(thin(many).length, 4);
   assert.ok(Math.max(...mix(1, [{ at: 0, samples: new Float32Array(100).fill(0.8) }, { at: 0, samples: new Float32Array(100).fill(0.8) }]).map(Math.abs)) <= 0.991);

@@ -63,17 +63,32 @@ steps:
 
 認証サービスは、照合に成功するとセッションIDを発行します。
 
-```yaml narration
+```yaml narration question
 - ボタンを押したあと、パスワードは、どこへ運ばれるのでしょう？
-- 最初に届くのは、{#gw}ゲートウェイという入口です。
-- ゲートウェイとは、外からの要求をまとめて受け付ける窓口のことです。
-- text: たとえば、会社の受付が来客を受け付けて、担当の部署へ案内するのと同じです。
-  example: true
-- 担当は{#auth}認証サービスで、パスワードが{#check}正しいかを照合します。
-- 正しければ、{#db}セッションDBに、ログインした印を30分間しまいます。
 ```
 
-```html motion
+```html motion question
+<zk-options transition="fade"></zk-options>
+<style>
+.flqq-bg{position:absolute;inset:0;background:linear-gradient(#141c3a,#1f2b55)}
+.flqq-mark{position:absolute;left:760px;top:170px;width:400px;height:400px;border-radius:50%;background:var(--zk-cyan);color:#1c2b52;font:900 280px/400px var(--zk-font);text-align:center;box-shadow:24px 24px 0 #0c1330;animation:flqq-pop .6s cubic-bezier(.2,.8,.3,1.5) .2s both,flqq-bob 2.4s ease-in-out .8s infinite}
+.flqq-word{position:absolute;left:0;right:0;top:640px;text-align:center;color:#fff;font:800 60px var(--zk-font);animation:flqq-up .5s ease-out .5s both}
+@keyframes flqq-pop{from{transform:scale(0) rotate(-20deg)}}
+@keyframes flqq-bob{50%{translate:0 -14px;rotate:4deg}}
+@keyframes flqq-up{from{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="flqq-bg"></div>
+<div class="flqq-mark" data-sfx="bubble">?</div>
+<div class="flqq-word">パスワードは、どこへ？</div>
+```
+
+```yaml narration answer
+- 最初に届くのは、{#gw}ゲートウェイという入口です。
+- 次に{#auth}認証サービスが、パスワードが{#check}正しいかを照合します。
+- 正しければ、{#db}セッションDBに、ログインしたことを30分間記録します。
+```
+
+```html motion answer
 <style>
 .fl-bg{position:absolute;inset:0;background:linear-gradient(#0f1e3d,#1b3366)}
 .fl-road{position:absolute;left:120px;top:640px;width:1680px;height:18px;border-radius:9px;background:#2c4a8a}
@@ -136,6 +151,46 @@ zk.scene((t, el) => {
 </script>
 ```
 
+```yaml narration term
+- ゲートウェイとは、外からの要求をまとめて受け付ける窓口のことです。
+```
+
+```html motion term
+<zk-options transition="cut"></zk-options>
+<style>
+.fltt-bg{position:absolute;inset:0;background:linear-gradient(#18233f,#24365f)}
+.fltt-card{position:absolute;left:460px;top:250px;width:1000px;height:420px;border-radius:40px;background:#f5f7ff;box-shadow:22px 22px 0 #0c1330;animation:fltt-in .6s cubic-bezier(.2,.8,.3,1.3) .2s both}
+.fltt-tag{position:absolute;left:60px;top:50px;padding:6px 26px;border-radius:30px;background:var(--zk-purple);color:#fff;font:800 32px var(--zk-font)}
+.fltt-word{position:absolute;left:60px;top:130px;color:#1c2b52;font:900 96px var(--zk-font)}
+.fltt-mean{position:absolute;left:64px;top:280px;color:#5b6673;font:700 42px var(--zk-font);animation:fltt-fade .5s ease-out .9s both}
+@keyframes fltt-in{from{transform:translateY(80px);opacity:0}}
+@keyframes fltt-fade{from{opacity:0}}
+</style>
+<div class="fltt-bg"></div>
+<div class="fltt-card" data-sfx="appear"><div class="fltt-tag">用語</div><div class="fltt-word">ゲートウェイ</div><div class="fltt-mean">外からの要求を受け付ける窓口</div></div>
+```
+
+```yaml narration example
+- 会社の受付が来客を迎えて、担当の部署へ案内するのと同じです。
+```
+
+```html motion example
+<zk-options transition="cut"></zk-options>
+<style>
+.flee-bg{position:absolute;inset:0;background:linear-gradient(#3a2346,#5a2f4f)}
+.flee-tag{position:absolute;left:140px;top:90px;padding:8px 30px;border-radius:34px;background:var(--zk-yellow);color:#1c2b52;font:800 36px var(--zk-font);animation:flee-pop .5s cubic-bezier(.2,.8,.3,1.5) .1s both}
+.flee-art{position:absolute;left:460px;top:170px;width:1000px;height:560px;animation:flee-drop .7s cubic-bezier(.3,1.4,.5,1) .3s both}
+.flee-cap{position:absolute;left:0;right:0;top:760px;text-align:center;color:#fff;font:800 48px var(--zk-font);animation:flee-fade .5s ease-out .9s both}
+@keyframes flee-pop{from{transform:scale(0)}}
+@keyframes flee-drop{from{transform:translateY(-200px);opacity:0}}
+@keyframes flee-fade{from{opacity:0}}
+</style>
+<div class="flee-bg"></div>
+<div class="flee-tag">身近なもので言うと</div>
+<svg class="flee-art" viewBox="0 0 1000 560" data-sfx="drop"><rect x="120" y="330" width="760" height="40" rx="12" fill="#c9a27a"/><rect x="160" y="370" width="680" height="170" fill="#a57e58"/><circle cx="500" cy="210" r="70" fill="#ffd6b0"/><rect x="420" y="270" width="160" height="70" rx="30" fill="#3ec1d3"/><circle cx="476" cy="200" r="9" fill="#1c2b52"/><circle cx="524" cy="200" r="9" fill="#1c2b52"/><path d="M470 236 Q500 256 530 236" fill="none" stroke="#1c2b52" stroke-width="7" stroke-linecap="round"/><path d="M640 120 L860 120 L900 160 L860 200 L640 200 Z" fill="#ffc94a"/><text x="760" y="174" text-anchor="middle" font-size="44" font-weight="800" fill="#1c2b52">担当へ</text></svg>
+<div class="flee-cap">受付が、担当の部署へ案内する</div>
+```
+
 ## ログイン時のやり取り
 
 ブラウザは、認証サービスからCookieを受け取った時点でログイン済みになります。
@@ -158,19 +213,33 @@ messages:
 
 Cookieには、セッションIDだけを入れます。
 
-```yaml narration
+```yaml narration question
 - では、ブラウザは、ログインしたことをどうやって覚えておくのでしょう？
-- やり取りに出てくるのは、{#b}ブラウザ、{#a}認証サービス、{#d}セッションDBの3つです。
-- まずブラウザが、{#send}IDとパスワードを送ります。
-- 認証サービスは、セッションIDを作って、{#store}セッションDBにしまいます。
-- セッションIDとは、ログインしたことを示す、合言葉のようなものです。
-- そして、その合言葉を{#cookie}クッキーに入れて、ブラウザに返します。
-- クッキーとは、ブラウザが預かっておく、小さなメモのことです。
-- text: たとえば、遊園地の再入場スタンプのように、次からはこれを見せるだけで入れます。
-  example: true
 ```
 
-```html motion
+```html motion question
+<zk-options transition="fade"></zk-options>
+<style>
+.sqqq-bg{position:absolute;inset:0;background:linear-gradient(#141c3a,#1f2b55)}
+.sqqq-mark{position:absolute;left:760px;top:170px;width:400px;height:400px;border-radius:50%;background:var(--zk-pink);color:#1c2b52;font:900 280px/400px var(--zk-font);text-align:center;box-shadow:24px 24px 0 #0c1330;animation:sqqq-pop .6s cubic-bezier(.2,.8,.3,1.5) .2s both,sqqq-bob 2.4s ease-in-out .8s infinite}
+.sqqq-word{position:absolute;left:0;right:0;top:640px;text-align:center;color:#fff;font:800 60px var(--zk-font);animation:sqqq-up .5s ease-out .5s both}
+@keyframes sqqq-pop{from{transform:scale(0) rotate(-20deg)}}
+@keyframes sqqq-bob{50%{translate:0 -14px;rotate:4deg}}
+@keyframes sqqq-up{from{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="sqqq-bg"></div>
+<div class="sqqq-mark" data-sfx="bubble">?</div>
+<div class="sqqq-word">ブラウザは、どう覚える？</div>
+```
+
+```yaml narration answer
+- 登場するのは、{#b}ブラウザ、{#a}認証サービス、{#d}セッションDBです。
+- まずブラウザが、{#send}IDとパスワードを送ります。
+- 認証サービスは、セッションIDを作って{#store}しまいます。
+- そのIDを{#cookie}クッキーに入れて返します。
+```
+
+```html motion answer
 <style>
 .sq-bg{position:absolute;inset:0;background:linear-gradient(#1a1440,#2b1f63)}
 .sq-ch{position:absolute;top:360px;width:320px;height:320px;transform-origin:50% 100%;animation:sq-pop .6s cubic-bezier(.2,.8,.3,1.5) var(--at) both}
@@ -240,6 +309,47 @@ zk.scene((t, el) => {
 </script>
 ```
 
+```yaml narration term
+- セッションIDとは、ログインしたことを示すトークンです。
+- クッキーとは、ブラウザが預かっておく、小さなメモのことです。
+```
+
+```html motion term
+<zk-options transition="cut"></zk-options>
+<style>
+.sqtt-bg{position:absolute;inset:0;background:linear-gradient(#18233f,#24365f)}
+.sqtt-card{position:absolute;left:460px;top:250px;width:1000px;height:420px;border-radius:40px;background:#f5f7ff;box-shadow:22px 22px 0 #0c1330;animation:sqtt-in .6s cubic-bezier(.2,.8,.3,1.3) .2s both}
+.sqtt-tag{position:absolute;left:60px;top:50px;padding:6px 26px;border-radius:30px;background:var(--zk-purple);color:#fff;font:800 32px var(--zk-font)}
+.sqtt-word{position:absolute;left:60px;top:130px;color:#1c2b52;font:900 96px var(--zk-font)}
+.sqtt-mean{position:absolute;left:64px;top:280px;color:#5b6673;font:700 42px var(--zk-font);animation:sqtt-fade .5s ease-out .9s both}
+@keyframes sqtt-in{from{transform:translateY(80px);opacity:0}}
+@keyframes sqtt-fade{from{opacity:0}}
+</style>
+<div class="sqtt-bg"></div>
+<div class="sqtt-card" data-sfx="appear"><div class="sqtt-tag">用語</div><div class="sqtt-word">セッションID</div><div class="sqtt-mean">ログインしたことを示すトークン</div></div>
+```
+
+```yaml narration example
+- 遊園地の再入場スタンプを思い浮かべてください。次からは、これを見せるだけで入れます。
+```
+
+```html motion example
+<zk-options transition="cut"></zk-options>
+<style>
+.sqee-bg{position:absolute;inset:0;background:linear-gradient(#3a2346,#5a2f4f)}
+.sqee-tag{position:absolute;left:140px;top:90px;padding:8px 30px;border-radius:34px;background:var(--zk-yellow);color:#1c2b52;font:800 36px var(--zk-font);animation:sqee-pop .5s cubic-bezier(.2,.8,.3,1.5) .1s both}
+.sqee-art{position:absolute;left:460px;top:170px;width:1000px;height:560px;animation:sqee-drop .7s cubic-bezier(.3,1.4,.5,1) .3s both}
+.sqee-cap{position:absolute;left:0;right:0;top:760px;text-align:center;color:#fff;font:800 48px var(--zk-font);animation:sqee-fade .5s ease-out .9s both}
+@keyframes sqee-pop{from{transform:scale(0)}}
+@keyframes sqee-drop{from{transform:translateY(-200px);opacity:0}}
+@keyframes sqee-fade{from{opacity:0}}
+</style>
+<div class="sqee-bg"></div>
+<div class="sqee-tag">身近なもので言うと</div>
+<svg class="sqee-art" viewBox="0 0 1000 560" data-sfx="drop"><rect x="140" y="140" width="520" height="300" rx="30" fill="#f5f7ff"/><rect x="140" y="140" width="130" height="300" rx="30" fill="#ef4b5f"/><text x="420" y="240" text-anchor="middle" font-size="52" font-weight="900" fill="#1c2b52">再入場</text><circle cx="420" cy="340" r="64" fill="none" stroke="#7b5ce1" stroke-width="12"/><path d="M420 296 L432 328 L466 328 L438 348 L448 380 L420 360 L392 380 L402 348 L374 328 L408 328 Z" fill="#7b5ce1"/><rect x="700" y="120" width="120" height="200" rx="24" fill="#7b5ce1"/><rect x="680" y="300" width="160" height="60" rx="16" fill="#5b40b8"/></svg>
+<div class="sqee-cap">再入場スタンプを見せるだけで入れる</div>
+```
+
 ## セッションの有効期限
 
 セッションIDは、最後の操作から30分が過ぎると削除されます。
@@ -264,19 +374,33 @@ steps:
   snapshot: ../../corpus/fixtures/sources/owasp-idle-timeout.txt
 ```
 
-```yaml narration
-- その合言葉は、いつまで使えるのでしょう？
-- ログインすると、{#issue}セッションIDが渡されます。
-- そして、最後に操作したときから、{#clock}時計が動き出します。
-- text: そのまま30分たつと、<short pause>{#expire}合言葉は消えてしまいます。
-  style: 少し声を落として
-- では、なぜ30分なのでしょう？
-- '{#ref}セキュリティのガイドラインでは、リスクの低いアプリの目安を、15分から30分としています。'
-- text: たとえば、昼休みに席を離れて戻ってきたら、もう一度ログインが必要になります。
-  example: true
+```yaml narration question
+- そのセッションIDは、いつまで使えるのでしょう？
 ```
 
-```html motion
+```html motion question
+<zk-options transition="fade"></zk-options>
+<style>
+.exqq-bg{position:absolute;inset:0;background:linear-gradient(#141c3a,#1f2b55)}
+.exqq-mark{position:absolute;left:760px;top:170px;width:400px;height:400px;border-radius:50%;background:var(--zk-yellow);color:#1c2b52;font:900 280px/400px var(--zk-font);text-align:center;box-shadow:24px 24px 0 #0c1330;animation:exqq-pop .6s cubic-bezier(.2,.8,.3,1.5) .2s both,exqq-bob 2.4s ease-in-out .8s infinite}
+.exqq-word{position:absolute;left:0;right:0;top:640px;text-align:center;color:#fff;font:800 60px var(--zk-font);animation:exqq-up .5s ease-out .5s both}
+@keyframes exqq-pop{from{transform:scale(0) rotate(-20deg)}}
+@keyframes exqq-bob{50%{translate:0 -14px;rotate:4deg}}
+@keyframes exqq-up{from{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="exqq-bg"></div>
+<div class="exqq-mark" data-sfx="bubble">?</div>
+<div class="exqq-word">いつまで使える？</div>
+```
+
+```yaml narration answer
+- ログインすると、{#issue}セッションIDが渡されます。
+- そして、最後に操作したときから、{#clock}時計が動き出します。
+- text: そのまま30分たつと、<short pause>{#expire}セッションIDは消えてしまいます。
+  style: 少し声を落として
+```
+
+```html motion answer
 <zk-options transition="zoom" hold="0.8"></zk-options>
 <style>
 .ex-bg{position:absolute;inset:0;background:linear-gradient(#1b2a52,#24396b)}
@@ -290,10 +414,6 @@ steps:
 @keyframes ex-in{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
 @keyframes ex-turn{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 @keyframes ex-gone{40%{transform:translateY(-16px) rotate(4deg)}to{transform:scale(.15) rotate(-20deg);opacity:0}}
-.ex-ref{position:absolute;left:1000px;top:250px;width:760px;padding:28px 34px;border-radius:26px;background:#f5f7ff;color:#1c2b52;font:700 32px/1.5 var(--zk-font);animation:ex-in .55s cubic-bezier(.2,.8,.3,1.4) var(--ref) both}
-.ex-ref b{display:block;margin-bottom:10px;color:#7b5ce1;font-size:26px}
-.ex-ref .ex-src{display:block;margin-top:14px;font-size:24px;color:#5b6673}
-.ex-eg{position:absolute;left:1000px;top:640px;padding:14px 30px;border-radius:40px;background:var(--zk-yellow);color:#1c2b52;font:800 34px var(--zk-font);opacity:0}
 </style>
 <div class="ex-bg"></div>
 <svg class="ex-clock" viewBox="0 0 560 560">
@@ -311,21 +431,84 @@ steps:
   </g>
 </svg>
 <div class="ex-out" data-sfx="whoosh"><div class="ex-shadow"></div><div class="ex-card" data-sfx="pop">セッションID<small>a3f9-27c1</small></div></div>
-<div class="ex-ref" data-sfx="pop"><b>根拠</b><span class="ex-ja"></span><span class="ex-src"></span></div>
-<div class="ex-eg">たとえば、昼休みに席を離れたら…</div>
+```
+
+```yaml narration question
+- では、なぜ30分なのでしょう？
+```
+
+```html motion question
+<zk-options transition="fade"></zk-options>
+<style>
+.exq2q-bg{position:absolute;inset:0;background:linear-gradient(#141c3a,#1f2b55)}
+.exq2q-mark{position:absolute;left:760px;top:170px;width:400px;height:400px;border-radius:50%;background:var(--zk-orange);color:#1c2b52;font:900 280px/400px var(--zk-font);text-align:center;box-shadow:24px 24px 0 #0c1330;animation:exq2q-pop .6s cubic-bezier(.2,.8,.3,1.5) .2s both,exq2q-bob 2.4s ease-in-out .8s infinite}
+.exq2q-word{position:absolute;left:0;right:0;top:640px;text-align:center;color:#fff;font:800 60px var(--zk-font);animation:exq2q-up .5s ease-out .5s both}
+@keyframes exq2q-pop{from{transform:scale(0) rotate(-20deg)}}
+@keyframes exq2q-bob{50%{translate:0 -14px;rotate:4deg}}
+@keyframes exq2q-up{from{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="exq2q-bg"></div>
+<div class="exq2q-mark" data-sfx="bubble">?</div>
+<div class="exq2q-word">なぜ30分？</div>
+```
+
+```yaml narration answer
+- '{#ref}セキュリティのガイドラインでは、リスクの低いアプリの目安を、15分から30分としています。'
+```
+
+```html motion answer
+<zk-options transition="cut"></zk-options>
+<style>
+.ex2-bg{position:absolute;inset:0;background:linear-gradient(#1b2a52,#24396b)}
+.ex2-ref{position:absolute;left:300px;top:200px;width:1320px;padding:44px 56px;border-radius:34px;background:#f5f7ff;color:#1c2b52;font:700 44px/1.55 var(--zk-font);box-shadow:22px 22px 0 #0c1330;animation:ex2-in .6s cubic-bezier(.2,.8,.3,1.3) var(--ref) both}
+.ex2-ref b{display:block;margin-bottom:14px;color:#7b5ce1;font-size:34px}
+.ex2-src{display:block;margin-top:20px;font-size:30px;color:#5b6673}
+.ex2-hi{background:linear-gradient(transparent 60%,#ffc94a 60%)}
+@keyframes ex2-in{from{transform:translateY(60px);opacity:0}}
+</style>
+<div class="ex2-bg"></div>
+<div class="ex2-ref" data-sfx="chime"><b>根拠</b><span class="ex2-ja"></span><span class="ex2-src"></span></div>
 <script>
-// 根拠の札には、原稿の yaml refs の引用を、そのまま出す。
+// 根拠の札には、原稿の yaml refs の引用を、そのまま出す。リスクの低いアプリの範囲に、印を付ける。
 const root = document.currentScript.closest('.zk-scene');
 const ref = zk.refs().find((r) => r.kind === 'quote');
 if (ref) {
-  root.querySelector('.ex-ja').textContent = ref.ja ?? ref.quote;
-  root.querySelector('.ex-src').textContent = `出典: ${ref.source}`;
+  const ja = ref.ja ?? ref.quote;
+  const key = '15〜30分';
+  const at = ja.indexOf(key);
+  const span = root.querySelector('.ex2-ja');
+  if (at < 0) span.textContent = ja;
+  else {
+    span.append(ja.slice(0, at));
+    const hi = document.createElement('span');
+    hi.className = 'ex2-hi';
+    hi.textContent = key;
+    span.append(hi, ja.slice(at + key.length));
+  }
+  root.querySelector('.ex2-src').textContent = `出典: ${ref.source}`;
 }
-// 例を話している間だけ、「たとえば」の札を出す。
-zk.scene((t, el, info) => {
-  el.querySelector('.ex-eg').style.opacity = info.example ? 1 : 0;
-});
 </script>
+```
+
+```yaml narration example
+- 昼休みに席を離れて戻ってきたら、もう一度ログインが必要になります。
+```
+
+```html motion example
+<zk-options transition="cut"></zk-options>
+<style>
+.exee-bg{position:absolute;inset:0;background:linear-gradient(#3a2346,#5a2f4f)}
+.exee-tag{position:absolute;left:140px;top:90px;padding:8px 30px;border-radius:34px;background:var(--zk-yellow);color:#1c2b52;font:800 36px var(--zk-font);animation:exee-pop .5s cubic-bezier(.2,.8,.3,1.5) .1s both}
+.exee-art{position:absolute;left:460px;top:170px;width:1000px;height:560px;animation:exee-drop .7s cubic-bezier(.3,1.4,.5,1) .3s both}
+.exee-cap{position:absolute;left:0;right:0;top:760px;text-align:center;color:#fff;font:800 48px var(--zk-font);animation:exee-fade .5s ease-out .9s both}
+@keyframes exee-pop{from{transform:scale(0)}}
+@keyframes exee-drop{from{transform:translateY(-200px);opacity:0}}
+@keyframes exee-fade{from{opacity:0}}
+</style>
+<div class="exee-bg"></div>
+<div class="exee-tag">身近なもので言うと</div>
+<svg class="exee-art" viewBox="0 0 1000 560" data-sfx="drop"><rect x="140" y="300" width="460" height="30" rx="10" fill="#c9a27a"/><rect x="170" y="330" width="30" height="200" fill="#a57e58"/><rect x="540" y="330" width="30" height="200" fill="#a57e58"/><rect x="220" y="170" width="260" height="130" rx="16" fill="#25408a"/><rect x="240" y="190" width="220" height="90" rx="8" fill="#4fb3f0" opacity=".35"/><rect x="660" y="260" width="180" height="180" rx="24" fill="#3cc48a"/><rect x="660" y="440" width="24" height="90" fill="#2a9a68"/><rect x="816" y="440" width="24" height="90" fill="#2a9a68"/><circle cx="820" cy="120" r="80" fill="#f5f7ff"/><path d="M820 120 L820 70 M820 120 L856 140" stroke="#1c2b52" stroke-width="12" stroke-linecap="round"/></svg>
+<div class="exee-cap">席を離れて戻ったら、もう一度ログイン</div>
 ```
 
 ## 構成
@@ -345,17 +528,32 @@ layers:
 
 ログイン画面と設定画面は、認証APIと利用者APIだけを呼び出します。
 
-```yaml narration
+```yaml narration question
 - 画面が、保存先に直接聞きに行ってはいけないのでしょうか？
-- ログイン機能は、3つの層に分かれています。
-- いちばん上が{#ui}画面、その下に{#api}API、いちばん下が{#store}保存先です。
-- APIとは、画面と保存先のあいだに立つ、窓口のことです。
-- 画面が直接、{#no}保存先にさわることはありません。必ず窓口を通します。
-- text: たとえば、銀行の金庫には、お客さんではなく、窓口の係だけが入れるのと同じです。
-  example: true
 ```
 
-```html motion
+```html motion question
+<zk-options transition="fade"></zk-options>
+<style>
+.lyqq-bg{position:absolute;inset:0;background:linear-gradient(#141c3a,#1f2b55)}
+.lyqq-mark{position:absolute;left:760px;top:170px;width:400px;height:400px;border-radius:50%;background:var(--zk-green);color:#1c2b52;font:900 280px/400px var(--zk-font);text-align:center;box-shadow:24px 24px 0 #0c1330;animation:lyqq-pop .6s cubic-bezier(.2,.8,.3,1.5) .2s both,lyqq-bob 2.4s ease-in-out .8s infinite}
+.lyqq-word{position:absolute;left:0;right:0;top:640px;text-align:center;color:#fff;font:800 60px var(--zk-font);animation:lyqq-up .5s ease-out .5s both}
+@keyframes lyqq-pop{from{transform:scale(0) rotate(-20deg)}}
+@keyframes lyqq-bob{50%{translate:0 -14px;rotate:4deg}}
+@keyframes lyqq-up{from{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="lyqq-bg"></div>
+<div class="lyqq-mark" data-sfx="bubble">?</div>
+<div class="lyqq-word">画面から、直接？</div>
+```
+
+```yaml narration answer
+- ログイン機能は、3つの層に分かれています。
+- いちばん上が{#ui}画面、その下に{#api}API、いちばん下が{#store}保存先です。
+- 画面が直接、{#no}保存先にさわることはありません。必ずAPIを通します。
+```
+
+```html motion answer
 <style>
 .ly-bg{position:absolute;inset:0;background:linear-gradient(#0f2233,#16405a)}
 .ly-slab{position:absolute;left:420px;width:900px;height:150px;animation:ly-drop .7s cubic-bezier(.3,1.4,.5,1) var(--at) both}
@@ -380,6 +578,46 @@ layers:
 </svg>
 ```
 
+```yaml narration term
+- APIとは、画面と保存先のあいだに立つ、窓口のことです。
+```
+
+```html motion term
+<zk-options transition="cut"></zk-options>
+<style>
+.lytt-bg{position:absolute;inset:0;background:linear-gradient(#18233f,#24365f)}
+.lytt-card{position:absolute;left:460px;top:250px;width:1000px;height:420px;border-radius:40px;background:#f5f7ff;box-shadow:22px 22px 0 #0c1330;animation:lytt-in .6s cubic-bezier(.2,.8,.3,1.3) .2s both}
+.lytt-tag{position:absolute;left:60px;top:50px;padding:6px 26px;border-radius:30px;background:var(--zk-purple);color:#fff;font:800 32px var(--zk-font)}
+.lytt-word{position:absolute;left:60px;top:130px;color:#1c2b52;font:900 96px var(--zk-font)}
+.lytt-mean{position:absolute;left:64px;top:280px;color:#5b6673;font:700 42px var(--zk-font);animation:lytt-fade .5s ease-out .9s both}
+@keyframes lytt-in{from{transform:translateY(80px);opacity:0}}
+@keyframes lytt-fade{from{opacity:0}}
+</style>
+<div class="lytt-bg"></div>
+<div class="lytt-card" data-sfx="appear"><div class="lytt-tag">用語</div><div class="lytt-word">API</div><div class="lytt-mean">画面と保存先のあいだの窓口</div></div>
+```
+
+```yaml narration example
+- 銀行の金庫に入れるのは、窓口の係だけ。それと同じしくみです。
+```
+
+```html motion example
+<zk-options transition="cut"></zk-options>
+<style>
+.lyee-bg{position:absolute;inset:0;background:linear-gradient(#3a2346,#5a2f4f)}
+.lyee-tag{position:absolute;left:140px;top:90px;padding:8px 30px;border-radius:34px;background:var(--zk-yellow);color:#1c2b52;font:800 36px var(--zk-font);animation:lyee-pop .5s cubic-bezier(.2,.8,.3,1.5) .1s both}
+.lyee-art{position:absolute;left:460px;top:170px;width:1000px;height:560px;animation:lyee-drop .7s cubic-bezier(.3,1.4,.5,1) .3s both}
+.lyee-cap{position:absolute;left:0;right:0;top:760px;text-align:center;color:#fff;font:800 48px var(--zk-font);animation:lyee-fade .5s ease-out .9s both}
+@keyframes lyee-pop{from{transform:scale(0)}}
+@keyframes lyee-drop{from{transform:translateY(-200px);opacity:0}}
+@keyframes lyee-fade{from{opacity:0}}
+</style>
+<div class="lyee-bg"></div>
+<div class="lyee-tag">身近なもので言うと</div>
+<svg class="lyee-art" viewBox="0 0 1000 560" data-sfx="drop"><rect x="120" y="80" width="460" height="460" rx="40" fill="#8aa0e0"/><circle cx="350" cy="310" r="170" fill="#c9d4f2"/><circle cx="350" cy="310" r="60" fill="#25408a"/><path d="M350 200 L350 420 M240 310 L460 310" stroke="#25408a" stroke-width="22" stroke-linecap="round"/><circle cx="780" cy="230" r="66" fill="#ffd6b0"/><rect x="700" y="300" width="160" height="200" rx="40" fill="#7b5ce1"/><rect x="760" y="330" width="40" height="70" rx="8" fill="#ffc94a"/><circle cx="758" cy="222" r="9" fill="#1c2b52"/><circle cx="802" cy="222" r="9" fill="#1c2b52"/></svg>
+<div class="lyee-cap">金庫に入れるのは、窓口の係だけ</div>
+```
+
 ## 応答時間の変化
 
 セッションDBをメモリに置くと、ログインの応答時間は180ミリ秒から110ミリ秒に縮みます。
@@ -397,15 +635,31 @@ items:
 
 この数値は、動画の出力を試すための架空の値です。
 
-```yaml narration
+```yaml narration question
 - 毎回セッションDBを見に行って、遅くならないのでしょうか？
-- セッションDBをメモリに置くと、待ち時間は{#fast}短くなります。
-- '{#before}180ミリ秒かかっていたログインが、{#after}110ミリ秒で終わるようになりました。'
-- text: たとえば、書類を倉庫まで取りに行くのをやめて、机の引き出しに置くようなものです。
-  example: true
 ```
 
-```html motion
+```html motion question
+<zk-options transition="fade"></zk-options>
+<style>
+.brqq-bg{position:absolute;inset:0;background:linear-gradient(#141c3a,#1f2b55)}
+.brqq-mark{position:absolute;left:760px;top:170px;width:400px;height:400px;border-radius:50%;background:var(--zk-purple);color:#1c2b52;font:900 280px/400px var(--zk-font);text-align:center;box-shadow:24px 24px 0 #0c1330;animation:brqq-pop .6s cubic-bezier(.2,.8,.3,1.5) .2s both,brqq-bob 2.4s ease-in-out .8s infinite}
+.brqq-word{position:absolute;left:0;right:0;top:640px;text-align:center;color:#fff;font:800 60px var(--zk-font);animation:brqq-up .5s ease-out .5s both}
+@keyframes brqq-pop{from{transform:scale(0) rotate(-20deg)}}
+@keyframes brqq-bob{50%{translate:0 -14px;rotate:4deg}}
+@keyframes brqq-up{from{opacity:0;transform:translateY(20px)}}
+</style>
+<div class="brqq-bg"></div>
+<div class="brqq-mark" data-sfx="bubble">?</div>
+<div class="brqq-word">遅くならない？</div>
+```
+
+```yaml narration answer
+- セッションDBをメモリに置くと、待ち時間は{#fast}短くなります。
+- '{#before}180ミリ秒かかっていたログインが、{#after}110ミリ秒で終わるようになりました。'
+```
+
+```html motion answer
 <zk-options hold="1"></zk-options>
 <style>
 .br-bg{position:absolute;inset:0;background:linear-gradient(#1b1634,#3a1f4f)}
@@ -451,10 +705,31 @@ zk.scene((t, el) => {
 </script>
 ```
 
+```yaml narration example
+- 書類を倉庫まで取りに行くのをやめて、机の引き出しに置くようなものです。
+```
+
+```html motion example
+<zk-options transition="cut"></zk-options>
+<style>
+.bree-bg{position:absolute;inset:0;background:linear-gradient(#3a2346,#5a2f4f)}
+.bree-tag{position:absolute;left:140px;top:90px;padding:8px 30px;border-radius:34px;background:var(--zk-yellow);color:#1c2b52;font:800 36px var(--zk-font);animation:bree-pop .5s cubic-bezier(.2,.8,.3,1.5) .1s both}
+.bree-art{position:absolute;left:460px;top:170px;width:1000px;height:560px;animation:bree-drop .7s cubic-bezier(.3,1.4,.5,1) .3s both}
+.bree-cap{position:absolute;left:0;right:0;top:760px;text-align:center;color:#fff;font:800 48px var(--zk-font);animation:bree-fade .5s ease-out .9s both}
+@keyframes bree-pop{from{transform:scale(0)}}
+@keyframes bree-drop{from{transform:translateY(-200px);opacity:0}}
+@keyframes bree-fade{from{opacity:0}}
+</style>
+<div class="bree-bg"></div>
+<div class="bree-tag">身近なもので言うと</div>
+<svg class="bree-art" viewBox="0 0 1000 560" data-sfx="drop"><rect x="60" y="120" width="300" height="300" rx="24" fill="#8a7bb8"/><rect x="100" y="180" width="220" height="40" rx="10" fill="#5b4a86"/><rect x="100" y="250" width="220" height="40" rx="10" fill="#5b4a86"/><rect x="100" y="320" width="220" height="40" rx="10" fill="#5b4a86"/><path d="M400 270 L560 270" stroke="#c9d4f2" stroke-width="14" stroke-dasharray="20 18" stroke-linecap="round"/><rect x="600" y="300" width="340" height="40" rx="12" fill="#c9a27a"/><rect x="630" y="340" width="280" height="140" fill="#a57e58"/><rect x="680" y="370" width="180" height="70" rx="12" fill="#ffc94a"/><rect x="740" y="398" width="60" height="14" rx="7" fill="#1c2b52"/><rect x="700" y="210" width="140" height="90" rx="8" fill="#f5f7ff"/></svg>
+<div class="bree-cap">倉庫ではなく、手元の引き出しに置く</div>
+```
+
 ```yaml narration ending
 - ボタンを押した一瞬に、裏では3つのことが起きていました。
-- '{#p1}パスワードは、受付のゲートウェイを通って、認証サービスが照合します。'
-- '{#p2}ログインした印は、30分で消える合言葉として、ブラウザが預かります。'
+- '{#p1}パスワードは、入口のゲートウェイを通って、認証サービスが照合します。'
+- '{#p2}ログインしたことを示すセッションIDは、30分で消えるトークンとして、ブラウザが預かります。'
 - '{#p3}画面は、APIという窓口を通してだけ、保存先にさわります。'
 - 次にログインのボタンを押すときは、この裏側を思い浮かべてみてください。
 ```
@@ -472,6 +747,6 @@ zk.scene((t, el) => {
 <div class="ed-bg"></div>
 <div class="ed-title" data-sfx="chime">まとめ</div>
 <div class="ed-card" data-sfx="pop" style="top:220px;background:var(--zk-cyan);--at:var(--p1)"><div class="ed-num">1</div>受付を通って、認証サービスが照合する</div>
-<div class="ed-card" data-sfx="pop" style="top:400px;background:var(--zk-yellow);--at:var(--p2)"><div class="ed-num">2</div>印は、30分で消える合言葉として預かる</div>
+<div class="ed-card" data-sfx="pop" style="top:400px;background:var(--zk-yellow);--at:var(--p2)"><div class="ed-num">2</div>セッションIDは、30分で消えるトークン</div>
 <div class="ed-card" data-sfx="pop" style="top:580px;background:var(--zk-orange);--at:var(--p3)"><div class="ed-num">3</div>画面は、APIを通して保存先にさわる</div>
 ```

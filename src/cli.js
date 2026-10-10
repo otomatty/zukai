@@ -65,7 +65,8 @@ if (cmd === 'prompt') {
   // 動画の書き方は、--video を付けたときと、設定の output が video のときに含める。
   const { loadSettings } = await import('./settings.js');
   const video = flags.has('--video') || loadSettings(process.cwd()).settings.output === 'video';
-  process.stdout.write(buildPrompt({ full: flags.has('--full'), type: opt('type-command'), video }));
+  const { termsOf } = await import('./terms.js');
+  process.stdout.write(buildPrompt({ full: flags.has('--full'), type: opt('type-command'), video, terms: termsOf(process.cwd()) }));
 } else if (cmd === 'type' && files.length) {
   process.stdout.write(buildPrompt({ only: files }));
 } else if (cmd === 'lint' && files.length) {

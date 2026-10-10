@@ -75,8 +75,9 @@ export function parse(source) {
         }
         push(block);
       } else if (isNarration(tk.info)) {
-        // ending を付けたブロックは、動画の最後のまとめのシーンに使う。
-        const block = { kind: 'narration', line, endLine, ending: /\bending\b/.test(tk.info) };
+        // 3つ目の語は役割。ending はまとめのシーン、question、answer、example、term はセクションの中のショットに使う。
+        const role = tk.info.trim().split(/\s+/)[2] ?? null;
+        const block = { kind: 'narration', line, endLine, role, ending: role === 'ending' };
         try {
           block.lines = YAML.parse(tk.content);
         } catch (e) {
@@ -84,7 +85,8 @@ export function parse(source) {
         }
         push(block);
       } else if (isMotion(tk.info)) {
-        push({ kind: 'motion', line, endLine, html: tk.content, ending: /\bending\b/.test(tk.info) });
+        const role = tk.info.trim().split(/\s+/)[2] ?? null;
+        push({ kind: 'motion', line, endLine, html: tk.content, role, ending: role === 'ending' });
       } else if (isRefs(tk.info)) {
         const block = { kind: 'refs', line, endLine };
         try {

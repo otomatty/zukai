@@ -16,7 +16,7 @@ import { loadSettings } from '../settings.js';
 import { scenesOf, timeline, wrapScripts, DEFAULT_OPTIONS } from './script.js';
 import { voicesFor } from './tts.js';
 import { resolveRefs } from '../refs.js';
-import { RATE, mix, voiceCues, wav16 } from './sfx.js';
+import { RATE, mix, voiceCues, wav16, presetOf, checkParams, PRESETS } from './sfx.js';
 
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
@@ -151,6 +151,11 @@ async function probe(browser, plan, tokens, L, id) {
   let p;
   try {
     p = await openPage(browser, pageHtml(plan, tokens, id), plan, L);
+    // 効果音の名前と ZzFX の数値を確かめる。間違っていても動画は作れるので warn にする。
+    for (const c of p.cues) {
+      const bad = c.kind === 'zzfx' ? checkParams(c.params) : presetOf(c.kind) ? null : `効果音「${c.kind}」はありません。${Object.keys(PRESETS).join('、')} から選ぶか、data-zzfx に ZzFX の数値を書いてください。`;
+      if (bad) findings.push({ severity: 'warn', rule: 'V302', message: bad });
+    }
     for (const e of p.errors) {
       findings.push({ severity: 'error', rule: 'V002', message: e.message });
       broken = true;
@@ -193,6 +198,7 @@ async function guarded(browser, prep) {
   const L = prep.limits;
   plan.scenes.forEach((s, i) => {
     if (s.end - s.start > L.maxSceneSeconds) results[i].findings.push({ severity: 'warn', rule: 'V106', message: `シーンが${(s.end - s.start).toFixed(1)}秒あります。上限の目安は${L.maxSceneSeconds}秒です。` });
+    if (s.role && s.end - s.start > L.maxShotSeconds) results[i].findings.push({ severity: 'warn', rule: 'V107', message: `ショットが${(s.end - s.start).toFixed(1)}秒あります。目安は${L.maxShotSeconds}秒までです。ショットを分けてください。` });
   });
   if (plan.duration > L.maxTotalSeconds) results[0].findings.push({ severity: 'warn', rule: 'V106', message: `動画全体が${plan.duration.toFixed(0)}秒あります。上限の目安は${L.maxTotalSeconds}秒です。` });
   if (results.some((r) => r.broken)) {
@@ -369,9 +375,9 @@ async function mux(r, plan, prep, tmp, target) {
       ...r.cues.filter((c) => s[c.scene]).map((c) => ({ ...c, t: s[c.scene].start + c.t })),
       // cut の切り替えには風切り音を付けない。
       ...s.slice(1).map((x, i) => ({ scene: x.id, t: s[i].end, kind: 'whoosh', dur: x.start - s[i].end })).filter((c) => c.dur > 0),
-    ].filter((c) => ['pop', 'whoosh', 'draw', 'chime'].includes(c.kind));
+    ];
     const gain = settings.video.sfx.volume * 0.25;
-    for (const p of voiceCues(all, files)) parts.push({ ...p, gain });
+    for (const p of await voiceCues(all, files)) parts.push({ ...p, gain });
   }
   const audio = path.join(tmp, 'audio.wav');
   fs.writeFileSync(audio, wav16(mix(plan.duration, parts)));
