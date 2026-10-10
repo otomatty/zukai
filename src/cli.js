@@ -16,7 +16,9 @@ const files = rest.filter((a) => !a.startsWith('--'));
 
 const usage = `使い方:
   zukai prompt [--full]                AI に渡す指示を出力する。図の型は一覧だけを含む（--full ですべての書き方を含む）
+  zukai prompt --chat [--type-command=コマンド]  チャットの返答の書き方を出力する
   zukai type <型...>                   指定した型の書き方と上限を出力する
+  zukai figures [--png] [--open] [--max-svg=字数] < 返答.md  返答の図を描き、JSON で出力する（--png で PNG も書き出す、--open でエディタのタブに開く）
   zukai lint <file.md...> [--json] [--model=名前] [--no-log] [--no-textlint]
   zukai build <file.md> [--out=file.html]                       1枚の HTML を書き出す（原稿を中に埋め込む）
   zukai build <file.md> --format=confluence [--out=フォルダ]     Confluence 用の本文、図の PNG、原稿をフォルダに書き出す
@@ -36,7 +38,26 @@ function print(result) {
 }
 
 if (cmd === 'prompt') {
-  process.stdout.write(buildPrompt({ full: flags.has('--full') }));
+  process.stdout.write(buildPrompt({ full: flags.has('--full'), chat: flags.has('--chat'), type: opt('type-command') }));
+} else if (cmd === 'figures') {
+  // チャットの返答を標準入力から読み、図を描いて JSON で返す。mod と VS Code の表示が使う。
+  const { figuresOf, writePngs, openInEditor } = await import('./chat.js');
+  let figures = figuresOf(fs.readFileSync(0, 'utf8'), process.cwd());
+  // --max-svg より長い SVG は返さない。表示する側が受け付けない長さの図を、出力に載せないため。
+  const maxSvg = Number(opt('max-svg') ?? Infinity);
+  figures = figures.map(({ svg, ...f }) => (svg && svg.length > maxSvg ? { ...f, error: `図が大きすぎます（SVG ${svg.length} 字、上限 ${maxSvg} 字）。` } : { ...f, svg }));
+  // PNG を書き出したときは SVG を出力しない。screenshot の SVG は画像を埋め込むので大きく、mod が読める出力の上限を超えるため。
+  if (flags.has('--png') || flags.has('--open')) figures = writePngs(figures).map(({ svg, ...f }) => f);
+  if (flags.has('--open')) {
+    const pngs = figures.filter((f) => f.png).map((f) => f.png);
+    try {
+      if (pngs.length) openInEditor(pngs);
+    } catch (e) {
+      console.error(e.message);
+      process.exitCode = 1;
+    }
+  }
+  console.log(JSON.stringify(figures));
 } else if (cmd === 'type' && files.length) {
   process.stdout.write(buildPrompt({ only: files }));
 } else if (cmd === 'lint' && files.length) {

@@ -4,10 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderConfluence } from './render.js';
-
-// PNG に変換するときの日本語フォント。SVG のフォント指定の先頭が PC に無い場合に使われる。
-// OS ごとに標準で入っているものを選ぶ。変えたいときは環境変数 ZUKAI_PNG_FONT で指定する。
-const pngFont = () => process.env.ZUKAI_PNG_FONT ?? { darwin: 'Hiragino Sans', win32: 'Yu Gothic UI' }[process.platform] ?? 'Noto Sans CJK JP';
+import { toPng } from './png.js';
 
 const MARK = /^<!--\s*zukai-confluence\s+(\d+)\s*-->\n?/m;
 
@@ -16,14 +13,8 @@ const withPageId = (source, id) => `<!-- zukai-confluence ${id} -->\n${source.re
 
 // 本文と添付ファイル（図の PNG、原稿）を作る。build と publish の両方が使う。
 export async function bundle(source, file) {
-  const { Resvg } = await import('@resvg/resvg-js');
   const page = await renderConfluence(source, file);
-  const files = page.figures.map((fig) => ({
-    name: fig.name,
-    type: 'image/png',
-    // 表示幅の2倍の解像度で書き出す。フォントは実行した PC に入っているものを使う。
-    data: new Resvg(fig.svg, { fitTo: { mode: 'zoom', value: 2 }, background: '#ffffff', font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render().asPng(),
-  }));
+  const files = page.figures.map((fig) => ({ name: fig.name, type: 'image/png', data: toPng(fig.svg).data }));
   files.push({ name: path.basename(file), type: 'text/markdown', data: Buffer.from(source) });
   return { title: page.title, body: page.body, files };
 }

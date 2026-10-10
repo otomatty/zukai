@@ -1,0 +1,6 @@
+{
+  "name": "zukai",
+  "version": "0.1.0",
+  "author": { "name": "otomatty" },
+  "description": "チャットの返答を zukai の書き方にし、返答の中の図を描く。Desktop アプリは SVG、ターミナルは画像、VS Code 拡張はエディタのタブに PNG を開く"
+}

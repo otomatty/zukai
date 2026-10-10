@@ -24,7 +24,9 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 ```bash
 npm install
 node src/cli.js prompt                       # AI に渡す指示を出力する（図の型は一覧だけ）
+node src/cli.js prompt --chat                # チャットの返答の書き方を出力する
 node src/cli.js type flow bar                # 指定した型の書き方と上限を出力する
+node src/cli.js figures --png < 返答.md       # 返答の中の図を描き、JSON で出力する
 node src/cli.js icons lambda                 # 図に使えるアイコンの名前を探す
 node src/cli.js capture 原稿.md               # screenshot の URL を撮影し、枠の位置を記録する
 node src/cli.js lint 原稿.md --model=モデル名  # 検査する。error が1件でもあれば終了コード1
@@ -72,6 +74,30 @@ node src/cli.js publish 原稿.md                                              #
 ページ ID は添付の原稿にも入ります。ページから原稿をダウンロードした人は、`--space-id` を指定せずに同じページを更新できます。
 
 `build --format=confluence` は、登録せずに同じ内容をフォルダへ書き出します。登録前に本文を確認するときに使います。
+
+## チャットの返答
+
+このリポジトリは、Claude Code のプラグインとしても読み込めます。プラグインの mod は、普段のチャットの返答を zukai の書き方にし、返答の中の `yaml figure` と `svg figure` のブロックを図にします。
+
+| 使う場所 | 図の出し方 |
+|---|---|
+| Desktop アプリの Code タブ | 返答の中に、図を SVG で描く |
+| ターミナルの `claude` | 返答の中に、図を PNG で描く。kitty の画像表示に対応しないターミナル（Windows Terminal、VS Code の統合ターミナルなど）では、PNG のパスを出す |
+| VS Code 拡張のチャット欄 | 返答が終わったら、図を PNG にしてエディタのタブで開く。チャット欄には mod の描画が出ないため |
+
+返答の書き方は `zukai prompt --chat` の出力で、mod がセッションの開始時にシステムプロンプトへ足します。返答には Lint をかけません。書き方を間違えた図は、YAML のまま表示されます。
+
+mod は Claude Code 2.1.296 以降で動きます。図は Node で描くので、先に `npm install` を実行してから、次のどちらかで読み込みます。
+
+```bash
+claude --plugin-dir /path/to/zukai
+```
+
+Desktop アプリと VS Code 拡張では、`~/.claude/settings.json` の `env` に `"CLAUDE_CODE_PLUGIN_DIRS": "/path/to/zukai"` を書きます。
+
+VS Code 拡張は、図を `code -r` で開きます。Cursor も `code` コマンドを入れます。別のコマンドで開くときは、環境変数 `ZUKAI_EDITOR` に指定します。PNG は、ほかのユーザーが読めないホームの下（`~/.cache/zukai/figures`）に書き出し、1日より古いものは次に書き出すときに消します。
+
+`zukai figures` は、返答を標準入力から読み、図ごとの行の範囲と SVG を JSON で返します。`--png` か `--open` を指定したときは、SVG の代わりに PNG のパスと大きさを返します。mod はこのコマンドだけを呼びます。
 
 ## 原稿の形
 
