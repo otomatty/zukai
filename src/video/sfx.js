@@ -117,6 +117,30 @@ export async function voiceCues(cues, files = {}) {
   return out;
 }
 
+// BGM。曲を繰り返して動画の長さに合わせ、ナレーションの間（talk の [始まり, 終わり] の秒）は音量を下げる。
+// 最初の1秒で大きくし、最後の1.5秒で消す。音量の変化は0.3秒かけて、ぶつ切りに聞こえないようにする。
+export function bgmTrack(song, duration, talk, { volume = 0.2, duck = 0.3 } = {}) {
+  const n = Math.ceil(duration * RATE);
+  const out = new Float32Array(n);
+  if (!song.length) return out;
+  const ramp = 0.3;
+  const sorted = [...talk].sort((a, b) => a[0] - b[0]);
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / RATE;
+    while (k < sorted.length && sorted[k][1] + ramp < t) k++;
+    // 近いナレーションの区間ほど、音量を下げる。区間の前後 ramp 秒で、なめらかに変える。
+    let near = 0;
+    for (let j = k; j < sorted.length && sorted[j][0] - ramp <= t; j++) {
+      const [a, b] = sorted[j];
+      near = Math.max(near, t < a ? 1 - (a - t) / ramp : t > b ? 1 - (t - b) / ramp : 1);
+    }
+    const fade = Math.min(1, t / 1, (duration - t) / 1.5);
+    out[i] = song[i % song.length] * volume * (1 - near * (1 - duck)) * Math.max(0, fade);
+  }
+  return out;
+}
+
 // 音を時刻に合わせて足し合わせる。標本化の周波数が違う音は、線形補間で 48kHz にそろえる。
 export function mix(duration, parts) {
   const out = new Float32Array(Math.ceil(duration * RATE));

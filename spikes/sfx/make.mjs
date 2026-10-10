@@ -73,7 +73,8 @@ function kenneySounds(dir) {
       const f = path.join(dir, e.kenney);
       if (!fs.existsSync(f)) throw new Error(`${f} がありません。--kenney に、interface と impact を展開したフォルダを指定してください。`);
       const r = spawnSync('ffmpeg', ['-loglevel', 'error', '-i', f, '-f', 'f32le', '-ac', '1', '-ar', String(RATE), '-'], { maxBuffer: 64 << 20 });
-      if (r.status) throw new Error(`ffmpeg が ${f} を読めませんでした。${r.stderr}`);
+      // ffmpeg が見つからないときは status が null で、error に理由が入る。
+      if (r.error || r.status !== 0) throw new Error(`ffmpeg が ${f} を読めませんでした。${r.error?.message ?? r.stderr}`);
       return [e.id, new Float32Array(r.stdout.buffer.slice(r.stdout.byteOffset, r.stdout.byteOffset + r.stdout.length))];
     }),
   );

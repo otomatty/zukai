@@ -60,6 +60,48 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   assert.deepEqual(r.findings.filter((f) => f.rule === 'P007').map((f) => f.line), [7]);
 });
 
+test('コード参照は、リポジトリの外のファイルを読まない', async () => {
+  const { lint } = await import('../src/lint/index.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-outside-'));
+  fs.mkdirSync(path.join(dir, 'repo'));
+  fs.writeFileSync(path.join(dir, 'repo', 'a.txt'), 'ok\n');
+  fs.writeFileSync(path.join(dir, 'secret.txt'), 'secret\n');
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ repos: { r: { path: 'repo', host: 'github', org: 'o', name: 'n', pin: false } } }));
+  const doc = (code) => `# 題名\n\n導入です。\n\n## 節\n\n主張です。\n\n\`\`\`yaml figure\ntype: flow\nsteps:\n  - label: 入口\n  - label: 出口\n\`\`\`\n\n説明です。\n\n\`\`\`yaml refs\n- code: ${code}\n  note: 説明です。\n\`\`\`\n`;
+  const r = await lint(doc('r:../secret.txt#L1'), path.join(dir, 'a.md'), { textlint: false });
+  assert.match(r.findings.find((f) => f.rule === 'R002')?.message ?? '', /外/);
+  const ok = await lint(doc('r:a.txt#L1'), path.join(dir, 'a.md'), { textlint: false });
+  assert.ok(!ok.findings.some((f) => f.rule === 'R002'));
+});
+
+test('init --video は、既存の設定のほかの項目を残して output を video にする', async () => {
+  const { writeProjectSettings } = await import('../src/settings.js');
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-init-'));
+  writeProjectSettings(project, 'document');
+  const file = path.join(project, '.zukai', 'settings.json');
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), mine: 1 }));
+  assert.equal(writeProjectSettings(project, 'document').written, false);
+  assert.equal(writeProjectSettings(project, 'video', { explicit: true }).updated, true);
+  assert.deepEqual([JSON.parse(fs.readFileSync(file, 'utf8')).output, JSON.parse(fs.readFileSync(file, 'utf8')).mine], ['video', 1]);
+});
+
+test('BGM は繰り返して長さに合わせ、ナレーションの間は小さくする', async () => {
+  const { bgmTrack, RATE } = await import('../src/video/sfx.js');
+  const song = new Float32Array(RATE / 2).fill(1);
+  const t = bgmTrack(song, 6, [[2, 3]], { volume: 0.2, duck: 0.3 });
+  assert.equal(t.length, 6 * RATE);
+  assert.ok(Math.abs(t[Math.round(1.5 * RATE)] - 0.2) < 1e-6);
+  assert.ok(Math.abs(t[Math.round(2.5 * RATE)] - 0.06) < 1e-6);
+  assert.equal(t[0], 0);
+});
+
+test('図の代わりに表を置いたセクションは、表を動画用に描く', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-table-')), 'a.md');
+  const s = scenesOf('# 題名\n\n導入です。\n\n## 比べる\n\n主張です。\n\n| 項目 | 値 |\n|---|---|\n| <b>速さ</b> | 速い |\n\n説明です。\n', file);
+  assert.match(s[1].tableHtml, /<table>[\s\S]*速い/);
+  assert.doesNotMatch(s[1].tableHtml, /<b>/);
+});
+
 test('シーンの設定を読み、使えない値を知らせ、スクリプトをシーンごとに包む', () => {
   const r = readOptions('<zk-options subtitles="off" transition="spin" hold="2"></zk-options><div>本体</div>');
   assert.equal(r.html, '<div>本体</div>');
@@ -138,11 +180,15 @@ test('無限ループと例外のシーンは、自動の動きに差し替え�
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-video-'));
   const file = path.join(dir, 'bad.md');
   const section = (title, html) => `## ${title}\n\n${title}のシーンです。\n\n\`\`\`yaml figure\ntype: flow\nsteps:\n  - label: 入口\n  - label: 出口\n\`\`\`\n\n説明です。\n\n\`\`\`html motion\n${html}\n\`\`\`\n`;
-  fs.writeFileSync(file, `# 確認\n\n確認の原稿です。\n\n${section('止まる', '<script>zk.scene((t) => { if (t > 1) for (;;) {} });</script>')}\n${section('例外', '<script>missing();</script>')}\n${section('正常', '<div style="position:absolute;left:100px;top:300px;font-size:60px;color:#fff;animation:a 1s both">正常</div><style>@keyframes a{from{opacity:0}}</style>')}`);
+  fs.writeFileSync(file, `# 確認\n\n確認の原稿です。\n\n${section('止まる', '<script>zk.scene((t) => { if (t > 1) for (;;) {} });</script>')}\n${section('例外', '<script>missing();</script>')}\n${section('正常', '<div style="position:absolute;left:100px;top:300px;font-size:60px;color:#fff;animation:a 1s both">正常</div><style>@keyframes a{from{opacity:0}}</style>')}\n${section('音とタイマー', '<script>zk.sound(() => { throw new Error("bad sound"); }); setTimeout(() => { throw new Error("bad timer"); }, 500);</script>')}`);
   const r = await frames(file, { project: dir });
   const rules = (i) => r.results[i].findings.map((f) => f.rule);
   assert.ok(rules(1).includes('V001') && rules(1).includes('V000'));
   assert.ok(rules(2).includes('V002') && rules(2).includes('V000'));
   assert.deepEqual(rules(3), []);
-  assert.deepEqual(r.scenes.map((s) => s.kind), ['title', 'auto', 'auto', 'free']);
+  // 音とタイマーの例外は、検査を止めずに warn として記録し、シーンはそのまま使う。
+  const soundAndTimer = r.results[4].findings.filter((f) => f.rule === 'V002');
+  assert.ok(soundAndTimer.some((f) => /bad sound/.test(f.message)) && soundAndTimer.some((f) => /bad timer/.test(f.message)));
+  assert.ok(soundAndTimer.every((f) => f.severity === 'warn'));
+  assert.deepEqual(r.scenes.map((s) => s.kind), ['title', 'auto', 'auto', 'free', 'free']);
 });

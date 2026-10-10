@@ -41,19 +41,24 @@
   window.cancelAnimationFrame = () => {};
   const timers = new Map();
   let timerId = 1;
-  window.setTimeout = (cb, ms = 0, ...args) => (timers.set(timerId, { at: now + Math.max(0, +ms || 0), cb, args, every: 0 }), timerId++);
-  window.setInterval = (cb, ms = 0, ...args) => (timers.set(timerId, { at: now + Math.max(1, +ms || 0), cb, args, every: Math.max(1, +ms || 0) }), timerId++);
+  // タイマーは、作ったシーンを覚えておく。コールバックの例外を、そのシーンのものとして記録するため。
+  window.setTimeout = (cb, ms = 0, ...args) => (timers.set(timerId, { at: now + Math.max(0, +ms || 0), cb, args, every: 0, scene: running }), timerId++);
+  window.setInterval = (cb, ms = 0, ...args) => (timers.set(timerId, { at: now + Math.max(1, +ms || 0), cb, args, every: Math.max(1, +ms || 0), scene: running }), timerId++);
   window.clearTimeout = window.clearInterval = (id) => timers.delete(id);
   function runTimers() {
     for (let n = 0; ; n++) {
-      if (n > 10000) throw new Error('1コマの間に、タイマーが1万回を超えて動きました。');
       let next = null;
       for (const [id, t] of timers) if (t.at <= now && (!next || t.at < next[1].at)) next = [id, t];
       if (!next) return;
       const [id, t] = next;
+      if (n > 10000) {
+        errors.push({ scene: t.scene, message: '1コマの間に、タイマーが1万回を超えて動きました。' });
+        timers.clear();
+        return;
+      }
       if (t.every) t.at += t.every;
       else timers.delete(id);
-      if (typeof t.cb === 'function') t.cb(...t.args);
+      if (typeof t.cb === 'function') guard(t.scene, 'タイマーのコールバック', () => t.cb(...t.args));
     }
   }
 
@@ -240,8 +245,21 @@
     if (!list.length) return null;
     const sc = plan.scenes[id];
     const ctx = new OfflineAudioContext(1, Math.ceil((sc.end - sc.start) * 48000), 48000);
-    for (const s of list) await s.fn(ctx);
-    const buf = (await ctx.startRendering()).getChannelData(0);
+    // AI の音の関数が例外を出しても、検査と書き出しは止めない。そのシーンの例外として記録し、音は付けない。
+    try {
+      for (const s of list) await s.fn(ctx);
+    } catch (e) {
+      errors.push({ scene: id, message: `zk.sound で例外が起きました。${e?.message ?? e}` });
+      return null;
+    }
+    let rendered;
+    try {
+      rendered = await ctx.startRendering();
+    } catch (e) {
+      errors.push({ scene: id, message: `zk.sound の音を作れませんでした。${e?.message ?? e}` });
+      return null;
+    }
+    const buf = rendered.getChannelData(0);
     const pcm = new Int16Array(buf.length);
     let peak = 0;
     for (let i = 0; i < buf.length; i++) {
@@ -337,7 +355,9 @@
       if (h.id !== c.cur && h.id !== c.next) continue;
       const el = sceneEls.find((e) => +e.dataset.id === h.id);
       const t = Math.max(0, T - plan.scenes[h.id].start);
+      running = h.id;
       guard(h.id, 'zk.scene の frame', () => h.frame(t, el, lineInfo(h.id, t)));
+      running = null;
     }
 
     const sc = plan.scenes[c.cur];

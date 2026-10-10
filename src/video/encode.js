@@ -16,7 +16,7 @@ import { loadSettings } from '../settings.js';
 import { scenesOf, timeline, wrapScripts, DEFAULT_OPTIONS } from './script.js';
 import { voicesFor } from './tts.js';
 import { resolveRefs } from '../refs.js';
-import { RATE, mix, voiceCues, wav16, presetOf, checkParams, PRESETS } from './sfx.js';
+import { RATE, mix, voiceCues, wav16, presetOf, checkParams, PRESETS, bgmTrack } from './sfx.js';
 
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
@@ -29,6 +29,10 @@ html,body{margin:0;width:${v.width}px;height:${v.height}px;overflow:hidden;backg
 .zk-claim{position:absolute;left:160px;right:160px;top:96px;margin:0;color:#fff;font-size:50px;line-height:1.38;font-weight:800;text-align:center}
 .zk-scene[data-kind=auto] .zk-fig{position:absolute;left:160px;top:270px;width:1600px;height:560px}
 .zk-fig>svg{width:100%;height:100%;overflow:visible}
+.zk-table{display:flex;align-items:center;justify-content:center}
+.zk-table table{border-collapse:collapse;color:#fff;font-size:34px;line-height:1.4}
+.zk-table th{text-align:left;padding:14px 26px;border-bottom:4px solid var(--zk-yellow)}
+.zk-table td{padding:14px 26px;border-bottom:2px solid rgba(255,255,255,.25)}
 #zk-sub{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:1240px;padding:12px 30px;border-radius:16px;background:${v.subtitle.band}cc;color:${v.subtitle.ink};font-size:40px;line-height:1.45;font-weight:700;text-align:center;visibility:hidden}
 #zk-fade{position:absolute;inset:0;background:#000;opacity:1}
 `;
@@ -41,7 +45,8 @@ function sceneHtml(sc) {
     ...Object.entries(sc.markers).map(([k, v]) => `--${k}:${v.toFixed(3)}s`),
   ].join(';');
   // manual を付けた図は、自動の動きを付けずに置く。AI が data-label で部品を狙って動かすときに使う。
-  const fig = (manual) => (sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${manual ? ' data-manual' : ''}>${sc.figureSvg}</div>` : '');
+  const fig = (manual) =>
+    sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${manual ? ' data-manual' : ''}>${sc.figureSvg}</div>` : sc.tableHtml ? `<div class="zk-fig zk-table" data-whole="true"${manual ? ' data-manual' : ''}>${sc.tableHtml}</div>` : '';
   let inner;
   if (sc.kind === 'title') inner = `<h1 class="zk-title">${esc(sc.title)}</h1>`;
   else if (sc.kind === 'auto') inner = `<h2 class="zk-claim">${esc(sc.claim)}</h2>${fig(false)}`;
@@ -53,7 +58,7 @@ function sceneHtml(sc) {
 export function pageHtml(plan, tokens, only = null) {
   const v = tokens.video;
   // ページの中では、図とシーンの HTML は DOM に入っているので、時間割からは外す。
-  const lite = { ...plan, scenes: plan.scenes.map(({ figureSvg, motionHtml, findings, ...s }) => s) };
+  const lite = { ...plan, scenes: plan.scenes.map(({ figureSvg, tableHtml, motionHtml, findings, ...s }) => s) };
   const runtime = fs.readFileSync(path.join(root, 'src/video/runtime.browser.js'), 'utf8');
   const scenes = plan.scenes.filter((s) => only == null || s.id === only);
   return `<!doctype html>
@@ -289,8 +294,12 @@ export async function makeVideo(file, { out, project = process.cwd(), draft = fa
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-video-'));
   const workers = Math.max(1, Math.min(4, Math.floor(os.cpus().length / 2)));
   // 撮影は1つのブラウザの中では直列になるので、区間ごとに別のブラウザを使う。
-  const browsers = await Promise.all(Array.from({ length: workers }, launch));
+  // 一部の起動が失敗しても、起動できた分は必ず閉じる。すべての起動を待ってから、失敗を投げる。
+  const launched = await Promise.allSettled(Array.from({ length: workers }, launch));
+  const browsers = launched.filter((x) => x.status === 'fulfilled').map((x) => x.value);
   try {
+    const failed = launched.find((x) => x.status === 'rejected');
+    if (failed) throw failed.reason;
     let { plan, results } = await guarded(browsers[0], prep);
     // 検査した時刻の間で暴走したときは、そのシーンを差し替えて撮り直す。2回までにする。
     for (let attempt = 0; ; attempt++) {
@@ -379,9 +388,17 @@ async function mux(r, plan, prep, tmp, target) {
     const gain = settings.video.sfx.volume * 0.25;
     for (const p of await voiceCues(all, files)) parts.push({ ...p, gain });
   }
+  // BGM。settings.json の video.bgm に書いた曲を、ナレーションの間だけ小さくして流す。
+  if (settings.video.bgm) {
+    const raw = await run('ffmpeg', ['-loglevel', 'error', '-i', settings.video.bgm, '-f', 'f32le', '-ac', '1', '-ar', String(RATE), '-']);
+    const song = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length));
+    const talk = plan.scenes.flatMap((s) => s.lines.map((l) => [s.start + s.narrStart + l.start, s.start + s.narrStart + l.end]));
+    parts.push({ at: 0, samples: bgmTrack(song, plan.duration, talk, { volume: settings.video.bgmVolume }) });
+  }
   const audio = path.join(tmp, 'audio.wav');
   fs.writeFileSync(audio, wav16(mix(plan.duration, parts)));
   const list = path.join(tmp, 'list.txt');
-  fs.writeFileSync(list, r.segments.map((x) => `file '${x}'`).join('\n'));
+  // ffmpeg の concat の書式では、引用符の中の ' を '\'' と書く。一時フォルダのパスに ' が入ることがあるため。
+  fs.writeFileSync(list, r.segments.map((x) => `file '${x.replace(/'/g, "'\\''")}'`).join('\n'));
   await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list, '-i', audio, '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', target]);
 }

@@ -165,8 +165,8 @@ if (cmd === 'prompt') {
   // 返答を資料にするスキルを、Claude Code が読む .claude/skills と、ほかのツールが読む .agents/skills に書く。
   const base = flags.has('--global') ? (await import('node:os')).homedir() : path.resolve(files[0] ?? '.');
   const { writeProjectSettings } = await import('./settings.js');
-  const s = writeProjectSettings(base, flags.has('--video') ? 'video' : 'document');
-  console.log(s.written ? `${s.file} を書き出しました。` : `${s.file} はすでにあるので、変えていません。`);
+  const s = writeProjectSettings(base, flags.has('--video') ? 'video' : 'document', { explicit: flags.has('--video') });
+  console.log(s.updated ? `${s.file} の output を video にしました。ほかの項目は変えていません。` : s.written ? `${s.file} を書き出しました。` : `${s.file} はすでにあるので、変えていません。`);
   const cli = path.join(root, 'src/cli.js').replaceAll('\\', '/');
   const skill = fs.readFileSync(path.join(root, 'prompts/answer-skill.md'), 'utf8').replaceAll('{{cli}}', cli);
   for (const d of ['.claude/skills', '.agents/skills']) {

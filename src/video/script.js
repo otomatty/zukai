@@ -4,6 +4,10 @@ import path from 'node:path';
 import { parse, sentences } from '../parse.js';
 import { types } from '../figures/index.js';
 import { readJson } from '../lint/index.js';
+import MarkdownIt from 'markdown-it';
+
+// 図の代わりに Markdown の表を置いたセクションの表。HTML は書けないようにして描く。
+const tableMd = new MarkdownIt({ html: false });
 
 // 時間割の定数（秒）。narrStart はシーンが始まってからナレーションが始まるまで。
 export const TIMING = { narrStart: 0.6, tail: 0.9, transition: 0.9, minScene: 3, charsPerSec: 7.5, lineGap: 0.25, fadeOut: 1 };
@@ -127,6 +131,9 @@ export function scenesOf(source, file) {
     const type = types[fig?.spec?.type];
     const figureSvg = type && !type.validate(fig.spec, limits, ctx).length ? type.render(fig.spec, tokens, ctx) : null;
     const refsBlock = s.blocks.find((b) => b.kind === 'refs') ?? null;
+    // 図の代わりに表を置いたセクションは、表を動画にも出す。代わりの自動の動きと <zk-figure> で使う。
+    const table = figureSvg ? null : s.blocks.find((b) => b.kind === 'table');
+    const tableHtml = table ? tableMd.render(rows.slice(table.line - 1, table.endLine).join('\n')) : null;
     const sectionText = textOf(s.line, s.endLine);
     // 役割を付けたナレーションがあれば、ナレーション1つを1ショット（シーン）にする。無ければセクション全体で1シーン。
     const narrations = s.blocks.filter((b) => b.kind === 'narration' && !b.ending);
@@ -150,7 +157,7 @@ export function scenesOf(source, file) {
       if (written && lines.length > L.maxShotLines) {
         findings.push({ severity: 'warn', rule: 'V107', message: role ? `このショットは${lines.length}行あります。目安は${L.maxShotLines}行までです。ショットを分けてください。` : `このシーンは${lines.length}行あります。目安は${L.maxShotLines}行までです。疑問（question）、答え（answer）、例（example）、用語（term）のショットに分けてください。` });
       }
-      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, whole: !type || WHOLE.has(fig.spec.type), motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
+      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, whole: !type || WHOLE.has(fig.spec.type), tableHtml, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
     });
     for (const m of motions.filter((x) => !used.has(x))) {
       out.at(-1).findings.push({ severity: 'warn', rule: 'V017', message: `L${m.line} の html motion${m.role ? ` ${m.role}` : ''} に、同じ役割の yaml narration がありません。` });

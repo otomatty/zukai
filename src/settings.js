@@ -13,7 +13,9 @@ export const defaults = () => ({
     model: 'gemini-3.8-flash-tts',
     voice: 'Kore',
     style: '落ち着いた声で、好奇心をくすぐるように語る',
+    // bgm は曲のファイル（.zukai からの相対パス）。bgmVolume は音量（0〜1）。ナレーションの間は、その3割まで下げる。
     bgm: null,
+    bgmVolume: 0.2,
     // files は、名前の付いた効果音を手元の音のファイルに差し替えるときに書く。例: { "appear": "sounds/pop.wav" }
     sfx: { enabled: true, volume: 0.5, files: {} },
   },
@@ -53,9 +55,15 @@ export function loadSettings(project) {
 }
 
 // init が書くプロジェクトの設定。すでにあれば上書きしない。
-export function writeProjectSettings(project, output) {
+// ただし --video を付けたときは、ほかの項目を残したまま output だけを video にする。既存のプロジェクトに動画を足せるようにするため。
+export function writeProjectSettings(project, output, { explicit = false } = {}) {
   const file = projectSettingsPath(project);
-  if (fs.existsSync(file)) return { file, written: false };
+  if (fs.existsSync(file)) {
+    const cur = readJson(file);
+    if (!explicit || cur.output === output) return { file, written: false };
+    fs.writeFileSync(file, JSON.stringify({ ...cur, output }, null, 2) + '\n');
+    return { file, written: true, updated: true };
+  }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const ignore = path.join(project, '.zukai', '.gitignore');
   if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, '*\n');
@@ -69,7 +77,9 @@ export function writeApiKey(key) {
   const cur = readJson(file);
   cur.gemini = { ...cur.gemini, apiKey: key };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  // ponytail: Windows では mode が効かない。共有の PC で使うなら、ホームのフォルダの権限で守る。
+  // mode は新しく作るときにしか効かない。init --global などで先にできていたファイルは、キーを書く前に本人だけが読める権限にする。
+  // ponytail: Windows では chmod と mode が読み取りの権限を変えない。共有の PC で使うなら、ホームのフォルダの権限で守る。
+  if (fs.existsSync(file)) fs.chmodSync(file, 0o600);
   fs.writeFileSync(file, JSON.stringify(cur, null, 2) + '\n', { mode: 0o600 });
   return file;
 }
