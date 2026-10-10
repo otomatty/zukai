@@ -95,7 +95,7 @@ claude --plugin-dir /path/to/zukai
 
 Desktop アプリと VS Code 拡張では、`~/.claude/settings.json` の `env` に `"CLAUDE_CODE_PLUGIN_DIRS": "/path/to/zukai"` を書きます。
 
-VS Code 拡張は、図を `code -r` で開きます。Cursor も `code` コマンドを入れます。別のコマンドで開くときは、環境変数 `ZUKAI_EDITOR` に指定します。PNG は一時フォルダの `zukai-figures` に書き出します。
+VS Code 拡張は、図を `code -r` で開きます。Cursor も `code` コマンドを入れます。別のコマンドで開くときは、環境変数 `ZUKAI_EDITOR` に指定します。PNG は、ほかのユーザーが読めないホームの下（`~/.cache/zukai/figures`）に書き出し、1日より古いものは次に書き出すときに消します。
 
 `zukai figures` は、返答を標準入力から読み、図ごとの行の範囲と SVG を JSON で返します。`--png` か `--open` を指定したときは、SVG の代わりに PNG のパスと大きさを返します。mod はこのコマンドだけを呼びます。
 

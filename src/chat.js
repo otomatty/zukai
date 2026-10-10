@@ -12,6 +12,19 @@ import { toPng, pngFont } from './png.js';
 
 const unesc = (s) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
+// シンボリックリンクをたどった実際のパス。まだ無いファイルは、そのままのパスで比べる。
+const real = (p) => {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+const inside = (dir, p) => {
+  const rel = path.relative(real(dir), real(p));
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+};
+
 // 図ごとに、返答の中の行の範囲（0始まり、end は含まない）と SVG を返す。描けない図は error を持つ。
 export function figuresOf(text, baseDir) {
   const tokens = readJson('contract/tokens.json');
@@ -28,9 +41,10 @@ export function figuresOf(text, baseDir) {
       if (b.parseError) return { ...at, error: `YAML を読めません。${b.parseError}` };
       if (!type) return { ...at, error: `type「${b.spec?.type}」は使えません。` };
       // 返答の screenshot は、作業フォルダの中の画像だけを読む。返答に書かれたパスから、ほかの場所の画像を表示しない。
+      // シンボリックリンクはたどってから比べる。枠の位置を記録した .json も、画像と同じ場所から読むので同じく確かめる。
       if (b.spec.type === 'screenshot') {
-        const rel = path.relative(baseDir, path.resolve(baseDir, String(b.spec.image)));
-        if (rel.startsWith('..') || path.isAbsolute(rel)) return { ...at, error: `画像「${b.spec.image}」は作業フォルダの外にあります。` };
+        const image = path.resolve(baseDir, String(b.spec.image));
+        if (![image, `${image}.json`].every((p) => inside(baseDir, p))) return { ...at, error: `画像「${b.spec.image}」は作業フォルダの外にあります。` };
       }
       const errors = type.validate(b.spec, limits, ctx);
       if (errors.length) return { ...at, error: errors.join(' ') };
@@ -41,13 +55,23 @@ export function figuresOf(text, baseDir) {
     });
 }
 
-// PNG を一時フォルダに書き出す。名前は SVG の内容とフォントから決めるので、同じ図は2回書かない。
-export function writePngs(figures, dir = path.join(os.tmpdir(), 'zukai-figures')) {
-  fs.mkdirSync(dir, { recursive: true });
+// PNG の置き場所。screenshot の PNG には画面の内容が写るので、ほかのユーザーが読めないホームの下に置く。
+const FIGURE_DIR = path.join(os.homedir(), '.cache', 'zukai', 'figures');
+// 置き場所の PNG は、この日数より古いものを消す。
+const KEEP_DAYS = 1;
+
+// PNG を書き出す。名前は SVG の内容とフォントから決めるので、同じ図は2回書かない。
+export function writePngs(figures, dir = FIGURE_DIR) {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const old = Date.now() - KEEP_DAYS * 86400000;
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (name.endsWith('.png') && fs.statSync(p).mtimeMs < old) fs.rmSync(p, { force: true });
+  }
   return figures.map((f) => {
     if (!f.svg) return f;
     const file = path.join(dir, `${crypto.createHash('sha256').update(`${pngFont()}\0${f.svg}`).digest('hex').slice(0, 16)}.png`);
-    if (!fs.existsSync(file)) fs.writeFileSync(file, toPng(f.svg).data);
+    if (!fs.existsSync(file)) fs.writeFileSync(file, toPng(f.svg).data, { mode: 0o600 });
     // 幅と高さは、PNG の先頭（IHDR）から読む。
     const head = fs.readFileSync(file).subarray(16, 24);
     return { ...f, png: file, width: head.readUInt32BE(0), height: head.readUInt32BE(4) };
@@ -57,7 +81,7 @@ export function writePngs(figures, dir = path.join(os.tmpdir(), 'zukai-figures')
 // エディタのタブで開く。Cursor も `code` を入れるので、既定は code。変えたいときは環境変数 ZUKAI_EDITOR で指定する。
 export function openInEditor(files) {
   const editor = process.env.ZUKAI_EDITOR ?? 'code';
-  // Windows の code は .cmd なので、シェル経由で起動する。パスは一時フォルダの中の16進の名前なので、引用符で囲めば足りる。
+  // Windows の code は .cmd なので、シェル経由で起動する。パスは置き場所の中の16進の名前なので、引用符で囲めば足りる。
   const r =
     process.platform === 'win32'
       ? spawnSync(`${editor} -r ${files.map((f) => `"${f}"`).join(' ')}`, { shell: true, stdio: 'ignore' })
