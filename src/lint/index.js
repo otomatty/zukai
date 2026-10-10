@@ -134,6 +134,7 @@ function lintProse(blocks) {
 function lintTerms(doc, terms) {
   if (!terms.length) return [];
   const texts = [];
+  if (doc.title) texts.push({ text: doc.title, line: doc.titleLine ?? 1 });
   for (const s of doc.sections) texts.push({ text: s.title, line: s.line });
   for (const b of [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]) {
     if (b.kind === 'paragraph' || b.kind === 'list') texts.push({ text: b.text, line: b.line });

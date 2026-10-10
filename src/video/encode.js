@@ -179,7 +179,12 @@ async function probe(browser, plan, tokens, L, id) {
     await seek(settled);
     const b = await shot(p.cdp, plan, 0.25);
     if (!a.equals(b)) findings.push({ severity: 'warn', rule: 'V201', message: '同じ時刻のコマが、撮るたびに変わります。状態を持つ動き（タイマーや requestAnimationFrame で値を積み上げる書き方）を、zk.scene の frame(t) で t から計算する書き方に変えてください。' });
-    const sound = await within(L.loadTimeoutMs, p.page.evaluate((i) => window.zkSound(i), id), 'zk.sound の音が作り終わりませんでした。');
+    // zk.sound の例外はページの中で記録するが、ページの外で失敗したときも、検査全体は止めずにこのシーンの指摘にする。
+    const sound = await within(L.loadTimeoutMs, p.page.evaluate((i) => window.zkSound(i), id), 'zk.sound の音が作り終わりませんでした。').catch((e) => {
+      if (e instanceof Runaway) throw e;
+      findings.push({ severity: 'warn', rule: 'V002', message: `zk.sound の音を作れませんでした。${e.message.split('\n')[0]}` });
+      return null;
+    });
     if (sound && sound.peak > 1) findings.push({ severity: 'warn', rule: 'V301', message: `zk.sound の音の最大値が ${sound.peak.toFixed(2)} で、音が割れます。1以下にしてください。` });
     // frame の中の例外は、その時刻だけの問題のことがあるので warn にとどめる。
     for (const e of await p.page.evaluate(() => window.zkErrors())) findings.push({ severity: 'warn', rule: 'V002', message: e.message });

@@ -57,6 +57,7 @@ export function parse(source) {
       const title = plain(tokens[i + 1].content);
       if (level === 1) {
         doc.title = title;
+        doc.titleLine = line;
       } else {
         current = { level, title, line, blocks: [], ignores: [] };
         doc.sections.push(current);

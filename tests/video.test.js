@@ -58,6 +58,13 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   const src = '# 題名\n\n導入です。\n\n## 渡し方\n\nログインした印を、矢印の先へ渡します。\n\n```yaml figure\ntype: flow\nsteps:\n  - label: 矢印\n  - label: 出口\n```\n\n説明です。\n';
   const r = await lint(src, file, { textlint: false });
   assert.deepEqual(r.findings.filter((f) => f.rule === 'P007').map((f) => f.line), [7]);
+  // 使う表記が避ける表記を含む場合（ユーザー と ユーザ）は、使う表記を知らせない。題名も調べる。
+  const { findAvoided } = await import('../src/terms.js');
+  const user = [{ use: 'ユーザー', avoid: ['ユーザ'] }];
+  assert.deepEqual(findAvoided('ユーザーが使う', user), []);
+  assert.equal(findAvoided('ユーザが使う', user).length, 1);
+  const titled = await lint(src.replace('# 題名', '# 印の渡し方'), file, { textlint: false });
+  assert.ok(titled.findings.some((f) => f.rule === 'P007' && f.line === 1));
 });
 
 test('コード参照は、リポジトリの外のファイルを読まない', async () => {

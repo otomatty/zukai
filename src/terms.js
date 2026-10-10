@@ -10,7 +10,8 @@ export function findAvoided(text, terms) {
   const out = [];
   for (const t of terms) {
     let masked = String(text ?? '');
-    for (const e of t.except ?? []) masked = masked.split(e).join('\u0000'.repeat(e.length));
+    // 使う表記そのものも先に隠す。「ユーザ」を避けて「ユーザー」と書く場合に、正しい「ユーザー」を知らせないため。
+    for (const e of [t.use, ...(t.except ?? [])]) if (e) masked = masked.split(e).join('\u0000'.repeat(e.length));
     for (const a of t.avoid) if (a && masked.includes(a)) out.push({ use: t.use, avoid: a });
   }
   return out;
