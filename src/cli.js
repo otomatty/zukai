@@ -15,16 +15,16 @@ const opt = (name) => rest.find((a) => a.startsWith(`--${name}=`))?.split('=').s
 const files = rest.filter((a) => !a.startsWith('--'));
 
 const usage = `使い方:
-  zukai prompt [--full]                AI に渡す指示を出力する。図の型は一覧だけを含む（--full ですべての書き方を含む）
-  zukai prompt --chat [--type-command=コマンド]  チャットの返答の書き方を出力する
+  zukai prompt [--full] [--type-command=コマンド]  AI に渡す指示を出力する。図の型は一覧だけを含む（--full ですべての書き方を含む）
   zukai type <型...>                   指定した型の書き方と上限を出力する
-  zukai figures [--png] [--open] [--max-svg=字数] < 返答.md  返答の図を描き、JSON で出力する（--png で PNG も書き出す、--open でエディタのタブに開く）
   zukai lint <file.md...> [--json] [--model=名前] [--no-log] [--no-textlint]
   zukai build <file.md> [--out=file.html]                       1枚の HTML を書き出す（原稿を中に埋め込む）
   zukai build <file.md> --format=confluence [--out=フォルダ]     Confluence 用の本文、図の PNG、原稿をフォルダに書き出す
   zukai publish <file.md> [--space-id=ID] [--parent-id=ID]      Confluence Cloud にページを作成または更新する
   zukai capture <file.md>                                       原稿の screenshot の URL を撮影し、枠の位置を記録する
   zukai extract <file.html> [--out=file.md]                     HTML に埋め込んだ原稿を取り出す
+  zukai view [--no-open]               .zukai/answers の資料を読むページを起動し、URL を出力する（動いていれば URL だけ）
+  zukai init [フォルダ] [--global]      返答を資料にするスキルを .claude/skills と .agents/skills に書き出す（--global でホームの下）
   zukai corpus                         corpus/ の原稿で、期待したルールが発火するか確認する
   zukai stats                          ルールごとの発火・修正・抑制の実績を表示する
   zukai rules                          自作ルールの一覧を表示する
@@ -38,26 +38,7 @@ function print(result) {
 }
 
 if (cmd === 'prompt') {
-  process.stdout.write(buildPrompt({ full: flags.has('--full'), chat: flags.has('--chat'), type: opt('type-command') }));
-} else if (cmd === 'figures') {
-  // チャットの返答を標準入力から読み、図を描いて JSON で返す。mod と VS Code の表示が使う。
-  const { figuresOf, writePngs, openInEditor } = await import('./chat.js');
-  let figures = figuresOf(fs.readFileSync(0, 'utf8'), process.cwd());
-  // --max-svg より長い SVG は返さない。表示する側が受け付けない長さの図を、出力に載せないため。
-  const maxSvg = Number(opt('max-svg') ?? Infinity);
-  figures = figures.map(({ svg, ...f }) => (svg && svg.length > maxSvg ? { ...f, error: `図が大きすぎます（SVG ${svg.length} 字、上限 ${maxSvg} 字）。` } : { ...f, svg }));
-  // PNG を書き出したときは SVG を出力しない。screenshot の SVG は画像を埋め込むので大きく、mod が読める出力の上限を超えるため。
-  if (flags.has('--png') || flags.has('--open')) figures = writePngs(figures).map(({ svg, ...f }) => f);
-  if (flags.has('--open')) {
-    const pngs = figures.filter((f) => f.png).map((f) => f.png);
-    try {
-      if (pngs.length) openInEditor(pngs);
-    } catch (e) {
-      console.error(e.message);
-      process.exitCode = 1;
-    }
-  }
-  console.log(JSON.stringify(figures));
+  process.stdout.write(buildPrompt({ full: flags.has('--full'), type: opt('type-command') }));
 } else if (cmd === 'type' && files.length) {
   process.stdout.write(buildPrompt({ only: files }));
 } else if (cmd === 'lint' && files.length) {
@@ -129,6 +110,31 @@ if (cmd === 'prompt') {
   const out = opt('out') ?? files[0].replace(/\.html$/, '') + '.md';
   fs.writeFileSync(out, source);
   console.log(`${out} に原稿を取り出しました。`);
+} else if (cmd === 'view') {
+  const view = await import('./view.js');
+  if (flags.has('--serve')) {
+    // ensure が切り離したプロセスで起動する本体。直接実行すると、起動のエラーを確かめられる。
+    const server = await view.serve(process.cwd());
+    console.log(`http://127.0.0.1:${server.address().port}/`);
+  } else {
+    try {
+      console.log(await view.ensure(process.cwd(), { open: !flags.has('--no-open') }));
+    } catch (e) {
+      console.error(e.message);
+      process.exit(1);
+    }
+  }
+} else if (cmd === 'init') {
+  // 返答を資料にするスキルを、Claude Code が読む .claude/skills と、ほかのツールが読む .agents/skills に書く。
+  const base = flags.has('--global') ? (await import('node:os')).homedir() : path.resolve(files[0] ?? '.');
+  const cli = path.join(root, 'src/cli.js').replaceAll('\\', '/');
+  const skill = fs.readFileSync(path.join(root, 'prompts/answer-skill.md'), 'utf8').replaceAll('{{cli}}', cli);
+  for (const d of ['.claude/skills', '.agents/skills']) {
+    const dir = path.join(base, d, 'zukai-answer');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'SKILL.md'), skill);
+    console.log(`${path.join(dir, 'SKILL.md')} を書き出しました。`);
+  }
 } else if (cmd === 'corpus') {
   const expected = JSON.parse(fs.readFileSync(path.join(root, 'corpus/expected.json'), 'utf8'));
   let failed = 0;

@@ -13,7 +13,8 @@
     "lint": "node src/cli.js lint",
     "build": "node src/cli.js build",
     "corpus": "node src/cli.js corpus",
-    "stats": "node src/cli.js stats"
+    "stats": "node src/cli.js stats",
+    "test": "node --test tests/view.test.js"
   },
   "license": "MIT",
   "dependencies": {

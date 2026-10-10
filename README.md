@@ -24,9 +24,7 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 ```bash
 npm install
 node src/cli.js prompt                       # AI に渡す指示を出力する（図の型は一覧だけ）
-node src/cli.js prompt --chat                # チャットの返答の書き方を出力する
 node src/cli.js type flow bar                # 指定した型の書き方と上限を出力する
-node src/cli.js figures --png < 返答.md       # 返答の中の図を描き、JSON で出力する
 node src/cli.js icons lambda                 # 図に使えるアイコンの名前を探す
 node src/cli.js capture 原稿.md               # screenshot の URL を撮影し、枠の位置を記録する
 node src/cli.js lint 原稿.md --model=モデル名  # 検査する。error が1件でもあれば終了コード1
@@ -34,6 +32,8 @@ node src/cli.js build 原稿.md                 # 原稿.html を書き出す
 node src/cli.js build 原稿.md --format=confluence  # Confluence 用のフォルダを書き出す
 node src/cli.js publish 原稿.md --space-id=ID  # Confluence Cloud にページを作る。2回目以降は更新する
 node src/cli.js extract 原稿.html             # HTML に埋め込んだ原稿を取り出す
+node src/cli.js init [フォルダ] [--global]     # 返答を資料にするスキルを、各 AI ツールが読む場所に書き出す
+node src/cli.js view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
 node src/cli.js corpus                       # Lint 自体が期待どおりに動くか確認する
 node src/cli.js stats                        # ルールごとの実績を表示する
 ```
@@ -75,29 +75,44 @@ node src/cli.js publish 原稿.md                                              #
 
 `build --format=confluence` は、登録せずに同じ内容をフォルダへ書き出します。登録前に本文を確認するときに使います。
 
-## チャットの返答
+## 返答を資料にする
 
-このリポジトリは、Claude Code のプラグインとしても読み込めます。プラグインの mod は、普段のチャットの返答を zukai の書き方にし、返答の中の `yaml figure` と `svg figure` のブロックを図にします。
+Claude Code、Codex、Cursor などの AI ツールで、説明が必要な返答をチャットの外に図解の資料として出します。mod もフックも使わないので、シェルを実行できるツールならどれでも動きます。
 
-| 使う場所 | 図の出し方 |
+| 出力先 | 書く内容 |
 |---|---|
-| Desktop アプリの Code タブ | 返答の中に、図を SVG で描く |
-| ターミナルの `claude` | 返答の中に、図を PNG で描く。kitty の画像表示に対応しないターミナル（Windows Terminal、VS Code の統合ターミナルなど）では、PNG のパスを出す |
-| VS Code 拡張のチャット欄 | 返答が終わったら、図を PNG にしてエディタのタブで開く。チャット欄には mod の描画が出ないため |
+| チャット | 結論1文、資料の URL、原稿のパス |
+| 資料（`.zukai/answers/*.md`） | 主張文、図、説明文のセクション。Lint を通した zukai の原稿 |
 
-返答の書き方は `zukai prompt --chat` の出力で、mod がセッションの開始時にシステムプロンプトへ足します。返答には Lint をかけません。書き方を間違えた図は、YAML のまま表示されます。
+手順は、スキル（`zukai-answer`）に書いてあります。モデルは、説明、設計、比較、手順を求められたときと、図解を頼まれたときに資料を書きます。短い質問の答えと、コードを直す作業の途中は、チャットだけで答えます。
 
-mod は Claude Code 2.1.296 以降で動きます。図は Node で描くので、先に `npm install` を実行してから、次のどちらかで読み込みます。
+```bash
+node src/cli.js init /path/to/project   # プロジェクトの .claude/skills と .agents/skills に書く
+node src/cli.js init --global           # ホームの ~/.claude/skills と ~/.agents/skills に書く
+```
+
+`.claude/skills` は Claude Code、`.agents/skills` は Codex、Cursor、GitHub Copilot、Devin などが読みます。スキルには、この CLI の絶対パスが入ります。リポジトリを動かしたら `init` をやり直します。
+
+`zukai view` は、プロジェクトごとのポートで表示用のページを起動し、初回はブラウザで開きます。すでに動いていれば URL だけを出力して終わります。
+
+- 左に資料の一覧、右に本文を出す。新しい資料を保存すると、自動で切り替える
+- 古い資料を読んでいる間は切り替えず、一覧に「新着」の印を付ける
+- ヘッダーの左のアイコンで一覧を開閉する。たたんだ状態はブラウザに覚え、たたんでいる間に新着があればアイコンに点を付ける
+- 2回直しても残った Lint の error は、本文の上に出す
+- ヘッダーの右のアイコンで、`build` と同じ1枚の HTML をダウンロードする
+- 127.0.0.1 だけで待ち受け、`.zukai/answers` の原稿だけを読む。ページへの要求が30分なければ終了する
+
+`.zukai` の中に `.gitignore` を置くので、資料は Git の管理に入りません。
+
+## Claude Code のプラグイン
+
+このリポジトリは、Claude Code のプラグインとしても読み込めます。読み込むと、資料を作る `zukai` スキルが使えます。
 
 ```bash
 claude --plugin-dir /path/to/zukai
 ```
 
 Desktop アプリと VS Code 拡張では、`~/.claude/settings.json` の `env` に `"CLAUDE_CODE_PLUGIN_DIRS": "/path/to/zukai"` を書きます。
-
-VS Code 拡張は、図を `code -r` で開きます。Cursor も `code` コマンドを入れます。別のコマンドで開くときは、環境変数 `ZUKAI_EDITOR` に指定します。PNG は、ほかのユーザーが読めないホームの下（`~/.cache/zukai/figures`）に書き出し、1日より古いものは次に書き出すときに消します。
-
-`zukai figures` は、返答を標準入力から読み、図ごとの行の範囲と SVG を JSON で返します。`--png` か `--open` を指定したときは、SVG の代わりに PNG のパスと大きさを返します。mod はこのコマンドだけを呼びます。
 
 ## 原稿の形
 
