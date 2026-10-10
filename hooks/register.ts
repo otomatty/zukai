@@ -24,9 +24,14 @@ export function split(text: string): Part[] {
     const open = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(line)
     // 閉じる行は、開いた記号と同じ文字で、同じ数以上並んだ行。
     const end = open ? lines.findIndex((l, j) => j > i && new RegExp(`^ {0,3}${open[2]![0]}{${open[2]!.length},}\\s*$`).test(l)) : -1
-    if (!open || end < 0) {
+    if (!open) {
       buf.push(line)
       continue
+    }
+    // 閉じていないコードブロックは、返答の終わりまで続く（書いている途中の外側のブロックの中を、図として数えない）。
+    if (end < 0) {
+      buf.push(...lines.slice(i))
+      break
     }
     const isFigure = open[1] === '' && open[2]![0] === '`' && /^\s*(ya?ml|svg)\s+figure\b/.test(open[3]!)
     if (isFigure) {
@@ -45,6 +50,11 @@ const cliOf = ($: EngineInterface) => `${$.plugin.root.replaceAll('\\', '/')}/sr
 
 // 同じブロックを描き直さない。返答を書いている間は、同じ図で何度も描画が起きる。
 const cache = new Map<string, Promise<Figure>>()
+// screenshot の図は、画像ファイルが撮り直されることがあるので、ターンが終わったらキャッシュから捨てる。
+const perTurn = new Set<string>()
+
+// Desktop の Svg 要素が受け付ける SVG の長さの上限。これより長い図は描かずに、YAML のまま表示する。
+const SVG_MAX = 131072
 
 // まだ描いていない図をまとめて1回の CLI 呼び出しで描く。結果は、図のブロックの順に返る。
 async function draw($: EngineInterface, blocks: string[], png: boolean): Promise<Figure[]> {
@@ -54,7 +64,7 @@ async function draw($: EngineInterface, blocks: string[], png: boolean): Promise
     // CLI の失敗、時間切れ、長すぎて切れた出力は、どれも図の error にする。error の図は YAML のまま表示される。
     const fail = (message: string) => todo.map(() => ({ error: message }))
     const run = $.process
-      .run(['node', cliOf($), 'figures', ...(png ? ['--png'] : [])], { stdin: todo.join('\n\n') })
+      .run(['node', cliOf($), 'figures', png ? '--png' : `--max-svg=${SVG_MAX}`], { stdin: todo.join('\n\n') })
       .then(r => {
         if (r.exitCode !== 0) return fail(r.stderr)
         if (r.isStdoutTruncated) return fail('図の出力が長すぎます。')
@@ -64,9 +74,9 @@ async function draw($: EngineInterface, blocks: string[], png: boolean): Promise
     todo.forEach((b, i) => {
       const one: Promise<Figure> = run.then(list => list[i] ?? { error: '図を描けませんでした。' })
       cache.set(key(b), one)
-      // 失敗した図は、次の描画でもう一度試す。screenshot は画像ファイルが撮り直されることがあるので、描き終えたら毎回捨てる。
-      // 型は CLI が YAML を読んだ結果で判定する（type: "screenshot" のような書き方も同じに扱うため）。
-      one.then(f => (f.type === 'screenshot' || f.error) && cache.delete(key(b)))
+      // 失敗した図は、次の描画でもう一度試す。
+      // screenshot かどうかは、CLI が YAML を読んだ結果で判定する（type: "screenshot" のような書き方も同じに扱うため）。
+      one.then(f => (f.error ? cache.delete(key(b)) : f.type === 'screenshot' && perTurn.add(key(b))))
     })
   }
   return Promise.all(blocks.map(b => cache.get(key(b))!))
@@ -129,6 +139,10 @@ export const register: Register = on => {
   // VS Code 拡張のチャット欄には mod の描画が出ない。返答が終わったら、図をエディタのタブで開く。
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    if (!e.agentId) {
+      for (const k of perTurn) cache.delete(k)
+      perTurn.clear()
+    }
     if (e.agentId || e.reason !== 'answer') return done
     if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) !== 'claude-vscode') return done
     const blocks = split(e.answer).filter(p => p.isFigure).map(p => p.text)

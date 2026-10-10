@@ -36,14 +36,26 @@ test('CLI の出力が切れたときは、図を描かずに文章のまま表�
   expect(await ui.findAll({ type: 'Markdown' })).toHaveLength(3)
 })
 
-test('screenshot の図は、キャッシュに残さず毎回描く', async ($, on) => {
+test('screenshot の図は、同じターンの中では描き直さず、ターンが終わったら描き直す', async ($, on) => {
   let calls = 0
   const shot = { ...fakeCli, stdout: JSON.stringify([{ type: 'screenshot', alt: '画面', svg: '<svg viewBox="0 0 720 56"></svg>' }]) }
   on('process.run', () => (calls++, { value: shot }))
+  on('turn.complete', () => ({ text: '' }))
   const text = '```yaml figure\ntype: "screenshot"\nimage: shots/a.png\n```'
-  for (let i = 0; i < 2; i++) {
+  const show = async () => {
     const ui = await $.ui.mount({ plugin: 'zukai', surface: 'desktop', component: 'AssistantMessage', props: { text, isFirstOfReply: true } })
     expect(await ui.find({ type: 'Svg' })).toBeDefined()
   }
+  await show()
+  await show()
+  expect(calls).toBe(1)
+  await $.turn.complete({ answer: '', durationMs: 0, isAborted: false, turnId: 't1', reason: 'answer' })
+  await show()
   expect(calls).toBe(2)
+})
+
+test('書いている途中の外側のブロックの中の図は、図として数えない', () => {
+  const open = '````markdown\n' + FIG + '\n説明の続き'
+  expect(split(open).every(p => !p.isFigure)).toBe(true)
+  expect(split(open).map(p => p.text).join('\n')).toBe(open)
 })
