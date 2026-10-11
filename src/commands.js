@@ -62,7 +62,8 @@ export const commands = [
     async run({ opt, has }) {
       const { doctor, printDoctor } = await import('./doctor.js');
       const { projectOf } = await import('./config.js');
-      const r = await doctor(projectOf(opt('dir') ?? process.cwd()));
+      // --dir で書いたフォルダはそのまま使う。上へたどるのは、--dir が無いときだけ。
+      const r = await doctor(opt('dir') ? path.resolve(opt('dir')) : projectOf(process.cwd()));
       if (has('json')) console.log(JSON.stringify(r, null, 2));
       else printDoctor(r);
       return r.ok ? 0 : 1;

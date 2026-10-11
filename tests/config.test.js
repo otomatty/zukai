@@ -237,3 +237,17 @@ test('Windows では、同じ設定のコマンドの値を二重引用符で囲
     Object.defineProperty(process, 'platform', saved);
   }
 });
+
+test('config は操作ごとに引数の数を確かめ、doctor は --dir のフォルダをそのまま使う', async () => {
+  const home = tmp('arity-home');
+  const parent = tmp('arity');
+  fs.writeFileSync(path.join(parent, 'zukai.config.json'), JSON.stringify({ output: 'video' }));
+  const r = run(['config', 'unset', 'output', 'unexpected'], { cwd: parent, home });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /引数が多すぎます/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(parent, 'zukai.config.json'), 'utf8')).output, 'video');
+  const child = path.join(parent, 'child');
+  fs.mkdirSync(child);
+  const d = run(['doctor', `--dir=${child}`, '--json'], { cwd: parent, home });
+  assert.equal(JSON.parse(d.out).project, child);
+});

@@ -330,6 +330,9 @@ export async function config({ args, opt, has }) {
   const scope = opt('scope');
   if (scope && !['team', 'local', 'user'].includes(scope)) throw new Error('--scope に書けるのは team、local、user のどれかです。');
   if (!action) return process.stdin.isTTY && process.stdout.isTTY ? configInteractive(project) : list(project, { origin: true });
+  // 操作ごとに引数の数を確かめる。unset に余分な引数を付けたような書き間違いで、設定を変えないため。
+  const arity = { list: 0, get: 1, set: 2, unset: 1 }[action];
+  if (arity !== undefined && args.length - 1 > arity) throw new Error(`config ${action} の引数が多すぎます（${args.slice(arity + 1).join(' ')}）。使い方は zukai help config で表示します。`);
   switch (action) {
     case 'list':
       return list(project, { origin: has('origin'), json: has('json') });
