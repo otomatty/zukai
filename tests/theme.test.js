@@ -535,6 +535,9 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   const white = await grey('#ffffff');
   assert.deepEqual(white.map((x) => [x.severity, /chart\.muted（#ffffff）と color\.paper/.test(x.message)]), [['warn', true]]);
   assert.deepEqual(await grey('#a8b0b9'), []);
+  // neutral のヒートマップの数値は、濃いマス（chart.muted）の上の color.ink で確かめる。
+  const heat = (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted: '#1c2530' } })).tokens)).filter((x) => x.what === 'ヒートマップの数値');
+  assert.ok(heat.some((x) => x.severity === 'error' && /color\.ink.*chart\.muted/.test(x.message)), JSON.stringify(heat));
   // series でも、系列の色が3つなら、4つ目を chart.muted、5つ目を chart.rest で描くので確かめる。5つあれば使わない。
   assert.deepEqual((await grey('#ffffff', 'series')).map((x) => x.severity), ['warn']);
   const five = ['#0432ff', '#ff2f92', '#ff2600', '#a77bff', '#00695c'];

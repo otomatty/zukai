@@ -354,6 +354,8 @@ export async function checkTheme(t) {
     // neutral では、強調しない棒や線を chart.muted（と、それを文字の色に寄せた色）で描く。
     // series でも、系列の色が足りなければ、次の1つを chart.muted、その先を chart.rest で描く（src/figures/chart.js の seriesColor）。
     if (chart.mode === 'neutral' || chart.series.length < MAX_SERIES) pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
+    // neutral のヒートマップは、color.surface から chart.muted までの色のマスに、color.ink で数値を書く。濃い側の chart.muted の上で確かめる。
+    if (chart.mode === 'neutral') pair('ヒートマップの数値', c.ink, chart.muted, `${at}.ink`, `${chartAt}.muted`);
     if (chart.mode === 'series' && chart.series.length < MAX_SERIES - 1) pair('残りの系列', chart.rest, c.paper, `${chartAt}.rest`, `${at}.paper`, FAINT, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {
