@@ -156,6 +156,12 @@ test('setup は、手元の設定で同じ値になっていても、--scope=tea
   const r = run(['setup', 'output', '--output=video', '--scope=team', '--yes'], { cwd: project, home });
   assert.equal(r.code, 0, r.err);
   assert.equal(JSON.parse(fs.readFileSync(path.join(project, 'zukai.config.json'), 'utf8')).output, 'video');
+  // 既定値がある項目を空にすると、書かずに止める。
+  const empty = run(['setup', 'output', '--output=', '--yes'], { cwd: project, home });
+  assert.equal(empty.code, 1);
+  assert.match(empty.err, /--output を空にはできません/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(project, 'zukai.config.json'), 'utf8')).output, 'video');
+  assert.throws(() => setValue(project, 'output', null), /null は書けません/);
 });
 
 test('publish は、設定の URL からページの URL を組み立てる', () =>

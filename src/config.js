@@ -283,6 +283,9 @@ export function setValue(project, key, value, scope) {
   if (!s) throw new Error(unknownKey(key));
   scope ??= s.scopes[0];
   if (!s.scopes.includes(scope)) throw new Error(`${key} は、${s.scopes.map((x) => `「${scopeNames[x]}」`).join('か')}の設定にだけ書けます。`);
+  // どの経路から呼ばれても、読むときに誤りになる値は書かない。
+  const why = invalid(s, value);
+  if (why) throw new Error(`${key} の値が正しくありません。${why}`);
   const file = filesOf(project)[scope];
   const cur = readJson(file);
   if (cur.error) throw new Error(cur.error);

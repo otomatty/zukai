@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, stateDir, scopeNames, display, listedKeys, closest, pad, widthOf } from './config.js';
+import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, stateDir, scopeNames, display, listedKeys, closest, pad, widthOf, invalid } from './config.js';
 
 const SECTIONS = ['skills', 'output', 'video', 'confluence'];
 const interactive = (has) => Boolean(process.stdin.isTTY && process.stdout.isTTY) && !has('yes');
@@ -233,6 +233,8 @@ function fromFlags(want, cfg, opt) {
   for (const [flag, key] of Object.entries(flagKeys)) {
     const v = opt(flag);
     if (v === undefined) continue;
+    // 空の値は「なし」。既定値がある項目（output など）は「なし」にできないので止める。
+    if (v === '' && invalid(specOf(key), null)) throw new Error(`--${flag} を空にはできません。既定値に戻すときは zukai config unset ${key} を実行します。`);
     answers.values[key] = v === '' ? null : specOf(key).type === 'path' ? path.resolve(v) : coerce(key, v, 'team', cfg.project);
   }
   if (want.has('skills') && opt('skills') !== 'none') {
