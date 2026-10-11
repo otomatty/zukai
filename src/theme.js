@@ -155,7 +155,15 @@ function fieldProblems(fields, at) {
     if (unknown.length) out.push(`${where}: ${unknown.join('、')} は使えません。${def.type} の項目に書けるのは ${allowed.join('、')} です。`);
     if (def.required !== undefined && typeof def.required !== 'boolean') out.push(`${where}.required は true か false で書きます。`);
     if (def.desc !== undefined && typeof def.desc !== 'string') out.push(`${where}.desc は文で書きます。`);
-    for (const n of ['min', 'max']) if (def[n] !== undefined && (typeof def[n] !== 'number' || !Number.isFinite(def[n]))) out.push(`${where}.${n} は数値で書きます。`);
+    // 文字の字数と配列の個数の上限は、0以上の整数。数値の項目の範囲は、どんな数値でもよい。
+    const count = def.type === 'string' || def.type === 'list';
+    for (const n of ['min', 'max']) {
+      if (def[n] === undefined) continue;
+      if (typeof def[n] !== 'number' || !Number.isFinite(def[n])) out.push(`${where}.${n} は数値で書きます。`);
+      else if (count && (!Number.isInteger(def[n]) || def[n] < 0)) out.push(`${where}.${n} は0以上の整数で書きます。`);
+    }
+    // 範囲が逆だと、どの値も検査を通らず、型が使えなくなる。
+    if (typeof def.min === 'number' && typeof def.max === 'number' && def.min > def.max) out.push(`${where}: min（${def.min}）が max（${def.max}）より大きくなっています。`);
     if (def.type === 'string' && def.max === undefined) out.push(`${where}: 文字の項目には max（全角の字数の上限）が要ります。図からはみ出さないことを、上限で保証するため。`);
     if (def.type === 'list') {
       if (def.max === undefined) out.push(`${where}: 配列の項目には max（個数の上限）が要ります。`);

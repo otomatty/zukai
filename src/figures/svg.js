@@ -21,16 +21,23 @@ export function gradientVector(angle) {
 }
 
 // テーマのグラデーション。zk-grad は塗りと線、zk-grad-tint は淡い面に使う。色が無ければ何も足さない。
+// 淡い面は、透明度ではなく、紙の色に重ねた色で塗る。動画では図の下が紙ではなく動画の背景になるので、
+// 透明にすると、theme check が確かめた色（紙に重ねた色）と違う色になるため。
 function gradientDefs(t) {
   const stops = t.gradient.stops;
   if (!stops.length) return '';
   const v = gradientVector(t.gradient.angle);
   const at = (i) => +(i / (stops.length - 1)).toFixed(4);
-  const grad = (id, opacity) => `<linearGradient id="${id}" x1="${v.x1}" y1="${v.y1}" x2="${v.x2}" y2="${v.y2}">${stops.map((c, i) => `<stop offset="${at(i)}" stop-color="${c}"${opacity < 1 ? ` stop-opacity="${opacity}"` : ''}/>`).join('')}</linearGradient>`;
-  return grad('zk-grad', 1) + grad('zk-grad-tint', TINT);
+  const grad = (id, colors) => `<linearGradient id="${id}" x1="${v.x1}" y1="${v.y1}" x2="${v.x2}" y2="${v.y2}">${colors.map((c, i) => `<stop offset="${at(i)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
+  return grad('zk-grad', stops) + grad('zk-grad-tint', stops.map((c) => over(c, t.color.paper, TINT)));
 }
 // 淡いグラデーションの濃さ。紙の色の上に、この割合で重ねる。
 export const TINT = 0.16;
+// 色 fg を、割合 a で bg に重ねた色。どちらも #rrggbb。
+function over(fg, bg, a) {
+  const ch = (h, i) => parseInt(h.slice(i, i + 2), 16);
+  return `#${[1, 3, 5].map((i) => Math.round(ch(fg, i) * a + ch(bg, i) * (1 - a)).toString(16).padStart(2, '0')).join('')}`;
+}
 
 // 強調した箱の描き方。emphasis.box で選ぶ。zk-on-em は、強調した箱の上の文字。
 // flat は単色の淡い面と強調の色の枠、fill はグラデーションの面に白抜きの文字、tint は淡いグラデーションの面とグラデーションの枠、outline はグラデーションの枠だけ。

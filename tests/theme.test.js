@@ -212,6 +212,23 @@ test('グラデーションの面に載せる文字は、どの色の上でも�
   assert.deepEqual(dark.filter((f) => f.what === '強調した箱の文字'), []);
 });
 
+test('淡いグラデーションの面は、透明にせず、図の紙の色に重ねた色で塗る', async () => {
+  // 動画では、図の下が動画の背景になる。透明にすると、theme check が確かめた色と違う色になる。
+  const { open } = await import('../src/figures/svg.js');
+  const { videoTokens } = await import('../src/video/script.js');
+  const t = readTheme(themeDir({ ...GRAD, emphasis: { box: 'tint', chart: 'flat' } })).tokens;
+  for (const [tokens, paper] of [[t, t.color.paper], [videoTokens(t), t.video.figure.color.paper]]) {
+    const svg = open(tokens, 100, '図');
+    const tint = svg.match(/<linearGradient id="zk-grad-tint"[^>]*>(.*?)<\/linearGradient>/)[1];
+    assert.doesNotMatch(tint, /stop-opacity/);
+    const want = tokens.gradient.stops.map((s) => {
+      const ch = (h, i) => parseInt(h.slice(i, i + 2), 16);
+      return `#${[1, 3, 5].map((i) => Math.round(ch(s, i) * 0.16 + ch(paper, i) * 0.84).toString(16).padStart(2, '0')).join('')}`;
+    });
+    assert.deepEqual([...tint.matchAll(/stop-color="(#[0-9a-f]{6})"/g)].map((m) => m[1]), want);
+  }
+});
+
 test('強調した箱はテーマの描き方で塗り、グラフは neutral で強調だけに色を付ける', () => {
   const { home, dir } = project({ ...GRAD, emphasis: { box: 'fill', chart: 'gradient' }, chart: { mode: 'neutral' } });
   const doc = `# 題名
@@ -340,6 +357,12 @@ test('独自の型の誤りは、テーマを確かめるときに知らせる',
   const typed = typedProject({ 'type.json': { ...STAT['type.json'], example: { ...STAT['type.json'].example, type: 'flow' } } });
   assert.match(run(['theme', 'check'], { cwd: typed.dir, home: typed.home }).out, /example に type は書きません/);
   // 定義の名前の書き間違いは、任意の項目として黙って通さない。
+  // 範囲が逆の項目と、字数や個数に負の数や小数を書いた項目は、どの値も通らなくなるので止める。
+  const bounds = typedProject({ 'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, n: { type: 'number', min: 10, max: 1 }, tags: { type: 'list', max: 2.5, of: { type: 'string', max: -1 } } } } });
+  const b = run(['theme', 'check'], { cwd: bounds.dir, home: bounds.home }).out;
+  assert.match(b, /fields\.n: min（10）が max（1）より大きくなっています/);
+  assert.match(b, /fields\.tags\.max は0以上の整数/);
+  assert.match(b, /fields\.tags\.of\.max は0以上の整数/);
   const typo = typedProject({ 'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, label: { type: 'string', max: 12, requred: true } } } });
   assert.match(run(['theme', 'check'], { cwd: typo.dir, home: typo.home }).out, /fields\.label: requred は使えません/);
   const flag = typedProject({ 'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, label: { type: 'string', max: 12, required: 'yes' } } } });
