@@ -225,14 +225,14 @@ test('doctor は、動画を作らない設定でも、撮影に要る Playwrigh
     }
   }));
 
-test('Windows では、同じ設定のコマンドの値を二重引用符で囲む', async () => {
+test('Windows では、同じ設定のコマンドの値を PowerShell の単一引用符で囲み、変数を展開させない', async () => {
   const { equivalent } = await import('../src/setup.js');
   const saved = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', { value: 'win32' });
   try {
-    const cmd = equivalent(process.cwd(), { skills: null, values: {}, credentials: {} }, [['video.style', "it's ok"], ['confluence.base', null]], 'team', new Set(['video']));
-    assert.match(cmd, /--style="it's ok"/);
-    assert.match(cmd, /--confluence-base="" /);
+    const cmd = equivalent(process.cwd(), { skills: null, values: {}, credentials: {} }, [['video.style', "it's $HOME"], ['confluence.base', null]], 'team', new Set(['video']));
+    assert.match(cmd, /--style='it''s \$HOME'/);
+    assert.match(cmd, /--confluence-base='' /);
   } finally {
     Object.defineProperty(process, 'platform', saved);
   }
@@ -250,4 +250,16 @@ test('config は操作ごとに引数の数を確かめ、doctor は --dir の�
   fs.mkdirSync(child);
   const d = run(['doctor', `--dir=${child}`, '--json'], { cwd: parent, home });
   assert.equal(JSON.parse(d.out).project, child);
+});
+
+test('toString のような名前を、サービスや AI ツールと取り違えない', () => {
+  const home = tmp('own-home');
+  const project = tmp('own');
+  const login = run(['login', 'toString', '--email=a@b.c'], { cwd: project, home, input: 'tok\n' });
+  assert.equal(login.code, 1);
+  assert.match(login.err, /サービス「toString」はありません/);
+  assert.ok(!fs.existsSync(path.join(home, '.zukai', 'credentials.json')));
+  const tools = run(['setup', 'skills', '--tools=toString', '--yes'], { cwd: project, home });
+  assert.equal(tools.code, 1);
+  assert.match(tools.err, /--tools の「toString」はありません/);
 });

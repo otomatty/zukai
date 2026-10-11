@@ -155,7 +155,7 @@ export async function setup({ sections, opt, has }) {
   printDoctor(await doctor(project));
   if (ask) {
     const cmd = equivalent(project, answers, changed, scope, want);
-    console.log(`\n同じ設定を、対話なしで行うコマンド:\n  ${cmd}`);
+    console.log(`\n同じ設定を、対話なしで行うコマンド${process.platform === 'win32' ? '（PowerShell）' : ''}:\n  ${cmd}`);
     if (Object.keys(answers.credentials).length) console.log('  キーとトークンは、それぞれ zukai login gemini、zukai login confluence で保存します。');
   }
   return 0;
@@ -243,7 +243,7 @@ function fromFlags(want, cfg, opt) {
     const where = opt('skills') ?? 'project';
     if (!['project', 'user'].includes(where)) throw new Error('--skills に書けるのは project、user、none のどれかです。');
     const tools = (opt('tools') ?? 'claude,agents').split(',').map((t) => t.trim()).filter(Boolean);
-    const bad = tools.find((t) => !skillDirs[t]);
+    const bad = tools.find((t) => !Object.hasOwn(skillDirs, t));
     if (bad) throw new Error(`--tools の「${bad}」はありません。claude と agents を、カンマで区切って書きます。`);
     answers.skills = { where, tools };
   }
@@ -306,16 +306,17 @@ function apply(plan) {
 
 // 対話の答えと同じ設定を、対話なしで行うコマンド。チームの手順書や、AI への指示にそのまま使える。
 export function equivalent(project, answers, changed, scope, want) {
-  // Windows のシェル（cmd、PowerShell）は単一引用符で囲む書き方を解さないので、二重引用符で囲む。
-  const q = (v) =>
-    /^[\w./:@,-]+$/.test(v) ? v : process.platform === 'win32' ? `"${String(v).replaceAll('"', '""')}"` : `'${String(v).replaceAll("'", "'\\''")}'`;
+  // 単一引用符で囲み、中は文字どおりに読ませる。Windows は既定のシェルの PowerShell に合わせ、単一引用符を重ねる。
+  // 二重引用符にすると、PowerShell が $HOME のような変数を展開して、別の値になるため。cmd は単一引用符を解さないので対象にしない。
+  const win = process.platform === 'win32';
+  const q = (v) => (/^[\w./:@,-]+$/.test(v) ? v : win ? `'${String(v).replaceAll("'", "''")}'` : `'${String(v).replaceAll("'", "'\\''")}'`);
   const parts = ['zukai', 'setup'];
   // 既定のセクションと同じ組み合わせのときだけ、セクションを省く。
   if (want.size !== DEFAULT_SECTIONS.length || DEFAULT_SECTIONS.some((s) => !want.has(s))) parts.push(...want);
   if (path.resolve(project) !== path.resolve(projectOf(process.cwd()))) parts.push(`--dir=${q(project)}`);
   if (answers.skills) parts.push(`--skills=${answers.skills.where}`, ...(answers.skills.tools.length ? [`--tools=${answers.skills.tools.join(',')}`] : []));
   const flagOf = Object.fromEntries(Object.entries(flagKeys).map(([f, k]) => [k, f]));
-  for (const [key, v] of changed) parts.push(`--${flagOf[key]}=${v === null ? (process.platform === 'win32' ? '""' : "''") : q(specOf(key).type === 'path' ? path.relative(process.cwd(), v) || '.' : v)}`);
+  for (const [key, v] of changed) parts.push(`--${flagOf[key]}=${v === null ? "''" : q(specOf(key).type === 'path' ? path.relative(process.cwd(), v) || '.' : v)}`);
   if (changed.length && scope !== 'team') parts.push(`--scope=${scope}`);
   parts.push('--yes');
   return parts.join(' ');
@@ -331,7 +332,8 @@ export async function config({ args, opt, has }) {
   if (scope && !['team', 'local', 'user'].includes(scope)) throw new Error('--scope に書けるのは team、local、user のどれかです。');
   if (!action) return process.stdin.isTTY && process.stdout.isTTY ? configInteractive(project) : list(project, { origin: true });
   // 操作ごとに引数の数を確かめる。unset に余分な引数を付けたような書き間違いで、設定を変えないため。
-  const arity = { list: 0, get: 1, set: 2, unset: 1 }[action];
+  const arities = { list: 0, get: 1, set: 2, unset: 1 };
+  const arity = Object.hasOwn(arities, action) ? arities[action] : undefined;
   if (arity !== undefined && args.length - 1 > arity) throw new Error(`config ${action} の引数が多すぎます（${args.slice(arity + 1).join(' ')}）。使い方は zukai help config で表示します。`);
   switch (action) {
     case 'list':
@@ -447,7 +449,8 @@ const services = {
   confluence: { keys: ['confluence.email', 'confluence.token'], name: 'Confluence' },
 };
 const serviceOf = (name) => {
-  if (services[name]) return services[name];
+  // toString のような、オブジェクトが元から持つ名前をサービスと取り違えないよう、自分の項目だけを見る。
+  if (Object.hasOwn(services, name ?? '')) return services[name];
   const near = closest(name ?? '', Object.keys(services));
   throw new Error(`サービス「${name}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}gemini か confluence を書きます。`);
 };
