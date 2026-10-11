@@ -535,7 +535,13 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   const white = await grey('#ffffff');
   assert.deepEqual(white.map((x) => [x.severity, /chart\.muted（#ffffff）と color\.paper/.test(x.message)]), [['warn', true]]);
   assert.deepEqual(await grey('#a8b0b9'), []);
-  assert.deepEqual(await grey('#ffffff', 'series'), []);
+  // series でも、系列の色が3つなら、4つ目を chart.muted、5つ目を chart.rest で描くので確かめる。5つあれば使わない。
+  assert.deepEqual((await grey('#ffffff', 'series')).map((x) => x.severity), ['warn']);
+  const five = ['#0432ff', '#ff2f92', '#ff2600', '#a77bff', '#00695c'];
+  assert.deepEqual((await checkTheme(readTheme(themeDir({ chart: { mode: 'series', muted: '#ffffff', series: five } })).tokens)).filter((x) => x.what === '灰色の系列'), []);
+  const rest = (await checkTheme(readTheme(themeDir({ chart: { rest: '#ffffff' } })).tokens)).filter((x) => x.what === '残りの系列');
+  assert.equal(rest.length, 1, JSON.stringify(rest));
+  assert.deepEqual((await checkTheme(baseTokens())).filter((x) => x.what === '残りの系列' || x.what === '灰色の系列'), []);
   // 2つ目からの灰色は、紙から chart.muted より離れる。明るいテーマでも、暗いテーマ（動画の図）でも。
   const { grey: shade } = await import('../src/figures/chart.js');
   const base = readTheme(null).tokens;

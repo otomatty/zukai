@@ -315,6 +315,10 @@ export const SERIES_GAP = 23;
 // 既定の灰色（#a8b0b9）が白地で 2.2:1 なので、それは通し、紙と見分けにくい色だけを知らせる。
 // 2つ目からの灰色は、chart.muted を文字の色に寄せて作る（src/figures/chart.js の grey）。紙からは chart.muted より離れるので、chart.muted だけを確かめればよい。
 const MUTED_BG = 2;
+// 系列の色が足りないときの残りの色（chart.rest）は、「その他」に使う淡い色。既定（#cdd3d9）が白地で 1.5:1 なので、紙とほぼ同じ色だけを知らせる。
+const REST_BG = 1.4;
+// 系列の色を順に使う型（stack など）の、色の数の上限。contract/limits.json の stack.maxItems と同じ。
+const MAX_SERIES = 5;
 
 // 見た目の検査。severity は error（文字が読めない）か warn（見分けにくい）。
 export async function checkTheme(t) {
@@ -347,7 +351,9 @@ export async function checkTheme(t) {
     const chartAt = at.replace(/color$/, 'chart');
     chart.series.forEach((s, i) => pair('系列の色', s, c.paper, `${chartAt}.series[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
     // neutral では、強調しない棒や線を chart.muted（と、それを文字の色に寄せた色）で描く。
-    if (chart.mode === 'neutral') pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
+    // series でも、系列の色が足りなければ、次の1つを chart.muted、その先を chart.rest で描く（src/figures/chart.js の seriesColor）。
+    if (chart.mode === 'neutral' || chart.series.length < MAX_SERIES) pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
+    if (chart.mode === 'series' && chart.series.length < MAX_SERIES - 1) pair('残りの系列', chart.rest, c.paper, `${chartAt}.rest`, `${at}.paper`, REST_BG, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {
         for (let j = i + 1; j < chart.series.length; j++) {
