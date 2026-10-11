@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.js';
-import { renderChart, isNumber, fmt, unitError, seriesColor } from './chart.js';
+import { renderChart, isNumber, fmt, unitError, seriesColor, highlight, neutral, grey, modeGuide } from './chart.js';
 
 const legendText = (it, total, unit) => `${it.label} ${Math.round((it.value / total) * 100)}%（${fmt(it.value)}${unit}）`;
 
@@ -17,17 +17,20 @@ items:
     value: 5
   - label: その他
     value: 3`,
-  fields: ['unit: 値の単位（必須）', 'items: 内訳の配列。大きい順に並べ、「その他」は最後に置く', 'items[].label: 内訳の名前（必須）', 'items[].value: 0より大きい数値（必須）。割合は自動で計算する'],
+  fields: ['unit: 値の単位（必須）', 'items: 内訳の配列。大きい順に並べ、「その他」は最後に置く', 'items[].label: 内訳の名前（必須）', 'items[].value: 0より大きい数値（必須）。割合は自動で計算する', 'items[].emphasis: true にすると、その内訳を強調の色で描く（任意、図全体で1つまで）'],
+
+  guide: (t) => modeGuide(t),
 
   validate(spec, limits) {
     const errors = [...unknownKeys(spec, ['type', 'unit', 'items'], 'stack'), ...unitError(spec, 'stack')];
     if (!Array.isArray(spec.items) || spec.items.length < 2) return [...errors, 'stack には items が2つ以上必要です。'];
     if (spec.items.length > limits.stack.maxItems) errors.push(`items が${spec.items.length}個あります。上限は${limits.stack.maxItems}個です。小さい内訳を「その他」にまとめてください。`);
     spec.items.forEach((it, i) => {
-      errors.push(...unknownKeys(it, ['label', 'value'], `items[${i}]`));
+      errors.push(...unknownKeys(it, ['label', 'value', 'emphasis'], `items[${i}]`));
       if (typeof it?.label !== 'string') errors.push(`items[${i}] に label がありません。`);
       if (!isNumber(it?.value) || it.value <= 0) errors.push(`items[${i}].value は0より大きい数値にしてください。`);
     });
+    if (spec.items.filter((it) => it?.emphasis).length > 1) errors.push('emphasis を付けられる内訳は1つまでです。');
     return errors;
   },
 
@@ -46,6 +49,9 @@ items:
     }
     const top = rows * 24 + 16;
     const last = spec.items.length - 1;
+    // neutral では、強調した内訳だけに色を付け、ほかは灰色の濃淡で見分ける。
+    let k = 0;
+    const colors = spec.items.map((it, i) => (it.emphasis ? highlight(t) : neutral(t) ? grey(t, k++) : seriesColor(t, i)));
     return renderChart(
       {
         grid: { left: 0, right: 0, top, bottom: 4 },
@@ -54,7 +60,7 @@ items:
         yAxis: { type: 'category', data: [''], show: false },
         series: spec.items.map((it, i) => ({
           name: it.label, type: 'bar', stack: 'total', barWidth: 24, data: [it.value],
-          itemStyle: { color: seriesColor(t, i), borderColor: t.color.paper, borderWidth: 1, borderRadius: i === 0 ? [4, 0, 0, 4] : i === last ? [0, 4, 4, 0] : 0 },
+          itemStyle: { color: colors[i], borderColor: t.color.paper, borderWidth: 1, borderRadius: i === 0 ? [4, 0, 0, 4] : i === last ? [0, 4, 4, 0] : 0 },
         })),
       },
       t, top + 36, spec.items.map((it) => legendText(it, total, spec.unit)).join('、'),

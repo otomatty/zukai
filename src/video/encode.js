@@ -11,7 +11,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readJson, root } from '../lint/index.js';
-import { tokensFor } from '../theme.js';
+import { themeFor } from '../theme.js';
 import { esc } from '../figures/svg.js';
 import { settingsFor, projectOf, stateDir, machineSetting } from '../config.js';
 import { scenesOf, timeline, wrapScripts, DEFAULT_OPTIONS } from './script.js';
@@ -22,7 +22,7 @@ import { RATE, mix, voiceCues, wav16, presetOf, checkParams, PRESETS, bgmTrack }
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
 const css = (t, v) => `
-:root{--zk-bg:${v.background};${Object.entries(v.palette).map(([k, c]) => `--zk-${k}:${c}`).join(';')};--zk-ink:${v.figure.color.ink};--zk-sub:${v.figure.color.sub};--zk-line:${v.figure.color.line};--zk-surface:${v.figure.color.surface};--zk-accent:${v.figure.color.accent};--zk-font:${t.font}}
+:root{--zk-bg:${v.background};${Object.entries(v.palette).map(([k, c]) => `--zk-${k}:${c}`).join(';')};--zk-ink:${v.figure.color.ink};--zk-sub:${v.figure.color.sub};--zk-line:${v.figure.color.line};--zk-surface:${v.figure.color.surface};--zk-accent:${v.figure.color.accent};--zk-gradient:${t.gradient.stops.length ? `linear-gradient(${t.gradient.angle}deg,${t.gradient.stops.join(',')})` : v.figure.color.accent};--zk-font:${t.font}}
 *{box-sizing:border-box}
 html,body{margin:0;width:${v.width}px;height:${v.height}px;overflow:hidden;background:${v.background};font-family:${t.font}}
 .zk-scene{position:absolute;inset:0;width:${v.width}px;height:${v.height}px;transform-origin:50% 50%;overflow:hidden;background:${v.background}}
@@ -46,8 +46,11 @@ function sceneHtml(sc) {
     ...Object.entries(sc.markers).map(([k, v]) => `--${k}:${v.toFixed(3)}s`),
   ].join(';');
   // manual を付けた図は、自動の動きを付けずに置く。AI が data-label で部品を狙って動かすときに使う。
+  // 図の中の名前（矢印の印やグラデーション）には、シーンの番号を付ける。1つのページに図がいくつも入ると、同じ名前は最初の図を指す。
+  // 矢印の印は参照した場所ではなく定義した場所の見え方を引き継ぐので、前のシーンが隠れると、後のシーンの矢じりまで消えるため。
+  const svg = sc.figureSvg?.replace(/(id="|url\(#|href="#)zk-/g, `$1zk${sc.id}-`);
   const fig = (manual) =>
-    sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${manual ? ' data-manual' : ''}>${sc.figureSvg}</div>` : sc.tableHtml ? `<div class="zk-fig zk-table" data-whole="true"${manual ? ' data-manual' : ''}>${sc.tableHtml}</div>` : '';
+    sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${sc.figureType ? ` data-type="${esc(sc.figureType)}"` : ''}${manual ? ' data-manual' : ''}>${svg}</div>` : sc.tableHtml ? `<div class="zk-fig zk-table" data-whole="true"${manual ? ' data-manual' : ''}>${sc.tableHtml}</div>` : '';
   let inner;
   if (sc.kind === 'title') inner = `<h1 class="zk-title">${esc(sc.title)}</h1>`;
   else if (sc.kind === 'auto') inner = `<h2 class="zk-claim">${esc(sc.claim)}</h2>${fig(false)}`;
@@ -59,9 +62,13 @@ function sceneHtml(sc) {
 export function pageHtml(plan, tokens, only = null) {
   const v = tokens.video;
   // ページの中では、図とシーンの HTML は DOM に入っているので、時間割からは外す。
-  const lite = { ...plan, scenes: plan.scenes.map(({ figureSvg, tableHtml, motionHtml, findings, ...s }) => s) };
+  const { motions = {}, ...rest } = plan;
+  const lite = { ...rest, scenes: plan.scenes.map(({ figureSvg, tableHtml, motionHtml, findings, ...s }) => s) };
   const runtime = fs.readFileSync(path.join(root, 'src/video/runtime.browser.js'), 'utf8');
   const scenes = plan.scenes.filter((s) => only == null || s.id === only);
+  // ページのシーンで使う独自の型の動きだけを入れる。AI のシーンのスクリプトと同じく、Chromium の中だけで動く。
+  const used = [...new Set(scenes.map((s) => s.figureType).filter((n) => n && motions[n]))];
+  const typeScripts = used.map((n) => `<script>zk.__type(${JSON.stringify(n)}, function (fig, ctx) {\n${motions[n].replace(/<\/script/gi, '<\\/script')}\n});</script>`).join('\n');
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${CSP}">
@@ -69,6 +76,7 @@ export function pageHtml(plan, tokens, only = null) {
 <script type="application/json" id="zk-plan">${JSON.stringify(lite).replace(/</g, '\\u003c')}</script>
 </head><body>
 <script>${runtime}</script>
+${typeScripts}
 ${scenes.map(sceneHtml).join('\n')}
 <div id="zk-sub"></div><div id="zk-fade"></div>
 </body></html>`;
@@ -130,7 +138,10 @@ function run(cmd, args, input) {
 
 // 原稿から時間割を作る。動画、コマの書き出し、検査で共通。
 async function prepare(file, project) {
-  const tokens = tokensFor(path.dirname(path.resolve(file)));
+  const theme = themeFor(path.dirname(path.resolve(file)));
+  const tokens = theme.tokens;
+  // テーマの独自の型の動き。型の名前ごとの、motion.js の中身。
+  const motions = Object.fromEntries(theme.types.filter((d) => d.motion).map((d) => [d.name, d.motion]));
   const limits = readJson('contract/limits.json').video;
   const { settings: all } = settingsFor(project);
   const settings = { video: all.video, apiKey: all.gemini?.apiKey ?? null };
@@ -148,7 +159,7 @@ async function prepare(file, project) {
   }
   const { voices, silentReason } = await voicesFor(scenes, settings, settings.apiKey ? stateDir(project, 'cache', 'tts') : null);
   const v = tokens.video;
-  const planOf = (list) => ({ ...timeline(list, voices), width: v.width, height: v.height, fps: v.fps, limits });
+  const planOf = (list) => ({ ...timeline(list, voices), width: v.width, height: v.height, fps: v.fps, limits, motions });
   return { tokens, limits, settings, voices, silentReason, scenes, planOf };
 }
 

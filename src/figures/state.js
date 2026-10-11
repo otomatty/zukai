@@ -1,4 +1,4 @@
-import { open, close, arrow, px, txt, rect, mid, unknownKeys } from './svg.js';
+import { open, close, arrow, px, txt, rect, emRect, mid, unknownKeys } from './svg.js';
 
 const H = 60;
 const pillWidth = (n) => (n <= 3 ? 132 : n === 4 ? 108 : 88);
@@ -107,8 +107,8 @@ emphasis: 有効`,
     }
     spec.states.forEach((s, i) => {
       const em = s === spec.emphasis;
-      out.push(rect(t, xs[i], y0, w, H, { rx: H / 2, fill: em ? t.color.accentSurface : t.color.surface, stroke: em ? t.color.accent : t.color.line, sw: t.figure.stroke * (em ? 1.5 : 1) }));
-      out.push(txt(t, xs[i] + w / 2, mid(cy, t.size.label), s, { cls: 'zk-text', fill: em ? t.color.accent : t.color.ink }));
+      out.push(em ? emRect(t, xs[i], y0, w, H, H / 2) : rect(t, xs[i], y0, w, H, { rx: H / 2, fill: t.color.surface }));
+      out.push(txt(t, xs[i] + w / 2, mid(cy, t.size.label), s, { cls: em ? 'zk-text zk-on-em' : 'zk-text' }));
     });
     out.push(close());
     return out.join('');

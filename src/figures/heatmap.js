@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.js';
-import { renderChart, axisText, isNumber, fmt, unitError } from './chart.js';
+import { renderChart, axisText, isNumber, fmt, unitError, neutral } from './chart.js';
 
 // heatmap: 2つの軸の組み合わせごとの量を、色の濃さで示す。
 export default {
@@ -46,9 +46,9 @@ values:
         grid: { left: Math.max(...spec.y.map((y) => px(y, 12))) + 20, right: px(top, 12) + 40, top: 8, bottom: 32 },
         xAxis: { type: 'category', data: spec.x, axisLine: { show: false }, axisTick: { show: false }, axisLabel: text },
         yAxis: { type: 'category', inverse: true, data: spec.y, axisLine: { show: false }, axisTick: { show: false }, axisLabel: text },
-        visualMap: { min: 0, max, calculable: false, orient: 'vertical', right: 8, top: 'middle', itemHeight: Math.min(140, spec.y.length * 24), itemWidth: 14, text: [top, '0'], textStyle: { color: t.color.sub, fontSize: 12 }, inRange: { color: [t.color.accentSurface, t.color.accent] } },
+        visualMap: { min: 0, max, calculable: false, orient: 'vertical', right: 8, top: 'middle', itemHeight: Math.min(140, spec.y.length * 24), itemWidth: 14, text: [top, '0'], textStyle: { color: t.color.sub, fontSize: 12 }, inRange: { color: neutral(t) ? [t.color.surface, t.chart.muted] : [t.color.accentSurface, t.color.accent] } },
         // 値が大きいマスにだけ数値を書く。すべてのマスに書くと読みにくい。
-        series: [{ type: 'heatmap', data, itemStyle: { borderColor: t.color.paper, borderWidth: 2, borderRadius: 3 }, label: { show: true, color: t.color.onAccent, fontSize: 12, fontWeight: 600, formatter: (p) => (p.value[2] >= max * 0.6 ? fmt(p.value[2]) : '') } }],
+        series: [{ type: 'heatmap', data, itemStyle: { borderColor: t.color.paper, borderWidth: 2, borderRadius: 3 }, label: { show: true, color: neutral(t) ? t.color.ink : t.color.onAccent, fontSize: 12, fontWeight: 600, formatter: (p) => (p.value[2] >= max * 0.6 ? fmt(p.value[2]) : '') } }],
       },
       t, spec.y.length * 34 + 44, `${spec.y.join('、')}と${spec.x.join('、')}の組み合わせごとの量`,
     );

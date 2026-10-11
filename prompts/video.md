@@ -118,6 +118,7 @@
 |---|---|
 | `--zk-bg` | 既定の背景 |
 | `--zk-night`、`--zk-navy`、`--zk-blue`、`--zk-sky`、`--zk-cyan`、`--zk-green`、`--zk-yellow`、`--zk-orange`、`--zk-red`、`--zk-pink`、`--zk-purple`、`--zk-white` | フラットな配色 |
+| `--zk-gradient` | テーマのグラデーション（`background: var(--zk-gradient)` で使う）。テーマに無ければ強調の色 |
 | `--zk-font` | 日本語のフォント |
 
 ### 時刻
@@ -142,7 +143,7 @@
 
 ### セクションの図
 
-資料の図を動画でも使うときは、`<zk-figure></zk-figure>` を置きます。図を自動の動き付きで置きます。`<zk-figure manual></zk-figure>` にすると、動きを付けずに置くので、自分で動かします。図の部品には `data-label`（箱の名前）、`data-part`（番号）、`data-kind`（`pop`、`draw`、`fade`）、`data-emphasis` の印が付いています。例: `[data-label="認証サービス"]`。図を使わず、内容を絵で描き直してもかまいません。
+資料の図を動画でも使うときは、`<zk-figure></zk-figure>` を置きます。テーマの独自の型の図には、型ごとの動きが付きます。図を自動の動き付きで置きます。`<zk-figure manual></zk-figure>` にすると、動きを付けずに置くので、自分で動かします。図の部品には `data-label`（箱の名前）、`data-part`（番号）、`data-kind`（`pop`、`draw`、`fade`）、`data-emphasis` の印が付いています。例: `[data-label="認証サービス"]`。図を使わず、内容を絵で描き直してもかまいません。
 
 ### シーンの設定
 

@@ -5,11 +5,11 @@ import path from 'node:path';
 import MarkdownIt from 'markdown-it';
 import { parse, isFigure, isRefs, isVideoOnly } from './parse.js';
 import { resolveRefs, refsHtml, refsStorage } from './refs.js';
-import { types } from './figures/index.js';
 import { esc } from './figures/svg.js';
 import { createHighlighter } from 'shiki';
 import { readJson, knownLang } from './lint/index.js';
-import { tokensFor } from './theme.js';
+import { themeFor } from './theme.js';
+import { typesFor } from './figures/custom.js';
 
 // 書き出す HTML で、原稿に書かれたスクリプトやフォームを動かさない。保存したファイルを開いたときも効くように meta で入れる。
 export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'";
@@ -54,13 +54,14 @@ async function resolveAllRefs(doc, ctx, limits) {
   for (const b of doc.sections.flatMap((s) => s.blocks).filter((x) => x.kind === 'refs')) map.set(b.line, (await resolveRefs(b, ctx, limits)).items);
   return map;
 }
-// tokens は、原稿のプロジェクトのテーマを重ねた値。theme preview は、まだ設定していないテーマの値を渡す。
-const ctxOf = (file, tokens) => {
+// テーマは、原稿のプロジェクトのもの。theme preview は、まだ設定していないテーマを渡す。
+const ctxOf = (file, given) => {
   const baseDir = path.dirname(path.resolve(file ?? '.'));
-  return { baseDir, tokens: tokens ?? tokensFor(baseDir) };
+  const theme = given ?? themeFor(baseDir);
+  return { baseDir, tokens: theme.tokens, types: typesFor(theme) };
 };
 
-export async function render(source, file, { tokens: given } = {}) {
+export async function render(source, file, { theme: given } = {}) {
   const limits = readJson('contract/limits.json');
   const ctx = ctxOf(file, given);
   const tokens = ctx.tokens;
@@ -89,7 +90,7 @@ export async function render(source, file, { tokens: given } = {}) {
       return highlighter.codeToHtml(tk.content.replace(/\n$/, ''), { lang, theme: tokens.codeTheme }) + '\n';
     }
     const block = doc.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'figure' && b.line === tk.map[0] + 1);
-    const type = types[block?.spec?.type];
+    const type = ctx.types[block?.spec?.type];
     if (!type || type.validate(block.spec, limits, ctx).length) {
       return `<figure class="error">この図は描画できません。<code>zukai lint</code> の F001 を確認してください。</figure>\n`;
     }
@@ -151,7 +152,7 @@ export async function renderConfluence(source, sourceName) {
       return macro('code', `${param}<ac:plain-text-body>${cdata(tk.content)}</ac:plain-text-body>`) + '\n';
     }
     const block = doc.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'figure' && b.line === tk.map[0] + 1);
-    const type = types[block?.spec?.type];
+    const type = ctx.types[block?.spec?.type];
     if (!type || type.validate(block.spec, limits, ctx).length) throw new Error(`L${tk.map[0] + 1} の図を描画できません。先に zukai lint を通してください。`);
     const name = `fig-${String(figures.length + 1).padStart(2, '0')}.png`;
     figures.push({ name, svg: type.render(block.spec, tokens, ctx) });

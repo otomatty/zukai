@@ -20,7 +20,8 @@ const ATTRS = new Set([
 ]);
 const COLOR_ATTRS = ['fill', 'stroke', 'stop-color'];
 const HIDDEN = new Set(['defs', 'marker', 'clipPath', 'linearGradient', 'radialGradient', 'title']);
-const CLASSES = ['zk-text', 'zk-note', 'zk-box', 'zk-box-em', 'zk-em', 'zk-band', 'zk-line', 'zk-dash'];
+// zk-on-em と zk-on-em-note は強調した箱（zk-box-em）の上の文字、zk-grad はテーマのグラデーションの塗り（無ければ強調の色）。
+const CLASSES = ['zk-text', 'zk-note', 'zk-box', 'zk-box-em', 'zk-on-em', 'zk-on-em-note', 'zk-em', 'zk-grad', 'zk-band', 'zk-line', 'zk-dash'];
 
 const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
 
@@ -130,7 +131,7 @@ const free = {
   <rect class="zk-box" x="170" y="30" width="240" height="90" rx="6"/>
   <text class="zk-text" x="290" y="80" text-anchor="middle">手順書を用意する</text>
   <rect class="zk-box-em" x="440" y="30" width="240" height="90" rx="6"/>
-  <text class="zk-text zk-em" x="560" y="80" text-anchor="middle">今月中に直す</text>
+  <text class="zk-text zk-on-em" x="560" y="80" text-anchor="middle">今月中に直す</text>
   <rect class="zk-box" x="170" y="150" width="240" height="90" rx="6"/>
   <text class="zk-text" x="290" y="200" text-anchor="middle">記録だけ残す</text>
   <rect class="zk-box" x="440" y="150" width="240" height="90" rx="6"/>

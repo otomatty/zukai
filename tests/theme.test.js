@@ -50,7 +50,7 @@ test('無い項目、変えられない値、色でない値、外へ出られ�
   assert.match(text, /colour という項目はありません/);
   assert.match(text, /figure.width はテーマでは変えられません/);
   assert.match(text, /color.ink の「red」は色ではありません/);
-  assert.match(text, /chart.series は、3個の色/);
+  assert.match(text, /chart.series は、3、4、5個の色/);
   assert.match(text, /font は、CSS の font-family の形/);
   assert.equal(r.tokens.figure.width, baseTokens().figure.width);
   assert.equal(r.tokens.color.ink, baseTokens().color.ink);
@@ -183,4 +183,178 @@ test('返答のスキルだけがある場所には、テーマのスキルを�
   const skill = JSON.parse(r.out).checks.find((c) => c.label === 'スキル');
   assert.equal(skill.status, 'warn');
   assert.match(skill.detail, /zukai-theme\/SKILL.md（無い）/);
+});
+
+// --- グラデーション、強調の描き方、グラフの色の付け方 ---
+
+const GRAD = { gradient: { stops: ['#0432ff', '#ff2f92', '#ff2600'], angle: 90 } };
+
+test('グラデーションと強調の描き方は、選択肢と色の数を確かめ、グラデーションが無ければ止める', () => {
+  const bad = readTheme(themeDir({ emphasis: { box: 'shiny' }, chart: { mode: 'gray', series: ['#000000', '#111111'] }, gradient: { stops: ['#000000'], angle: 400 } })).problems.join('\n');
+  assert.match(bad, /emphasis.box は、flat、fill、tint、outline のどれか/);
+  assert.match(bad, /chart.mode は、series、neutral のどれか/);
+  assert.match(bad, /chart.series は、3、4、5個の色/);
+  assert.match(bad, /gradient.stops は、2、3、4、5個の色/);
+  assert.match(bad, /gradient.angle は、0〜360 の数値/);
+  assert.match(readTheme(themeDir({ emphasis: { box: 'fill' } })).problems.join('\n'), /gradient.stops に2〜5個の色を書いてください/);
+  const ok = readTheme(themeDir({ ...GRAD, emphasis: { box: 'tint', chart: 'gradient' }, chart: { mode: 'neutral', series: ['#0432ff', '#ff2f92', '#ff2600', '#7c3aed', '#00838f'] } }));
+  assert.deepEqual(ok.problems, []);
+  assert.equal(ok.tokens.chart.series.length, 5);
+});
+
+test('グラデーションの面に載せる文字は、どの色の上でも読めるかを確かめる', async () => {
+  const fill = await checkTheme(readTheme(themeDir({ ...GRAD, emphasis: { box: 'fill' } })).tokens);
+  assert.ok(fill.some((f) => f.severity === 'error' && /onAccent（#ffffff）と gradient.stops\[1\]（#ff2f92）/.test(f.message)));
+  const dark = await checkTheme(readTheme(themeDir({ gradient: { stops: ['#0b2a99', '#7a1048'], angle: 90 }, emphasis: { box: 'fill' }, video: { figure: { color: { onAccent: '#ffffff' } } } })).tokens);
+  assert.deepEqual(dark.filter((f) => f.what === '強調した箱の文字'), []);
+});
+
+test('強調した箱はテーマの描き方で塗り、グラフは neutral で強調だけに色を付ける', () => {
+  const { home, dir } = project({ ...GRAD, emphasis: { box: 'fill', chart: 'gradient' }, chart: { mode: 'neutral' } });
+  const doc = `# 題名
+
+## 経路
+
+要求は、ゲートウェイから認証サービスへ進みます。
+
+\`\`\`yaml figure
+type: flow
+steps:
+  - label: ゲートウェイ
+  - label: 認証サービス
+    emphasis: true
+\`\`\`
+
+認証サービスが照合します。
+
+## 内訳
+
+費用の多くは、実行環境です。
+
+\`\`\`yaml figure
+type: stack
+unit: 万円
+items:
+  - label: 実行環境
+    value: 12
+    emphasis: true
+  - label: その他
+    value: 3
+\`\`\`
+
+その他は、ログの保存です。
+`;
+  fs.writeFileSync(path.join(dir, 'a.md'), doc);
+  const r = run(['build', 'a.md'], { cwd: dir, home });
+  assert.equal(r.code, 0, r.err);
+  const html = fs.readFileSync(path.join(dir, 'a.html'), 'utf8');
+  assert.match(html, /<linearGradient id="zk-grad" x1="0" y1="0.5" x2="1" y2="0.5">/);
+  assert.match(html, /\.zk-box-em\{fill:url\(#zk-grad\);stroke:none\}/);
+  assert.match(html, /\.zk-on-em\{fill:#ffffff\}/);
+  // ECharts の強調も、グラデーションで塗る。重ねたときの色を作れずに壊れた CSS を出さない。
+  assert.ok((html.match(/<linearGradient/g) ?? []).length >= 3);
+  assert.doesNotMatch(html, /object Object/);
+  // neutral では、強調しない内訳を灰色にする。
+  assert.match(html, /fill="#a8b0b9"|fill="rgb\(168,176,185\)"/);
+});
+
+// --- 独自の型 ---
+
+const STAT = {
+  'type.json': {
+    summary: '主役の数字を大きく見せる',
+    when: '1つの数字が結論のとき',
+    fields: {
+      value: { type: 'string', max: 5, required: true, desc: '数字' },
+      label: { type: 'string', max: 12, required: true, desc: '数字が何を表すか' },
+      tags: { type: 'list', max: 3, of: { type: 'string', max: 6 }, desc: '添える語' },
+    },
+    example: { value: '300', label: '導入企業数', tags: ['累計'] },
+  },
+  'figure.svg': `<svg viewBox="0 0 720 200">
+  <title>{{label}} {{value}}</title>
+  <g><text class="zk-grad" x="360" y="110" text-anchor="middle" font-size="96" font-weight="900">{{value}}</text></g>
+  <text class="zk-text" x="360" y="150" text-anchor="middle">{{label}}</text>
+  {{#tags}}<text class="zk-note" x="{{= 300 + @index * 120}}" y="185">{{.}}</text>{{/tags}}
+</svg>`,
+  'motion.js': 'ctx.parts.forEach((p, k) => p.el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: (ctx.start + k * 0.2) * 1000, fill: "both" }));',
+};
+// 独自の型を持つテーマのプロジェクト。files で、型のファイルを差し替える。
+function typedProject(files = {}, tokens = GRAD) {
+  const p = project(tokens);
+  const tdir = path.join(p.dir, 'brand/types/stat');
+  fs.mkdirSync(tdir, { recursive: true });
+  for (const [name, body] of Object.entries({ ...STAT, ...files })) if (body !== null) fs.writeFileSync(path.join(tdir, name), typeof body === 'string' ? body : JSON.stringify(body));
+  return p;
+}
+const statDoc = (spec) => `# 題名
+
+## 実績
+
+導入企業は、300社を超えています。
+
+\`\`\`yaml figure
+${spec}
+\`\`\`
+
+導入先は、スタートアップから大企業まで広がっています。
+`;
+
+test('テーマの独自の型は、指示に出て、検査を通り、資料に描ける', () => {
+  const { home, dir } = typedProject();
+  const prompt = run(['prompt'], { cwd: dir, home }).out;
+  assert.match(prompt, /\| stat（このテーマの型） \| 1つの数字が結論のとき \|/);
+  const type = run(['type', 'stat'], { cwd: dir, home }).out;
+  assert.match(type, /value: 数字（必須、全角5字まで）/);
+  assert.match(type, /type: stat\nvalue: "300"/);
+
+  fs.writeFileSync(path.join(dir, 'a.md'), statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数\ntags: [累計, 国内]'));
+  const lint = run(['lint', 'a.md', '--no-log', '--no-textlint'], { cwd: dir, home });
+  assert.equal(lint.code, 0, lint.out);
+  assert.equal(run(['build', 'a.md'], { cwd: dir, home }).code, 0);
+  const html = fs.readFileSync(path.join(dir, 'a.html'), 'utf8');
+  assert.match(html, /class="zk-grad"[^>]*>300<\/text>/);
+  assert.match(html, /x="420"[^>]*>国内<\/text>/);
+
+  // 項目の上限と、無い項目は、型のある図と同じく F001 にする。
+  // 上限は全角の字数で数えるので、半角の数字は2つで1字になる。
+  fs.writeFileSync(path.join(dir, 'b.md'), statDoc('type: stat\nvalue: "12345678901"\nlabel: 導入企業数\ncolor: red'));
+  const bad = JSON.parse(run(['lint', 'b.md', '--no-log', '--no-textlint', '--json'], { cwd: dir, home }).out)[0];
+  assert.ok(bad.findings.some((f) => f.rule === 'F001' && /value「12345678901」が全角7字相当あります。上限は5字/.test(f.message)), JSON.stringify(bad.findings));
+  assert.ok(bad.findings.some((f) => f.rule === 'F001' && /未定義のキー「color」/.test(f.message)));
+});
+
+test('独自の型の誤りは、テーマを確かめるときに知らせる', () => {
+  const tpl = typedProject({ 'figure.svg': '<svg viewBox="0 0 720 100">{{#value}}</svg>' });
+  assert.match(run(['theme', 'check'], { cwd: tpl.dir, home: tpl.home }).out, /figure.svg: \{\{#value\}\} が閉じていません/);
+  const field = typedProject({ 'type.json': { ...STAT['type.json'], fields: { value: { type: 'string' } } } });
+  assert.match(run(['theme', 'check'], { cwd: field.dir, home: field.home }).out, /max（全角の字数の上限）が要ります/);
+  // 例が、自由な図と同じ検査（色）を通らない。
+  const color = typedProject({ 'figure.svg': STAT['figure.svg'].replace('class="zk-text"', 'fill="#123456" font-size="15"') });
+  const c = run(['theme', 'check'], { cwd: color.dir, home: color.home });
+  assert.equal(c.code, 1);
+  assert.match(c.out, /型 stat の例が検査を通りません。.*色「#123456」は使えません/);
+  const motion = typedProject({ 'motion.js': 'ctx.parts.forEach((p) => {' });
+  assert.match(run(['theme', 'check'], { cwd: motion.dir, home: motion.home }).out, /motion.js を読めません/);
+});
+
+test('動画では、独自の型の図に型の動きを付け、図の中の名前をシーンごとに分ける', async () => {
+  const { dir } = typedProject();
+  const { scenesOf, timeline, estimateVoice } = await import('../src/video/script.js');
+  const { pageHtml } = await import('../src/video/encode.js');
+  const { tokensFor, themeFor } = await import('../src/theme.js');
+  const file = path.join(dir, 'a.md');
+  const flow = '\n## 経路\n\n要求は、認証サービスへ進みます。\n\n```yaml figure\ntype: flow\nsteps:\n  - label: ゲートウェイ\n  - label: 認証サービス\n```\n\n認証サービスが照合します。\n';
+  fs.writeFileSync(file, statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数') + flow);
+  const scenes = scenesOf(fs.readFileSync(file, 'utf8'), file);
+  assert.equal(scenes[1].figureType, 'stat');
+  assert.equal(scenes[2].figureType, null);
+  const plan = { ...timeline(scenes, scenes.map((s) => estimateVoice(s.lines))), width: 1920, height: 1080, fps: 30, motions: Object.fromEntries(themeFor(dir).types.map((d) => [d.name, d.motion])) };
+  const html = pageHtml(plan, tokensFor(dir));
+  assert.match(html, /<script>zk\.__type\("stat", function \(fig, ctx\) \{\nctx\.parts\.forEach/);
+  assert.match(html, /data-type="stat"/);
+  // 2つ目の図の矢印は、2つ目の図の印を指す。
+  assert.match(html, /<marker id="zk2-arrow"/);
+  assert.match(html, /marker-end="url\(#zk2-arrow\)"/);
+  assert.doesNotMatch(html, /"motions"/);
 });

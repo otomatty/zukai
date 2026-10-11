@@ -12,6 +12,42 @@ export function widthOf(text) {
 
 export const px = (text, fontSize) => widthOf(text) * fontSize;
 
+// グラデーションの向き。CSS の角度（90 は左から右、180 は上から下）を、図形の外枠に対する始点と終点にする。
+export function gradientVector(angle) {
+  const r = (angle * Math.PI) / 180;
+  const [dx, dy] = [Math.sin(r) / 2, -Math.cos(r) / 2];
+  const n = (v) => +v.toFixed(4);
+  return { x1: n(0.5 - dx), y1: n(0.5 - dy), x2: n(0.5 + dx), y2: n(0.5 + dy) };
+}
+
+// テーマのグラデーション。zk-grad は塗りと線、zk-grad-tint は淡い面に使う。色が無ければ何も足さない。
+function gradientDefs(t) {
+  const stops = t.gradient.stops;
+  if (!stops.length) return '';
+  const v = gradientVector(t.gradient.angle);
+  const at = (i) => +(i / (stops.length - 1)).toFixed(4);
+  const grad = (id, opacity) => `<linearGradient id="${id}" x1="${v.x1}" y1="${v.y1}" x2="${v.x2}" y2="${v.y2}">${stops.map((c, i) => `<stop offset="${at(i)}" stop-color="${c}"${opacity < 1 ? ` stop-opacity="${opacity}"` : ''}/>`).join('')}</linearGradient>`;
+  return grad('zk-grad', 1) + grad('zk-grad-tint', TINT);
+}
+// 淡いグラデーションの濃さ。紙の色の上に、この割合で重ねる。
+export const TINT = 0.16;
+
+// 強調した箱の描き方。emphasis.box で選ぶ。zk-on-em は、強調した箱の上の文字。
+// flat は単色の淡い面と強調の色の枠、fill はグラデーションの面に白抜きの文字、tint は淡いグラデーションの面とグラデーションの枠、outline はグラデーションの枠だけ。
+function emphasisCss(t) {
+  const c = t.color;
+  const sw = t.figure.stroke;
+  const box = {
+    flat: `fill:${c.accentSurface};stroke:${c.accent};stroke-width:${sw * 1.5}`,
+    fill: 'fill:url(#zk-grad);stroke:none',
+    tint: `fill:url(#zk-grad-tint);stroke:url(#zk-grad);stroke-width:${sw * 1.5}`,
+    outline: `fill:${c.paper};stroke:url(#zk-grad);stroke-width:${sw * 2}`,
+  }[t.emphasis.box];
+  const on = t.emphasis.box === 'fill' ? c.onAccent : c.accent;
+  const onNote = t.emphasis.box === 'fill' ? c.onAccent : c.sub;
+  return [`.zk-box-em{${box}}`, `.zk-on-em{fill:${on}}`, `.zk-on-em-note{fill:${onNote}}`];
+}
+
 export function open(t, height, title) {
   const c = t.color;
   const f = t.figure;
@@ -21,14 +57,15 @@ export function open(t, height, title) {
     `.zk-text{font-family:${t.font.replace(/"/g, "'")};fill:${c.ink};font-size:${t.size.label}px;font-weight:600}`,
     `.zk-note{font-family:${t.font.replace(/"/g, "'")};fill:${c.sub};font-size:${t.size.note}px}`,
     `.zk-box{fill:${c.surface};stroke:${c.line};stroke-width:${f.stroke}}`,
-    `.zk-box-em{fill:${c.accentSurface};stroke:${c.accent};stroke-width:${f.stroke * 1.5}}`,
+    ...emphasisCss(t),
     `.zk-em{fill:${c.accent}}`,
+    `.zk-grad{fill:${t.gradient.stops.length ? 'url(#zk-grad)' : c.accent}}`,
     `.zk-band{fill:${c.paper};stroke:${c.line};stroke-width:${f.stroke}}`,
     `.zk-line{fill:none;stroke:${c.sub};stroke-width:${f.stroke}}`,
     `.zk-dash{fill:none;stroke:${c.line};stroke-width:${f.stroke};stroke-dasharray:4 4}`,
     '</style>',
     '<defs><marker id="zk-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">',
-    `<path d="M1 1 L9 5 L1 9 Z" fill="${c.sub}"/></marker></defs>`,
+    `<path d="M1 1 L9 5 L1 9 Z" fill="${c.sub}"/></marker>${gradientDefs(t)}</defs>`,
   ].join('');
 }
 
@@ -42,11 +79,12 @@ export function box(t, x, y, w, h, label, { note, emphasis, ref } = {}) {
   const cx = x + w / 2;
   const cy = y + h / 2;
   const cls = emphasis ? 'zk-box-em' : 'zk-box';
-  const textCls = emphasis ? 'zk-text zk-em' : 'zk-text';
+  const textCls = emphasis ? 'zk-text zk-on-em' : 'zk-text';
+  const noteCls = emphasis ? 'zk-note zk-on-em-note' : 'zk-note';
   const out = [`<rect class="${cls}" x="${x}" y="${y}" width="${w}" height="${h}" rx="${t.figure.radius}"/>`];
   if (note) {
     out.push(`<text class="${textCls}" x="${cx}" y="${mid(cy - 9, t.size.label)}" text-anchor="middle">${esc(label)}</text>`);
-    out.push(`<text class="zk-note" x="${cx}" y="${mid(cy + 12, t.size.note)}" text-anchor="middle">${esc(note)}</text>`);
+    out.push(`<text class="${noteCls}" x="${cx}" y="${mid(cy + 12, t.size.note)}" text-anchor="middle">${esc(note)}</text>`);
   } else {
     out.push(`<text class="${textCls}" x="${cx}" y="${mid(cy, t.size.label)}" text-anchor="middle">${esc(label)}</text>`);
   }
@@ -72,6 +110,8 @@ export function unknownKeys(obj, allowed, where) {
 export const txt = (t, x, y, s, o = {}) =>
   `<text class="${o.cls ?? 'zk-note'}" x="${x}" y="${y}" text-anchor="${o.anchor ?? 'middle'}" style="${o.fill ? `fill:${o.fill};` : ''}${o.weight ? `font-weight:${o.weight};` : ''}${o.size ? `font-size:${o.size}px;` : ''}">${esc(s)}</text>`;
 export const ln = (t, d, o = {}) => `<path d="${d}" fill="none" stroke="${o.color ?? t.color.line}" stroke-width="${o.w ?? t.figure.stroke}" stroke-linecap="round"/>`;
+// 強調した箱。描き方は open() の zk-box-em で決まる。中の文字は zk-on-em を付ける。
+export const emRect = (t, x, y, w, h, rx = t.figure.radius) => `<rect class="zk-box-em" x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}"/>`;
 export const rect = (t, x, y, w, h, o = {}) =>
   `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${o.rx ?? t.figure.radius}" fill="${o.fill ?? t.color.paper}" stroke="${o.stroke ?? t.color.line}" stroke-width="${o.sw ?? t.figure.stroke}"/>`;
 

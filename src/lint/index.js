@@ -9,7 +9,8 @@ import { bundledLanguages } from 'shiki';
 import { rules, prosePatterns } from './rules.js';
 import { resolveRefs } from '../refs.js';
 import { termsOf, findAvoided } from '../terms.js';
-import { tokensFor } from '../theme.js';
+import { themeFor } from '../theme.js';
+import { typesFor } from '../figures/custom.js';
 
 // ハイライトできる言語名。出力やログのように言語がないものは text と書く。
 export const knownLang = (lang) => ['text', 'txt', 'plaintext', 'plain', 'ansi'].includes(lang) || lang in bundledLanguages;
@@ -62,9 +63,9 @@ function lintStructure(section, limits) {
 function lintFigure(block, limits, tokens, ctx) {
   const out = [];
   if (block.parseError) return [finding('F001', block.line, `YAML を読めません。${block.parseError}`)];
-  const type = types[block.spec?.type];
+  const type = ctx.types[block.spec?.type];
   if (!type) {
-    return [finding('F001', block.line, `type「${block.spec?.type}」は使えません。使える型は ${Object.keys(types).join('、')} です。`)];
+    return [finding('F001', block.line, `type「${block.spec?.type}」は使えません。使える型は ${Object.keys(ctx.types).join('、')} です。`)];
   }
   const errors = type.validate(block.spec, limits, ctx);
   errors.forEach((m) => out.push(finding('F001', block.line, m)));
@@ -99,8 +100,8 @@ async function lintRefs(section, ctx, limits) {
     }
   }
   // 図の根拠の番号は、仕様の検証に通った図からだけ読む。書きかけの図は F001 で知らせ、ここで例外を出さない。
-  for (const b of section.blocks.filter((x) => x.kind === 'figure' && !x.parseError && types[x.spec?.type] && !types[x.spec.type].validate(x.spec, limits, ctx).length)) {
-    const used = types[b.spec.type].refs?.(b.spec) ?? [];
+  for (const b of section.blocks.filter((x) => x.kind === 'figure' && !x.parseError && ctx.types[x.spec?.type] && !ctx.types[x.spec.type].validate(x.spec, limits, ctx).length)) {
+    const used = ctx.types[b.spec.type].refs?.(b.spec) ?? [];
     const bad = used.filter((n) => !Number.isInteger(n) || n < 1 || n > count);
     if (bad.length) out.push(finding('R001', b.line, count ? `図の番号 ${bad.join('、')} に対応する根拠がありません。根拠は${count}件です。` : `図に番号 ${bad.join('、')} がありますが、根拠のブロック（yaml refs）がありません。`));
   }
@@ -142,8 +143,8 @@ function lintTerms(doc, terms, source, limits, ctx) {
   for (const b of [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]) {
     if (b.kind === 'paragraph' || b.kind === 'list') texts.push({ text: b.text, line: b.line });
     // 図のラベルと補足は、仕様の検証に通った図からだけ取り出す。書きかけの図は F001 で知らせ、ここでは読まない。
-    if (b.kind === 'figure' && b.spec && types[b.spec.type] && !b.parseError && !types[b.spec.type].validate(b.spec, limits, ctx).length) {
-      const t = types[b.spec.type];
+    if (b.kind === 'figure' && b.spec && ctx.types[b.spec.type] && !b.parseError && !ctx.types[b.spec.type].validate(b.spec, limits, ctx).length) {
+      const t = ctx.types[b.spec.type];
       for (const x of [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
     }
     // 表は、資料にも動画にも出るので、セルの文字を行ごとに調べる。区切りの行（|---|）は飛ばす。
@@ -198,9 +199,10 @@ export async function lint(source, file, { textlint = true } = {}) {
   const limits = readJson('contract/limits.json');
   const doc = parse(source);
   const baseDir = path.dirname(path.resolve(file));
-  // 図の色と文字の大きさは、原稿のプロジェクトのテーマで確かめる。描くときと同じ値にするため。
-  const tokens = tokensFor(baseDir);
-  const ctx = { baseDir, tokens };
+  // 図の色、文字の大きさ、使える型は、原稿のプロジェクトのテーマで確かめる。描くときと同じにするため。
+  const theme = themeFor(baseDir);
+  const tokens = theme.tokens;
+  const ctx = { baseDir, tokens, types: typesFor(theme) };
   let findings = [...lintProse(doc.lead), ...lintCode(doc.lead)];
 
   for (const section of doc.sections) {

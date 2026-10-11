@@ -67,6 +67,7 @@
   }
 
   const errors = [];
+  const typeMotions = {};
   const cues = [];
   const hooks = [];
   const sounds = [];
@@ -107,6 +108,10 @@
     // 自分で作る音。fn(ctx) に OfflineAudioContext を渡す。ctx の時刻0がシーンの始まり。
     sound(fn) {
       sounds.push({ id: running, fn });
+    },
+    // テーマの独自の型の動き（types/<名前>/motion.js）。エンジンが型ごとに包んで登録する。
+    __type(name, fn) {
+      typeMotions[name] = fn;
     },
     // 図の部品。<zk-figure> で置いた図の中から、ラベルで探す。
     part: (root, label) => root.querySelector(`[data-label="${CSS.escape(label)}"]`),
@@ -227,7 +232,14 @@
           const svg = w.querySelector('svg');
           const parts = svg ? tagParts(svg) : [];
           // 自由なシーンでも、manual を付けなかった図には自動の動きを付ける。
-          if (!w.hasAttribute('data-manual')) animateFigure(sc, w, parts);
+          // テーマの独自の型に動き（motion.js）があれば、自動の動きの代わりにそれを使う。
+          // fig は図を包む要素、ctx.parts は部品、ctx.times は各部品が現れる秒、ctx.frame(f) は毎コマ f(t, info) を呼ぶ。
+          const motion = typeMotions[w.dataset.type];
+          if (w.hasAttribute('data-manual')) return;
+          if (motion) {
+            const times = partTimes(sc, parts);
+            guard(sc.id, `型 ${w.dataset.type} の動き（motion.js）`, () => motion(w, { svg, parts, times, start: times[0] ?? sc.narrStart, scene: sc, frame: (f) => hooks.push({ id: sc.id, frame: (t, root, info) => f(t, info) }), sfx: (kind, at) => cues.push({ scene: sc.id, t: at, kind }) }));
+          } else animateFigure(sc, w, parts);
         });
         // data-sfx を付けた要素は、最初のアニメーションが始まる時刻に音を鳴らす。2つ目からは、浮く動きのような続きの動きとみなす。
         // data-zzfx には ZzFX の数値を、カンマ区切りで書く。空の値は既定値になる。

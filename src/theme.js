@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { root, settingsFor } from './config.js';
+import { compile } from './template.js';
 
 export const baseTokens = () => JSON.parse(fs.readFileSync(path.join(root, 'contract/tokens.json'), 'utf8'));
 
@@ -17,6 +18,17 @@ const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 export const isColor = (v) => typeof v === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
 // フォントの指定は、CSS と SVG の style にそのまま入る。宣言や要素の外へ出られる文字を通さない。
 const isFont = (v) => typeof v === 'string' && v.trim() !== '' && !/[;{}<>\\\n\r]/.test(v);
+
+// 長さを変えられる配列と、選べる数。ここに無い配列は、既定と同じ数の色で書く。
+const LENGTHS = { 'gradient.stops': [0, 2, 3, 4, 5], 'chart.series': [3, 4, 5], 'video.figure.chart.series': [3, 4, 5] };
+// 名前で選ぶ値と、その選択肢。
+export const CHOICES = {
+  'emphasis.box': ['flat', 'fill', 'tint', 'outline'],
+  'emphasis.chart': ['flat', 'gradient'],
+  'chart.mode': ['series', 'neutral'],
+};
+// 範囲のある数値。ここに無い数値は、0より大きければよい。
+const RANGES = { 'gradient.angle': [0, 360] };
 
 // base の形に合う値だけを重ねる。base に無い名前、型の違う値、色でない値は problems に入れ、重ねない。
 function overlay(base, over, at, problems) {
@@ -37,11 +49,17 @@ function overlay(base, over, at, problems) {
       if (isObj(v)) out[k] = overlay(b, v, key, problems);
       else problems.push(`${key} は、{ } の中に項目を書きます。`);
     } else if (Array.isArray(b)) {
-      if (Array.isArray(v) && v.length === b.length && v.every(isColor)) out[k] = v;
-      else problems.push(`${key} は、${b.length}個の色（#rrggbb）の配列で書きます。`);
+      const lengths = LENGTHS[key] ?? [b.length];
+      if (Array.isArray(v) && lengths.includes(v.length) && v.every(isColor)) out[k] = v;
+      else problems.push(`${key} は、${lengths.filter(Boolean).join('、')}個の色（#rrggbb）の配列で書きます。${lengths.includes(0) ? '使わないときは [] にします。' : ''}`);
     } else if (typeof b === 'number') {
-      if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = v;
-      else problems.push(`${key} は、0より大きい数値で書きます。`);
+      const [min, max] = RANGES[key] ?? [0, Infinity];
+      const ok = typeof v === 'number' && Number.isFinite(v) && (RANGES[key] ? v >= min && v <= max : v > 0);
+      if (ok) out[k] = v;
+      else problems.push(RANGES[key] ? `${key} は、${min}〜${max} の数値で書きます。` : `${key} は、0より大きい数値で書きます。`);
+    } else if (CHOICES[key]) {
+      if (CHOICES[key].includes(v)) out[k] = v;
+      else problems.push(`${key} は、${CHOICES[key].join('、')} のどれかを書きます。`);
     } else if (isColor(b)) {
       if (isColor(v)) out[k] = v;
       else problems.push(`${key} の「${v}」は色ではありません。#rrggbb か #rgb で書きます。`);
@@ -58,10 +76,10 @@ function overlay(base, over, at, problems) {
 // name はテーマの名前で、rules.md の # 見出しか、フォルダの名前。
 export function readTheme(dir) {
   const base = baseTokens();
-  if (!dir) return { dir: null, name: null, tokens: base, rules: '', problems: [] };
+  if (!dir) return { dir: null, name: null, tokens: base, rules: '', types: [], problems: [] };
   const problems = [];
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-    return { dir, name: path.basename(dir), tokens: base, rules: '', problems: [`テーマのフォルダ ${dir} がありません。zukai theme init ${dir} で作るか、設定の theme を直してください。`] };
+    return { dir, name: path.basename(dir), tokens: base, rules: '', types: [], problems: [`テーマのフォルダ ${dir} がありません。zukai theme init ${dir} で作るか、設定の theme を直してください。`] };
   }
   let tokens = base;
   const file = path.join(dir, 'tokens.json');
@@ -70,6 +88,9 @@ export function readTheme(dir) {
       const over = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (isObj(over)) tokens = overlay(base, over, '', problems);
       else problems.push('tokens.json は JSON のオブジェクトで書きます。');
+      // グラデーションを使う描き方は、グラデーションの色が無いと描けない。
+      const uses = [tokens.emphasis.box !== 'flat' && `emphasis.box の ${tokens.emphasis.box}`, tokens.emphasis.chart !== 'flat' && `emphasis.chart の ${tokens.emphasis.chart}`].filter(Boolean);
+      if (uses.length && !tokens.gradient.stops.length) problems.push(`${uses.join('と')}は、グラデーションで描きます。gradient.stops に2〜5個の色を書いてください。`);
     } catch (e) {
       problems.push(`tokens.json を読めません。${e.message}`);
     }
@@ -77,7 +98,78 @@ export function readTheme(dir) {
   const rulesFile = path.join(dir, 'rules.md');
   const rules = fs.existsSync(rulesFile) ? fs.readFileSync(rulesFile, 'utf8').trim() : '';
   const name = rules.match(/^#\s+(.+)$/m)?.[1].trim() ?? path.basename(dir);
-  return { dir, name, tokens, rules, problems: problems.map((p) => `${path.join(dir, 'tokens.json')}: ${p}`) };
+  const types = readTypes(dir);
+  return { dir, name, tokens, rules, types: types.types, problems: [...problems.map((p) => `${path.join(dir, 'tokens.json')}: ${p}`), ...types.problems] };
+}
+
+// --- 独自の型 -----------------------------------------------------------------
+
+const FIELD_TYPES = ['string', 'number', 'boolean', 'list', 'object'];
+// type.json の fields の形を確かめる。誤りを返す。
+function fieldProblems(fields, at) {
+  if (!isObj(fields) || !Object.keys(fields).length) return [`${at} は、項目の名前と定義の { } で書きます。`];
+  return Object.entries(fields).flatMap(([k, def]) => {
+    const where = `${at}.${k}`;
+    if (!/^[A-Za-z][\w]*$/.test(k) || k === 'type' || k === 'theme' || k === 'width') return [`${where}: 項目の名前は英字で始め、type、theme、width 以外にします。`];
+    if (!isObj(def) || !FIELD_TYPES.includes(def.type)) return [`${where}: type は ${FIELD_TYPES.join('、')} のどれかを書きます。`];
+    const out = [];
+    for (const n of ['min', 'max']) if (def[n] !== undefined && (typeof def[n] !== 'number' || !Number.isFinite(def[n]))) out.push(`${where}.${n} は数値で書きます。`);
+    if (def.type === 'string' && def.max === undefined) out.push(`${where}: 文字の項目には max（全角の字数の上限）が要ります。図からはみ出さないことを、上限で保証するため。`);
+    if (def.type === 'list') {
+      if (def.max === undefined) out.push(`${where}: 配列の項目には max（個数の上限）が要ります。`);
+      if (!isObj(def.of)) out.push(`${where}: 配列の項目には of（要素の定義）が要ります。`);
+      else out.push(...(def.of.type === 'object' ? fieldProblems(def.of.fields, `${where}.of.fields`) : fieldProblems({ item: def.of }, where).map((p) => p.replace('.item', '.of'))));
+    }
+    if (def.type === 'object') out.push(...fieldProblems(def.fields, `${where}.fields`));
+    return out;
+  });
+}
+
+// テーマのフォルダの types/<名前>/ を読む。ひな形と動きのスクリプトは、ここで書き方だけを確かめる。
+// スクリプトは動かさない。動くのは、動画を作るときの Chromium の中だけ。
+function readTypes(dir) {
+  const base = path.join(dir, 'types');
+  const types = [];
+  const problems = [];
+  if (!fs.existsSync(base)) return { types, problems };
+  for (const name of fs.readdirSync(base).sort()) {
+    const tdir = path.join(base, name);
+    if (!fs.statSync(tdir).isDirectory()) continue;
+    const say = (m) => problems.push(`${tdir}: ${m}`);
+    if (!/^[a-z][a-z0-9-]*$/.test(name)) {
+      say('型の名前（フォルダの名前）は、英小文字で始め、英小文字、数字、ハイフンだけにします。');
+      continue;
+    }
+    let json;
+    try {
+      json = JSON.parse(fs.readFileSync(path.join(tdir, 'type.json'), 'utf8'));
+    } catch (e) {
+      say(e.code === 'ENOENT' ? 'type.json がありません。' : `type.json を読めません。${e.message}`);
+      continue;
+    }
+    const before = problems.length;
+    for (const k of ['summary', 'when']) if (typeof json[k] !== 'string' || !json[k].trim()) say(`type.json の ${k} を文で書きます。`);
+    fieldProblems(json.fields, 'fields').forEach(say);
+    if (!isObj(json.example)) say('type.json の example に、図の仕様の例を { } で書きます（type は書かない）。');
+    let template = null;
+    try {
+      template = compile(fs.readFileSync(path.join(tdir, 'figure.svg'), 'utf8'));
+    } catch (e) {
+      say(e.code === 'ENOENT' ? 'figure.svg（図のひな形）がありません。' : `figure.svg: ${e.message}`);
+    }
+    let motion = null;
+    if (fs.existsSync(path.join(tdir, 'motion.js'))) {
+      motion = fs.readFileSync(path.join(tdir, 'motion.js'), 'utf8');
+      try {
+        // 書き方だけを確かめる。関数を作るだけで、呼ばない。
+        new Function('fig', 'ctx', motion); // eslint-disable-line no-new-func
+      } catch (e) {
+        say(`motion.js を読めません。${e.message}`);
+      }
+    }
+    if (problems.length === before) types.push({ name, dir: tdir, json, template, motion });
+  }
+  return { types, problems };
 }
 
 // 原稿やフォルダから、そのプロジェクトのテーマを読む。誤りがあれば止める。書き間違いを黙って無視しないため。
@@ -99,6 +191,11 @@ const luminance = (h) => {
   const [r, g, b] = rgb(h).map(linear);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
+// 半透明の色 fg を、bg の上に重ねた色。
+const blend = (fg, bg, alpha) => `#${rgb(fg).map((v, i) => Math.round((v * alpha + rgb(bg)[i] * (1 - alpha)) * 255).toString(16).padStart(2, '0')).join('')}`;
+// 淡いグラデーションの濃さ。figures/svg.js の TINT と同じ値にする（このファイルは図の部品を読まないため、ここにも置く）。
+const TINT_ALPHA = 0.16;
+
 // WCAG のコントラスト比。
 export const contrast = (a, b) => {
   const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
@@ -146,6 +243,17 @@ export async function checkTheme(t) {
     pair('強調の文字', c.accent, c.accentSurface, `${at}.accent`, `${at}.accentSurface`);
     pair('強調の上の文字', c.onAccent, c.accent, `${at}.onAccent`, `${at}.accent`);
     pair('強調の上の文字', c.onAccent, c.ink, `${at}.onAccent`, `${at}.ink`);
+    // 強調した箱の上の文字は、グラデーションのどの色の上でも読めること。淡い面（tint）は、紙の色に重ねた色で確かめる。
+    const stops = t.gradient.stops;
+    if (t.emphasis.box === 'fill') stops.forEach((s, i) => pair('強調した箱の文字', c.onAccent, s, `${at}.onAccent`, `gradient.stops[${i}]`));
+    if (t.emphasis.box === 'tint') {
+      stops.forEach((s, i) => {
+        const bg = blend(s, c.paper, TINT_ALPHA);
+        pair('強調した箱の文字', c.accent, bg, `${at}.accent`, `gradient.stops[${i}] の淡い面`);
+        pair('強調した箱の補足', c.sub, bg, `${at}.sub`, `gradient.stops[${i}] の淡い面`);
+      });
+    }
+    if (t.emphasis.box === 'outline' || t.emphasis.chart === 'gradient') stops.forEach((s, i) => pair('グラデーションの色', s, c.paper, `gradient.stops[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
     const chartAt = at.replace(/color$/, 'chart');
     chart.series.forEach((s, i) => pair('系列の色', s, c.paper, `${chartAt}.series[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
     for (const [vision, m] of Object.entries(VISION)) {
@@ -234,5 +342,17 @@ export async function themeReport(dir) {
   const theme = readTheme(dir);
   const findings = theme.problems.map((message) => ({ severity: 'error', what: '値', message }));
   if (!findings.length) findings.push(...(await checkTheme(theme.tokens)));
+  // 独自の型は、組み込みの型と名前が重ならず、例が検査を通ること。ひな形と上限の誤りを、原稿を書く前に見つけるため。
+  if (!theme.problems.length && theme.types.length) {
+    try {
+      const { checkExamples, builtinNames } = await import('./figures/custom.js');
+      for (const d of theme.types) if (builtinNames().includes(d.name)) findings.push({ severity: 'error', what: '独自の型', message: `型 ${d.name} は、組み込みの型と同じ名前です。別の名前にしてください。` });
+      const limits = JSON.parse(fs.readFileSync(path.join(root, 'contract/limits.json'), 'utf8'));
+      if (findings.every((f) => f.what !== '独自の型')) checkExamples(theme, limits).forEach((message) => findings.push({ severity: 'error', what: '独自の型', message }));
+    } catch (e) {
+      if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+      // 依存が欠けている。doctor が別に知らせる。
+    }
+  }
   return { dir, name: theme.name, theme, findings, ok: findings.every((f) => f.severity !== 'error') };
 }

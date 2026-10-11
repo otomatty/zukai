@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.js';
-import { renderChart, isNumber, fmt } from './chart.js';
+import { renderChart, isNumber, fmt, highlight, neutral, modeGuide } from './chart.js';
 
 const ROW = 40;
 
@@ -23,6 +23,8 @@ items:
     'items[].value: 0以上の数値（必須）',
     'items[].emphasis: true にすると強調色で描き、ほかの棒を灰色にする（任意、図全体で1つまで）',
   ],
+
+  guide: (t) => modeGuide(t),
 
   validate(spec, limits) {
     const errors = [...unknownKeys(spec, ['type', 'unit', 'items'], 'bar')];
@@ -60,7 +62,7 @@ items:
           type: 'bar', barWidth: 20,
           data: spec.items.map((it) => ({
             value: it.value,
-            itemStyle: { color: !hasEmphasis || it.emphasis ? t.color.accent : t.chart.muted, borderRadius: [0, 4, 4, 0] },
+            itemStyle: { color: it.emphasis ? highlight(t) : hasEmphasis || neutral(t) ? t.chart.muted : t.color.accent, borderRadius: [0, 4, 4, 0] },
             label: { fontWeight: it.emphasis ? 700 : 400 },
           })),
           label: { show: true, position: 'right', distance: 8, color: t.color.ink, fontSize: 13, formatter: (p) => fmt(p.value) + spec.unit },
