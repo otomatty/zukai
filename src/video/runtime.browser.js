@@ -67,7 +67,8 @@
   }
 
   const errors = [];
-  const typeMotions = {};
+  // 型の名前は利用者が決めるので、constructor のような、オブジェクトが元から持つ名前を拾わないようにする。
+  const typeMotions = Object.create(null);
   const cues = [];
   const hooks = [];
   const sounds = [];

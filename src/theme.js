@@ -16,6 +16,8 @@ export const FIXED = ['figure.width', 'video.width', 'video.height', 'video.fps'
 
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 export const isColor = (v) => typeof v === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+// #rgb を #rrggbb にする。透明度を後ろに足す使い方（字幕の帯の「#rrggbbcc」など）があるため、読むときにそろえる。
+const long = (c) => (c.length === 4 ? `#${[...c.slice(1)].map((x) => x + x).join('')}` : c).toLowerCase();
 // フォントの指定は、CSS と SVG の style にそのまま入る。宣言や要素の外へ出られる文字を通さない。
 const isFont = (v) => typeof v === 'string' && v.trim() !== '' && !/[;{}<>\\\n\r]/.test(v);
 
@@ -50,7 +52,7 @@ function overlay(base, over, at, problems) {
       else problems.push(`${key} は、{ } の中に項目を書きます。`);
     } else if (Array.isArray(b)) {
       const lengths = LENGTHS[key] ?? [b.length];
-      if (Array.isArray(v) && lengths.includes(v.length) && v.every(isColor)) out[k] = v;
+      if (Array.isArray(v) && lengths.includes(v.length) && v.every(isColor)) out[k] = v.map(long);
       else problems.push(`${key} は、${lengths.filter(Boolean).join('、')}個の色（#rrggbb）の配列で書きます。${lengths.includes(0) ? '使わないときは [] にします。' : ''}`);
     } else if (typeof b === 'number') {
       const [min, max] = RANGES[key] ?? [0, Infinity];
@@ -61,7 +63,7 @@ function overlay(base, over, at, problems) {
       if (CHOICES[key].includes(v)) out[k] = v;
       else problems.push(`${key} は、${CHOICES[key].join('、')} のどれかを書きます。`);
     } else if (isColor(b)) {
-      if (isColor(v)) out[k] = v;
+      if (isColor(v)) out[k] = long(v);
       else problems.push(`${key} の「${v}」は色ではありません。#rrggbb か #rgb で書きます。`);
     } else if (k === 'font') {
       if (isFont(v)) out[k] = v;
@@ -167,6 +169,15 @@ function readTypes(dir) {
       json = JSON.parse(fs.readFileSync(path.join(tdir, 'type.json'), 'utf8'));
     } catch (e) {
       say(e.code === 'ENOENT' ? 'type.json がありません。' : `type.json を読めません。${e.message}`);
+      continue;
+    }
+    if (!isObj(json)) {
+      say('type.json は JSON のオブジェクトで書きます。');
+      continue;
+    }
+    // 組み込みの型（src/figures/<名前>.js）と同じ名前は使えない。部品のファイル（svg、chart など）の名前も避ける。
+    if (fs.existsSync(path.join(root, 'src/figures', `${name}.js`))) {
+      say(`型の名前 ${name} は、組み込みの型か zukai の部品と同じ名前です。別の名前にしてください。`);
       continue;
     }
     const before = problems.length;
@@ -379,10 +390,9 @@ export async function themeReport(dir, { set = {} } = {}) {
   // 独自の型は、組み込みの型と名前が重ならず、例が検査を通ること。ひな形と上限の誤りを、原稿を書く前に見つけるため。
   if (!theme.problems.length && theme.types.length) {
     try {
-      const { checkExamples, builtinNames } = await import('./figures/custom.js');
-      for (const d of theme.types) if (builtinNames().includes(d.name)) findings.push({ severity: 'error', what: '独自の型', message: `型 ${d.name} は、組み込みの型と同じ名前です。別の名前にしてください。` });
+      const { checkExamples } = await import('./figures/custom.js');
       const limits = JSON.parse(fs.readFileSync(path.join(root, 'contract/limits.json'), 'utf8'));
-      if (findings.every((f) => f.what !== '独自の型')) checkExamples(theme, limits).forEach((message) => findings.push({ severity: 'error', what: '独自の型', message }));
+      checkExamples(theme, limits).forEach((message) => findings.push({ severity: 'error', what: '独自の型', message }));
     } catch (e) {
       if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
       // 依存が欠けている。doctor が別に知らせる。

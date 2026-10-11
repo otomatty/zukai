@@ -89,12 +89,17 @@ export function makeType(d) {
     // 文字の長さは、項目の定義（max）で確かめる。
     labels: () => [],
     notes: () => [],
+    // 用語の表記（P007）の検査に渡す、図に出る文字。仕様の中の文字の値をすべて集める。
+    texts: (spec) => {
+      const out = [];
+      const walk = (v) => (typeof v === 'string' ? out.push(v) : Array.isArray(v) ? v.forEach(walk) : v && typeof v === 'object' ? Object.values(v).forEach(walk) : null);
+      Object.entries(spec).forEach(([k, v]) => k !== 'type' && walk(v));
+      return out;
+    },
     title: (spec, t) => free.title({ svg: toSvg(spec, t) }),
     render: (spec, t) => free.render({ svg: toSvg(spec, t) }, t),
   };
 }
-
-export const builtinNames = () => Object.keys(builtin);
 
 // 型の一覧に、テーマの独自の型を足す。自由な図（free）は最後に置く。組み込みの型と同じ名前は、黙って置き換えずに止める。
 const cache = new WeakMap();

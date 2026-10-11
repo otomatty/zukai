@@ -353,9 +353,10 @@ test('動画では、独自の型の図に型の動きを付け、図の中の�
   const html = pageHtml(plan, tokensFor(dir));
   assert.match(html, /<script>zk\.__type\("stat", function \(fig, ctx\) \{\nctx\.parts\.forEach/);
   assert.match(html, /data-type="stat"/);
-  // 2つ目の図の矢印は、2つ目の図の印を指す。
-  assert.match(html, /<marker id="zk2-arrow"/);
-  assert.match(html, /marker-end="url\(#zk2-arrow\)"/);
+  // 2つ目の図の矢印は、2つ目の図の印を指す。zk- で始まらない名前（自由な図、独自の型、ECharts）にも付ける。
+  assert.match(html, /<marker id="s2-zk-arrow"/);
+  assert.match(html, /marker-end="url\(#s2-zk-arrow\)"/);
+  assert.doesNotMatch(html, /id="zk-arrow"/);
   assert.doesNotMatch(html, /"motions"/);
 });
 
@@ -407,4 +408,46 @@ test('rules.md の「決めたこと」は、出典と同じく AI への指示�
   const p = rulesPrompt(theme);
   assert.match(p, /角丸は使わない/);
   assert.doesNotMatch(p, /tint にした/);
+});
+
+// --- レビューで直したこと ---
+
+test('独自の型の文字も、用語の表記（P007）の検査を受ける', () => {
+  const { home, dir } = typedProject();
+  const cfg = JSON.parse(fs.readFileSync(path.join(dir, 'zukai.config.json'), 'utf8'));
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ ...cfg, terms: [{ use: 'トークン', avoid: ['印'], except: ['矢印'] }] }));
+  fs.writeFileSync(path.join(dir, 'a.md'), statDoc('type: stat\nvalue: "300"\nlabel: 印の数\ntags: [矢印]'));
+  const r = JSON.parse(run(['lint', 'a.md', '--no-log', '--no-textlint', '--json'], { cwd: dir, home }).out)[0];
+  const p7 = r.findings.filter((f) => f.rule === 'P007');
+  assert.equal(p7.length, 1, JSON.stringify(r.findings));
+  assert.match(p7[0].message, /印/);
+});
+
+test('#rgb の色は #rrggbb にそろえる。透明度を後ろに足す使い方があるため', () => {
+  const t = readTheme(themeDir({ video: { subtitle: { band: '#000' } }, chart: { series: ['#F00', '#0a0', '#00f'] } })).tokens;
+  assert.equal(t.video.subtitle.band, '#000000');
+  assert.deepEqual(t.chart.series, ['#ff0000', '#00aa00', '#0000ff']);
+});
+
+test('独自の型の type.json がオブジェクトでないときと、組み込みの型と同じ名前のときは、テーマの誤りにする', () => {
+  const nul = typedProject({ 'type.json': 'null' });
+  const a = run(['theme', 'check'], { cwd: nul.dir, home: nul.home });
+  assert.equal(a.code, 1);
+  assert.match(a.out, /type.json は JSON のオブジェクトで書きます/);
+  const clash = typedProject();
+  fs.renameSync(path.join(clash.dir, 'brand/types/stat'), path.join(clash.dir, 'brand/types/flow'));
+  assert.match(run(['theme', 'check'], { cwd: clash.dir, home: clash.home }).out, /型の名前 flow は、組み込みの型か zukai の部品と同じ名前/);
+  // 見本は、生の例外ではなく、テーマの誤りとして止まる。
+  assert.match(run(['theme', 'preview'], { cwd: clash.dir, home: clash.home }).err, /テーマに誤りがあるので、見本を描けません/);
+});
+
+test('見本と見比べは、テーマから来る文字を HTML として出さず、描けない例は枠にして続ける', () => {
+  const { home, dir } = typedProject({ 'type.json': { ...STAT['type.json'], summary: '<img src=x onerror=alert(1)>数字' } });
+  assert.equal(run(['theme', 'preview'], { cwd: dir, home }).code, 0);
+  const html = fs.readFileSync(path.join(dir, '.zukai/theme-preview.html'), 'utf8');
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img src=x/);
+  // 案でラベルを大きくしても、見比べのページは書き出せる。
+  const r = run(['theme', 'compare', 'size.label=100', '--types=flow,stat'], { cwd: dir, home });
+  assert.equal(r.code, 0, r.err);
 });

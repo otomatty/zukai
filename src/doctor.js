@@ -52,7 +52,13 @@ export async function doctor(project) {
   // テーマは、設定の theme があるときだけ確かめる。無ければ、zukai の既定の見た目で描く。
   if (!cfg.values.theme) add('テーマ', 'skip', '設定していません。zukai の既定の見た目で描きます');
   else {
-    const r = await themeReport(cfg.values.theme);
+    // テーマを読めない場合も、残りの確認を続ける。doctor は、壊れた環境を調べるためのコマンドなので。
+    let r;
+    try {
+      r = await themeReport(cfg.values.theme);
+    } catch (e) {
+      r = { name: shown(cfg.values.theme), findings: [{ severity: 'error', message: `テーマを読めません。${e.message}` }] };
+    }
     const errors = r.findings.filter((f) => f.severity === 'error');
     add('テーマ', errors.length ? 'ng' : r.findings.length ? 'warn' : 'ok', [`${r.name}（${shown(cfg.values.theme)}）`, ...r.findings.map((f) => `${f.severity} ${f.message}`)].join('\n'), r.findings.length ? `zukai theme check ${shown(cfg.values.theme)}` : '');
   }

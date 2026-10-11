@@ -48,7 +48,8 @@ function sceneHtml(sc) {
   // manual を付けた図は、自動の動きを付けずに置く。AI が data-label で部品を狙って動かすときに使う。
   // 図の中の名前（矢印の印やグラデーション）には、シーンの番号を付ける。1つのページに図がいくつも入ると、同じ名前は最初の図を指す。
   // 矢印の印は参照した場所ではなく定義した場所の見え方を引き継ぐので、前のシーンが隠れると、後のシーンの矢じりまで消えるため。
-  const svg = sc.figureSvg?.replace(/(id="|url\(#|href="#)zk-/g, `$1zk${sc.id}-`);
+  // 同じ図を複数のショットで使うこともあるので、zk- で始まる名前に限らず、すべての名前と参照に付ける。
+  const svg = sc.figureSvg?.replace(/(\bid="|url\((['"]?)#|href="#)/g, (m) => `${m}s${sc.id}-`);
   const fig = (manual) =>
     sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${sc.figureType ? ` data-type="${esc(sc.figureType)}"` : ''}${manual ? ' data-manual' : ''}>${svg}</div>` : sc.tableHtml ? `<div class="zk-fig zk-table" data-whole="true"${manual ? ' data-manual' : ''}>${sc.tableHtml}</div>` : '';
   let inner;

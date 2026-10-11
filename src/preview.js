@@ -15,20 +15,30 @@ const SKIP = ['screenshot'];
 const chip = (c) => `<span style="display:inline-block;width:1.1em;height:1.1em;margin-right:.4em;vertical-align:-.2em;border-radius:3px;background:${c};border:1px solid #dfe4ea"></span>`;
 const fence = (t) => `\`\`\`${t.fence ?? 'yaml figure'}\n${t.example}\n\`\`\``;
 
+// 型の例を描く。案によっては描けない例（ひな形が SVG として読めないなど）もあるので、そのときは理由を書いた枠にする。
+function drawExample(type, t, ctx, style) {
+  try {
+    return isolated(type.render(exampleSpec(type), t, ctx), style);
+  } catch (e) {
+    return `<div style="border:1px solid #b42318;border-radius:8px;padding:10px;color:#b42318;font-size:.8rem">型 ${esc(type.name)} の例を描けません。${esc(String(e.message ?? e).split('\n')[0])}</div>`;
+  }
+}
+
 // 図を、画像として置く。SVG の中の style はページ全体に効くので、別の配色の図を同じページに並べると、後の図の色が前の図に移るため。
 const isolated = (svg, style = 'display:block;width:100%;height:auto') => `<img alt="" style="${style}" src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}">`;
 
+// 見本の原稿は HTML を通す設定で描くので、テーマから来る文字（名前、型の説明、検査の結果）は、HTML として読まれないように書く。
 function source(theme, findings) {
   const t = theme.tokens;
-  const result = findings.length ? findings.map((f) => `- ${f.severity}：${f.what}。${f.message}`).join('\n') : '- 問題はありません。';
+  const result = findings.length ? findings.map((f) => `- ${f.severity}：${esc(f.what)}。${esc(f.message)}`).join('\n') : '- 問題はありません。';
   const colors = Object.entries(t.color).map(([k, v]) => `| color.${k} | ${chip(v)}${v} |`);
   const series = [...t.chart.series.map((v, i) => `| chart.series[${i}] | ${chip(v)}${v} |`), `| chart.muted | ${chip(t.chart.muted)}${t.chart.muted} |`];
   const grad = t.gradient.stops.length ? [`| gradient | ${t.gradient.stops.map(chip).join('')}${t.gradient.angle}° |`] : [];
   const types = typesFor(theme);
-  const figures = Object.values(types).filter((x) => !SKIP.includes(x.name)).map((x) => `## ${x.name}\n\n${x.name} の型の見本です。\n\n${fence(x)}\n\n${x.summary}。`);
-  return `# テーマの見本：${theme.name ?? '既定の見た目'}
+  const figures = Object.values(types).filter((x) => !SKIP.includes(x.name)).map((x) => `## ${x.name}\n\n${x.name} の型の見本です。\n\n${fence(x)}\n\n${esc(x.summary)}。`);
+  return `# テーマの見本：${esc(theme.name ?? '既定の見た目')}
 
-${theme.dir ? `テーマのフォルダ ${theme.dir} の値で描いています。` : 'テーマを設定していないので、zukai の既定の値で描いています。'}
+${theme.dir ? `テーマのフォルダ ${esc(theme.dir)} の値で描いています。` : 'テーマを設定していないので、zukai の既定の値で描いています。'}
 
 ## 確かめた結果
 
@@ -88,7 +98,7 @@ function videoSection(theme) {
   const v = t.video;
   const ctx = { baseDir: process.cwd(), tokens: t };
   const types = typesFor(theme);
-  const draw = (name) => isolated(types[name].render(exampleSpec(types[name]), t, ctx), 'display:block;width:100%;height:100%;object-fit:contain');
+  const draw = (name) => drawExample(types[name], t, ctx, 'display:block;width:100%;height:100%;object-fit:contain');
   const frame = (inner) => `<div style="position:relative;aspect-ratio:16/9;background:${v.background};border-radius:8px;overflow:hidden;margin:0 0 18px;font-family:${t.font.replace(/"/g, "'")}">${inner}</div>`;
   const scene = frame(
     `<div style="position:absolute;top:7%;left:8%;right:8%;text-align:center;color:${v.ink};font-weight:800;font-size:clamp(13px,2.4vw,24px);line-height:1.4">主張文は、この色と大きさで出ます</div>` +
@@ -174,7 +184,7 @@ export async function compareThemes(dir, variants, { only = null } = {}) {
     if (!c.report) return '';
     const types = typesFor(c.theme);
     const ctx = { baseDir: dir ?? process.cwd(), tokens: c.theme.tokens, types };
-    return isolated(types[name].render(exampleSpec(types[name]), c.theme.tokens, ctx));
+    return drawExample(types[name], c.theme.tokens, ctx);
   };
   const row = (label, f) => `<div class="row"><div class="label">${label}</div>${columns.map((c) => cell(c, f(c))).join('')}</div>`;
   const n = columns.length;
