@@ -6,6 +6,18 @@ import { spawnSync } from 'node:child_process';
 import { root, loadConfig, scopeNames } from './config.js';
 import { zukaiCommand, skillStatus, shown } from './setup.js';
 
+// package.json の engines.node（「^20.19.0 || >=23.5.0」の形）を、今の Node が満たすか。
+export function satisfies(version, range) {
+  const v = version.split('.').map(Number);
+  const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  return range.split('||').some((part) => {
+    const m = part.trim().match(/^(\^|>=)(\d+)\.(\d+)\.(\d+)$/);
+    if (!m) return false;
+    const min = m.slice(2).map(Number);
+    return cmp(v, min) >= 0 && (m[1] === '>=' || v[0] === min[0]);
+  });
+}
+
 // status は ok（そろっている）、ng（今の設定で使うのに足りない）、warn（動くが直したほうがよい）、skip（今の設定では使わない）。
 export async function doctor(project) {
   const checks = [];
@@ -13,10 +25,10 @@ export async function doctor(project) {
   const cfg = loadConfig(project);
   const inRoot = (cmd) => `cd ${JSON.stringify(root)} && ${cmd}`;
 
-  const major = Number(process.versions.node.split('.')[0]);
-  add('Node', major >= 20 ? 'ok' : 'ng', process.versions.node, major >= 20 ? '' : 'Node 20 以上を入れてください。');
-
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const nodeOk = satisfies(process.versions.node, pkg.engines.node);
+  add('Node', nodeOk ? 'ok' : 'ng', process.versions.node, nodeOk ? '' : `Node ${pkg.engines.node} を入れてください。依存パッケージがこの版を求めます。`);
+
   const missing = Object.keys(pkg.dependencies).filter((d) => !fs.existsSync(path.join(root, 'node_modules', d, 'package.json')));
   add('依存パッケージ', missing.length ? 'ng' : 'ok', missing.length ? `${missing.join('、')} がありません` : '', missing.length ? inRoot('npm install') : '');
 

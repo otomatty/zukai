@@ -176,3 +176,9 @@ test('publish は、設定の URL からページの URL を組み立てる', ()
       globalThis.fetch = saved;
     }
   }));
+
+test('doctor は、依存パッケージが求める Node の版を確かめる', async () => {
+  const { satisfies } = await import('../src/doctor.js');
+  const range = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node;
+  assert.deepEqual(['20.18.0', '20.19.0', '21.0.0', '22.12.0', '22.13.0', '23.4.0', '24.1.0'].map((v) => satisfies(v, range)), [false, true, false, false, true, false, true]);
+});
