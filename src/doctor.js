@@ -47,8 +47,9 @@ export async function doctor(project) {
 
   // 動画は output が video のときに必要。撮影（capture）も同じ Playwright と Chromium を使う。
   const video = cfg.values.output === 'video';
-  const need = (ok) => (ok ? 'ok' : video ? 'ng' : 'skip');
-  const note = video ? '' : '（動画と撮影で使う）';
+  // capture は出力によらず Playwright と Chromium を使うので、動画を作らない設定でも、足りなければ ! で直し方を示す。
+  const need = (ok) => (ok ? 'ok' : video ? 'ng' : 'warn');
+  const note = video ? '' : '（撮影と動画で使う）';
   let chromiumPath = cfg.values.chromium;
   const hasPlaywright = fs.existsSync(path.join(root, 'node_modules', 'playwright', 'package.json'));
   add('Playwright', need(hasPlaywright), hasPlaywright ? '' : `ありません${note}`, hasPlaywright ? '' : inRoot('npm install playwright'));

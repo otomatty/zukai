@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, stateDir, scopeNames, display, listedKeys, closest, pad, widthOf, invalid } from './config.js';
+import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, scopeNames, display, listedKeys, closest, pad, widthOf, invalid } from './config.js';
 
 const SECTIONS = ['skills', 'output', 'video', 'confluence'];
 // セクションを書かずに setup を実行したときに質問するセクション。
@@ -291,8 +291,8 @@ function printPlan(plan) {
   }
 }
 
+// .zukai/ は、手元の設定を書くときに setValue が作る。この PC だけに書くときに、プロジェクトに .zukai/ を作らないため。
 function apply(plan) {
-  stateDir(plan.project);
   for (const it of plan.items) {
     if (it.kind === 'create') ensureTeamFile(plan.project);
     else if (it.kind === 'set') setValue(plan.project, it.key, it.value, it.scope);
@@ -306,14 +306,16 @@ function apply(plan) {
 
 // 対話の答えと同じ設定を、対話なしで行うコマンド。チームの手順書や、AI への指示にそのまま使える。
 export function equivalent(project, answers, changed, scope, want) {
-  const q = (v) => (/^[\w./:@,-]+$/.test(v) ? v : `'${String(v).replaceAll("'", "'\\''")}'`);
+  // Windows のシェル（cmd、PowerShell）は単一引用符で囲む書き方を解さないので、二重引用符で囲む。
+  const q = (v) =>
+    /^[\w./:@,-]+$/.test(v) ? v : process.platform === 'win32' ? `"${String(v).replaceAll('"', '""')}"` : `'${String(v).replaceAll("'", "'\\''")}'`;
   const parts = ['zukai', 'setup'];
   // 既定のセクションと同じ組み合わせのときだけ、セクションを省く。
   if (want.size !== DEFAULT_SECTIONS.length || DEFAULT_SECTIONS.some((s) => !want.has(s))) parts.push(...want);
   if (path.resolve(project) !== path.resolve(projectOf(process.cwd()))) parts.push(`--dir=${q(project)}`);
   if (answers.skills) parts.push(`--skills=${answers.skills.where}`, ...(answers.skills.tools.length ? [`--tools=${answers.skills.tools.join(',')}`] : []));
   const flagOf = Object.fromEntries(Object.entries(flagKeys).map(([f, k]) => [k, f]));
-  for (const [key, v] of changed) parts.push(`--${flagOf[key]}=${v === null ? "''" : q(specOf(key).type === 'path' ? path.relative(process.cwd(), v) || '.' : v)}`);
+  for (const [key, v] of changed) parts.push(`--${flagOf[key]}=${v === null ? (process.platform === 'win32' ? '""' : "''") : q(specOf(key).type === 'path' ? path.relative(process.cwd(), v) || '.' : v)}`);
   if (changed.length && scope !== 'team') parts.push(`--scope=${scope}`);
   parts.push('--yes');
   return parts.join(' ');

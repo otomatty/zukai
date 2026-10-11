@@ -204,3 +204,36 @@ test('URL は接続先のホスト名まで検査し、setup の同じ設定の�
   assert.match(equivalent(project, answers, [], 'team', new Set(['output', 'video', 'confluence'])), /^zukai setup output video confluence /);
   assert.doesNotMatch(equivalent(project, answers, [], 'team', new Set(['skills', 'output', 'confluence'])), /setup (skills|output)/);
 });
+
+test('この PC だけにスキルを書く setup は、プロジェクトに .zukai/ を作らない', () => {
+  const home = tmp('user-skill-home');
+  const project = tmp('user-skill');
+  fs.mkdirSync(path.join(project, '.git'));
+  const r = run(['setup', 'skills', '--skills=user', '--tools=claude', '--yes'], { cwd: project, home });
+  assert.equal(r.code, 0, r.err);
+  assert.ok(fs.existsSync(path.join(home, '.claude/skills/zukai-answer/SKILL.md')));
+  assert.ok(!fs.existsSync(path.join(project, '.zukai')));
+});
+
+test('doctor は、動画を作らない設定でも、撮影に要る Playwright と Chromium が無ければ直し方を示す', async () =>
+  withHome(async () => {
+    const { doctor } = await import('../src/doctor.js');
+    const r = await doctor(tmp('doctor'));
+    for (const label of ['Playwright', 'Chromium']) {
+      const c = r.checks.find((x) => x.label === label);
+      assert.ok(c.status === 'ok' || (c.status === 'warn' && c.fix), `${label}: ${c.status}`);
+    }
+  }));
+
+test('Windows では、同じ設定のコマンドの値を二重引用符で囲む', async () => {
+  const { equivalent } = await import('../src/setup.js');
+  const saved = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    const cmd = equivalent(process.cwd(), { skills: null, values: {}, credentials: {} }, [['video.style', "it's ok"], ['confluence.base', null]], 'team', new Set(['video']));
+    assert.match(cmd, /--style="it's ok"/);
+    assert.match(cmd, /--confluence-base="" /);
+  } finally {
+    Object.defineProperty(process, 'platform', saved);
+  }
+});
