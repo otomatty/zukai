@@ -173,6 +173,7 @@ async function probe(browser, plan, tokens, L, id) {
   const dur = sc.end - sc.start;
   const findings = [...sc.findings];
   let broken = false;
+  let dropMotion = false;
   let p;
   try {
     p = await openPage(browser, pageHtml(plan, tokens, id), plan, L);
@@ -217,6 +218,8 @@ async function probe(browser, plan, tokens, L, id) {
     if (sound && sound.peak > 1) findings.push({ severity: 'warn', rule: 'V301', message: `zk.sound の音の最大値が ${sound.peak.toFixed(2)} で、音が割れます。1以下にしてください。` });
     // frame の中の例外は、その時刻だけの問題のことがあるので warn にとどめる。
     for (const e of await p.page.evaluate(() => window.zkErrors())) findings.push({ severity: 'warn', rule: 'V002', message: e.message });
+    // 型の動きが例外を出したシーンは、仕上げでは型の動きを使わない。途中で切り替えると、型の動きが登録した効果音が、自動の動きの音と一緒に残るため。
+    dropMotion = (await p.page.evaluate(() => window.zkMotionFailed())).includes(id);
     drainPageErrors('コマを進めている間に、捕まえられない例外が起きました。');
   } catch (e) {
     if (!(e instanceof Runaway)) throw e;
@@ -225,7 +228,7 @@ async function probe(browser, plan, tokens, L, id) {
   } finally {
     await p?.close();
   }
-  return { id, heading: sc.heading, kind: sc.kind, findings, broken: broken && sc.kind === 'free' };
+  return { id, heading: sc.heading, kind: sc.kind, findings, broken: broken && sc.kind === 'free', dropMotion };
 }
 
 // すべてのシーンを調べ、使えないシーンを自動の動きに差し替えた時間割を返す。
@@ -241,9 +244,13 @@ async function guarded(browser, prep) {
     if (s.role && s.end - s.start > L.maxShotSeconds) results[i].findings.push({ severity: 'warn', rule: 'V107', message: `ショットが${(s.end - s.start).toFixed(1)}秒あります。目安は${L.maxShotSeconds}秒までです。ショットを分けてください。` });
   });
   if (plan.duration > L.maxTotalSeconds) results[0].findings.push({ severity: 'warn', rule: 'V106', message: `動画全体が${plan.duration.toFixed(0)}秒あります。上限の目安は${L.maxTotalSeconds}秒です。` });
-  if (results.some((r) => r.broken)) {
-    prep.scenes = prep.scenes.map((s, i) => (results[i].broken ? fallback(s) : s));
+  if (results.some((r) => r.broken || r.dropMotion)) {
+    prep.scenes = prep.scenes.map((s, i) => {
+      const next = results[i].broken ? fallback(s) : s;
+      return results[i].dropMotion ? { ...next, figureType: null } : next;
+    });
     results.filter((r) => r.broken).forEach((r) => r.findings.push({ severity: 'error', rule: 'V000', message: 'このシーンは、ガードレールに引っかかったため自動の動きに差し替えました。' }));
+    results.filter((r) => r.dropMotion && !r.broken).forEach((r) => r.findings.push({ severity: 'warn', rule: 'V002', message: 'このシーンの図は、型の動き（motion.js）が例外を出したため、自動の動きで書き出します。' }));
     plan = prep.planOf(prep.scenes);
   }
   return { plan, results };

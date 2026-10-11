@@ -69,6 +69,8 @@
   const errors = [];
   // 型の名前は利用者が決めるので、constructor のような、オブジェクトが元から持つ名前を拾わないようにする。
   const typeMotions = Object.create(null);
+  // 型の動きが例外を出して、自動の動きに切り替えたシーン。エンジンは、仕上げの書き出しでこのシーンの型の動きを使わない。
+  const motionFailed = new Set();
   const cues = [];
   const hooks = [];
   const sounds = [];
@@ -248,6 +250,7 @@
             // 図を元に戻して、自動の動きにする。t を渡すと、作り直した動きをその時刻に合わせる（毎コマの処理の途中で壊れたとき）。
             const fallback = (t) => {
               broken = true;
+              motionFailed.add(sc.id);
               w.getAnimations({ subtree: true }).forEach((a) => a.cancel());
               w.innerHTML = before;
               const fresh = w.querySelector('svg');
@@ -487,4 +490,5 @@
     return out;
   };
   window.zkErrors = () => errors.splice(0);
+  window.zkMotionFailed = () => [...motionFailed];
 })();

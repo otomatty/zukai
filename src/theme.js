@@ -315,8 +315,9 @@ export const SERIES_GAP = 23;
 // 既定の灰色（#a8b0b9）が白地で 2.2:1 なので、それは通し、紙と見分けにくい色だけを知らせる。
 // 2つ目からの灰色は、chart.muted を文字の色に寄せて作る（src/figures/chart.js の grey）。紙からは chart.muted より離れるので、chart.muted だけを確かめればよい。
 const MUTED_BG = 2;
-// 系列の色が足りないときの残りの色（chart.rest）は、「その他」に使う淡い色。既定（#cdd3d9）が白地で 1.5:1 なので、紙とほぼ同じ色だけを知らせる。
-const REST_BG = 1.4;
+// 淡くてよい線や面（chart.rest、gitgraph のブランチの線とレーン）が、紙と見分けられる下限。
+// 既定の chart.rest（#cdd3d9）と gitgraph の黄色（#FACC15）が白地で 1.5:1 なので、紙とほぼ同じ色だけを知らせる。
+const FAINT = 1.4;
 // 系列の色を順に使う型（stack など）の、色の数の上限。contract/limits.json の stack.maxItems と同じ。
 const MAX_SERIES = 5;
 
@@ -353,7 +354,7 @@ export async function checkTheme(t) {
     // neutral では、強調しない棒や線を chart.muted（と、それを文字の色に寄せた色）で描く。
     // series でも、系列の色が足りなければ、次の1つを chart.muted、その先を chart.rest で描く（src/figures/chart.js の seriesColor）。
     if (chart.mode === 'neutral' || chart.series.length < MAX_SERIES) pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
-    if (chart.mode === 'series' && chart.series.length < MAX_SERIES - 1) pair('残りの系列', chart.rest, c.paper, `${chartAt}.rest`, `${at}.paper`, REST_BG, 'warn');
+    if (chart.mode === 'series' && chart.series.length < MAX_SERIES - 1) pair('残りの系列', chart.rest, c.paper, `${chartAt}.rest`, `${at}.paper`, FAINT, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {
         for (let j = i + 1; j < chart.series.length; j++) {
@@ -364,6 +365,14 @@ export async function checkTheme(t) {
     }
   };
   figure(t.color, t.chart, 'color');
+  // gitgraph。最初のブランチの名前は紙の上、ほかはブランチの色の上に書く（src/figures/gitgraph.js）。
+  const g = t.gitgraph;
+  pair('ブランチの名前', g.ink, t.color.paper, 'gitgraph.ink', 'color.paper');
+  g.branch.forEach((b, i) => {
+    if (i > 0) pair('ブランチの名前', g.ink, b, 'gitgraph.ink', `gitgraph.branch[${i}]`);
+    pair('ブランチの色', b, t.color.paper, `gitgraph.branch[${i}]`, 'color.paper', FAINT, 'warn');
+  });
+  pair('ブランチの色', g.lane, t.color.paper, 'gitgraph.lane', 'color.paper', FAINT, 'warn');
   pair('ページ', t.page.error, t.color.paper, 'page.error', 'color.paper');
   // 画面の注釈の番号は、資料でも動画でも screenshot.onNote で書く。動画の図は color を差し替えるので、onAccent を使うと動画でだけ色が変わる。
   pair('画面の注釈', t.screenshot.onNote, t.screenshot.note, 'screenshot.onNote', 'screenshot.note');

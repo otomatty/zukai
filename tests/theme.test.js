@@ -568,6 +568,15 @@ test('画面の注釈の番号は、資料でも動画でも screenshot.onNote �
   assert.deepEqual((await checkTheme(baseTokens())).filter((x) => x.what === '画面の注釈'), []);
 });
 
+test('gitgraph の色は、ブランチの名前を紙とブランチの色の上で、線を紙の上で確かめる', async () => {
+  const white = Array(8).fill('#ffffff');
+  const f = await checkTheme(readTheme(themeDir({ gitgraph: { ink: '#ffffff', branch: white, lane: '#ffffff' } })).tokens);
+  assert.ok(f.some((x) => x.what === 'ブランチの名前' && x.severity === 'error' && /gitgraph\.ink（#ffffff）と color\.paper/.test(x.message)), JSON.stringify(f));
+  assert.ok(f.some((x) => x.what === 'ブランチの色' && x.severity === 'warn' && /gitgraph\.lane/.test(x.message)));
+  assert.equal(f.filter((x) => x.what === 'ブランチの色').length, 9);
+  assert.deepEqual((await checkTheme(baseTokens())).filter((x) => x.what.startsWith('ブランチ')), []);
+});
+
 test('字幕の文字は、背景に重ねた半透明の帯の色で確かめる', async () => {
   // 帯は不透明なら 4.69:1 だが、白い背景に 80% で重ねると #333333 になり、2.8:1 しかない。
   const t = readTheme(themeDir({ video: { background: '#ffffff', subtitle: { band: '#000000', ink: '#777777' } } })).tokens;
@@ -577,6 +586,18 @@ test('字幕の文字は、背景に重ねた半透明の帯の色で確かめ�
 
 // Playwright と Chromium がある環境でだけ動かす。
 const hasBrowser = await import('playwright').then(() => true, () => false);
+test('毎コマの処理で壊れた型の動きは、仕上げの書き出しで使わない', { skip: !hasBrowser && 'Playwright がありません', timeout: 120000 }, async () => {
+  // 途中で切り替えると、型の動きが登録した効果音が、自動の動きの音と一緒に残るため。
+  const { dir } = typedProject({ 'motion.js': "ctx.sfx('chime', 0.2); ctx.frame(() => { throw new Error('bad frame'); });" });
+  const file = path.join(dir, 'a.md');
+  fs.writeFileSync(file, statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数'));
+  const { frames } = await import('../src/video/encode.js');
+  const r = await frames(file, { project: dir });
+  const i = r.scenes.findIndex((s) => s.heading === '実績');
+  assert.ok(i > 0, JSON.stringify(r.scenes.map((s) => s.heading)));
+  assert.ok(r.results[i].findings.some((f) => /型の動き（motion\.js）が例外を出したため、自動の動きで書き出します/.test(f.message)), JSON.stringify(r.results[i].findings));
+});
+
 test('型の動きが例外を出したら、図を元に戻して自動の動きにする', { skip: !hasBrowser && 'Playwright がありません', timeout: 120000 }, async () => {
   const { scenesOf, timeline, estimateVoice } = await import('../src/video/script.js');
   const { pageHtml } = await import('../src/video/encode.js');
