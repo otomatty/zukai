@@ -81,7 +81,7 @@ Claude Code から使う場合は、`skills/zukai/SKILL.md` をスキルとし�
 | この PC | `~/.zukai/config.json` | この PC の全プロジェクト |
 | チーム | `zukai.config.json` | コミットしてチームで共有する |
 | 手元 | `.zukai/config.json` | この PC のこのプロジェクトだけ。Git の管理に入らない |
-| 本人だけ | `~/.zukai/credentials.json` | API キーとトークン。本人だけが読める権限で置く |
+| 本人だけ | `~/.zukai/credentials.json` | API キーとトークン。本人だけが読める権限で置く。Windows ではこの権限が効かないので、ホームのフォルダの権限で守る |
 
 表の下ほど優先し、環境変数はさらに優先します。たとえば、チームで `output` を `video` にしていても、手元で `document` にすれば、自分だけ資料だけになります。
 
@@ -206,7 +206,7 @@ zukai video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960�
 
 効果音は ZzFX（MIT、`src/video/vendor/`）で作ります。AI は、名前の付いた12個の音（`appear`、`whoosh`、`chime` など）を選ぶか、ZzFX の数値を書いて新しい音を作ります。音の選び方は `spikes/sfx/` で聞き比べました。
 
-ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（既定は `gemini-3.8-flash-tts`、声は `Kore`。`video.model` と `video.voice` で変える）で読み上げ、`.zukai/cache/tts` に保存します。API キーは `zukai login gemini` で `~/.zukai/credentials.json` に保存するか、環境変数 `GEMINI_API_KEY` に置きます。キーが無いときは、字幕だけの無音の動画になります。そのことは `zukai doctor` が知らせ、`zukai prompt` の指示にも書くので、AI がチャットで利用者に伝えます。無料枠のキーでは、送った文が Google の製品改善に使われます。
+ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（既定は `gemini-3.8-flash-tts`、声は `Kore`。`video.model` と `video.voice` で変える）で読み上げ、`.zukai/cache/tts` に保存します。API キーは `zukai login gemini` で `~/.zukai/credentials.json` に保存するか、環境変数 `GEMINI_API_KEY` に置きます。キーが無いときは、字幕だけの無音の動画になります。そのことは `zukai doctor` が知らせ、`zukai prompt` の指示にも書くので、AI がチャットで利用者に伝えます。無料枠のキーでは、地域と利用規約によって、送った文が Google の製品改善に使われることがあります。条件は Gemini API の利用規約で確かめます。
 
 動画を作るには、Playwright と Chromium（`npm install playwright`、`npx playwright install chromium`）と、コマンドのパスに入った ffmpeg が必要です。足りないものは `zukai doctor` が、直すコマンドと一緒に表示します。
 

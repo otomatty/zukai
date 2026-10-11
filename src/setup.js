@@ -197,7 +197,7 @@ async function askAll(want, cfg, opt) {
     if (process.env.GEMINI_API_KEY) console.log('Gemini の API キー: 環境変数 GEMINI_API_KEY を使います。');
     else {
       const has = Boolean(cfg.values['gemini.apiKey']);
-      console.log('ナレーションの読み上げに、Gemini の API キーを使います。無料枠のキーでは、送った文が Google の製品改善に使われます。');
+      console.log('ナレーションの読み上げに、Gemini の API キーを使います。無料枠のキーでは、地域と利用規約によって、送った文が Google の製品改善に使われることがあります。');
       const key = await readSecret(`Gemini の API キー（Enter で${has ? '今のキーのまま' : '後回し。無音の動画になります'}）`);
       if (key) answers.credentials['gemini.apiKey'] = key;
     }

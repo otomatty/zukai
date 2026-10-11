@@ -7,7 +7,7 @@
 | 案 | 中身 | ライセンス | 動画への組み込み方 |
 |---|---|---|---|
 | ZzFX | 21個の数値から効果音を作る小さなライブラリ（v1.4.0） | MIT（Frank Force） | ページに入れ、AI が `zk.sound` の中で数値を決めて音を作る |
-| Kenney | Interface Sounds（100個）と Impact Sounds（130個）の音のファイル | CC0（www.kenney.nl） | 選んだファイルを設定の `video.sfx.files` に書く（`zukai config set video.sfx.files.appear パス`）。今の仕組みのまま使える |
+| Kenney | Interface Sounds（100個）と Impact Sounds（130個）の音のファイル | CC0（www.kenney.nl） | 選んだファイルを設定の `video.sfx.files` に書く（手元にだけある音のファイルは `zukai config set video.sfx.files.appear パス --scope=local`）。今の仕組みのまま使える |
 
 ## 作り方
 
