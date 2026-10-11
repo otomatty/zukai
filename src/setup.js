@@ -7,6 +7,8 @@ import path from 'node:path';
 import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, stateDir, scopeNames, display, listedKeys, closest, pad, widthOf, invalid } from './config.js';
 
 const SECTIONS = ['skills', 'output', 'video', 'confluence'];
+// セクションを書かずに setup を実行したときに質問するセクション。
+const DEFAULT_SECTIONS = ['skills', 'output', 'confluence'];
 const interactive = (has) => Boolean(process.stdin.isTTY && process.stdout.isTTY) && !has('yes');
 const ui = () => import('@inquirer/prompts');
 const home = os.homedir();
@@ -110,7 +112,7 @@ export async function setup({ sections, opt, has }) {
       throw new Error(`セクション「${s}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}${SECTIONS.join('、')} のどれかを書きます。`);
     }
   }
-  const want = new Set(sections.length ? sections : ['skills', 'output', 'confluence']);
+  const want = new Set(sections.length ? sections : DEFAULT_SECTIONS);
   const project = path.resolve(opt('dir') ?? projectOf(process.cwd()));
   const cfg = loadConfig(project);
   const ask = interactive(has);
@@ -303,10 +305,11 @@ function apply(plan) {
 }
 
 // 対話の答えと同じ設定を、対話なしで行うコマンド。チームの手順書や、AI への指示にそのまま使える。
-function equivalent(project, answers, changed, scope, want) {
+export function equivalent(project, answers, changed, scope, want) {
   const q = (v) => (/^[\w./:@,-]+$/.test(v) ? v : `'${String(v).replaceAll("'", "'\\''")}'`);
   const parts = ['zukai', 'setup'];
-  if (want.size < 3) parts.push(...want);
+  // 既定のセクションと同じ組み合わせのときだけ、セクションを省く。
+  if (want.size !== DEFAULT_SECTIONS.length || DEFAULT_SECTIONS.some((s) => !want.has(s))) parts.push(...want);
   if (path.resolve(project) !== path.resolve(projectOf(process.cwd()))) parts.push(`--dir=${q(project)}`);
   if (answers.skills) parts.push(`--skills=${answers.skills.where}`, ...(answers.skills.tools.length ? [`--tools=${answers.skills.tools.join(',')}`] : []));
   const flagOf = Object.fromEntries(Object.entries(flagKeys).map(([f, k]) => [k, f]));

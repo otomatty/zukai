@@ -191,3 +191,16 @@ test('doctor は、依存パッケージが求める Node の版を確かめる'
   const range = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node;
   assert.deepEqual(['20.18.0', '20.19.0', '21.0.0', '22.12.0', '22.13.0', '23.4.0', '24.1.0'].map((v) => satisfies(v, range)), [false, true, false, false, true, false, true]);
 });
+
+test('URL は接続先のホスト名まで検査し、setup の同じ設定のコマンドは選んだセクションを残す', async () => {
+  const { invalid, specOf } = await import('../src/config.js');
+  const url = specOf('confluence.base');
+  assert.ok(invalid(url, 'https://'));
+  assert.ok(invalid(url, 'ftp://example.com'));
+  assert.equal(invalid(url, 'https://ex.atlassian.net/wiki'), null);
+  const { equivalent } = await import('../src/setup.js');
+  const answers = { skills: null, values: {}, credentials: {} };
+  const project = process.cwd();
+  assert.match(equivalent(project, answers, [], 'team', new Set(['output', 'video', 'confluence'])), /^zukai setup output video confluence /);
+  assert.doesNotMatch(equivalent(project, answers, [], 'team', new Set(['skills', 'output', 'confluence'])), /setup (skills|output)/);
+});

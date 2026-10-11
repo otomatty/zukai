@@ -106,8 +106,16 @@ export function invalid(s, v) {
     case 'string':
     case 'path':
       return typeof v === 'string' && v ? null : '文字列で書いてください。';
-    case 'url':
-      return typeof v === 'string' && /^https?:\/\//.test(v) ? null : 'http か https で始まる URL を書いてください。';
+    case 'url': {
+      // 「https://」だけのような、接続先の無い値を通さない。
+      let u = null;
+      try {
+        u = typeof v === 'string' ? new URL(v) : null;
+      } catch {
+        // URL として読めない。
+      }
+      return u && /^https?:$/.test(u.protocol) && u.hostname ? null : 'http か https で始まり、接続先のホスト名を含む URL を書いてください。';
+    }
     case 'number':
       if (typeof v !== 'number' || !Number.isFinite(v)) return '数値で書いてください。';
       return (s.min !== undefined && v < s.min) || (s.max !== undefined && v > s.max) ? `${s.min}〜${s.max} の数値で書いてください。` : null;
