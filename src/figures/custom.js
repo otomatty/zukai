@@ -89,12 +89,11 @@ export function makeType(d) {
     // 文字の長さは、項目の定義（max）で確かめる。
     labels: () => [],
     notes: () => [],
-    // 用語の表記（P007）の検査に渡す、図に出る文字。仕様の中の文字の値をすべて集める。
-    texts: (spec) => {
-      const out = [];
-      const walk = (v) => (typeof v === 'string' ? out.push(v) : Array.isArray(v) ? v.forEach(walk) : v && typeof v === 'object' ? Object.values(v).forEach(walk) : null);
-      Object.entries(spec).forEach(([k, v]) => k !== 'type' && walk(v));
-      return out;
+    // 用語の表記（P007）の検査に渡す、図に出る文字。ひな形を埋めた SVG の text 要素の文字だけを返す。
+    // 属性（id や href）にだけ使う値は、読み手には見えないので調べない。
+    texts: (spec, ctx) => {
+      const svg = toSvg(spec, tokensOf(ctx));
+      return [...free.labels({ svg }), ...free.notes({ svg })];
     },
     title: (spec, t) => free.title({ svg: toSvg(spec, t) }),
     render: (spec, t) => free.render({ svg: toSvg(spec, t) }, t),

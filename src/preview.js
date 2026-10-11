@@ -141,7 +141,8 @@ export async function previewTheme(dir) {
 // 案の書き方。「emphasis.box=tint」のように、項目と値を = でつなぐ。1つの案で複数の値を変えるときは + でつなぐ。
 // 値は JSON として読めればその値（["#0432ff","#ff2f92"] や 3）、読めなければ文字にする。
 export function parseVariant(text) {
-  const set = {};
+  // __proto__ のような名前も、そのまま項目の名前として readTheme に渡し、そこで誤りにする。
+  const set = Object.create(null);
   for (const part of text.split('+')) {
     const i = part.indexOf('=');
     if (i < 1) throw new Error(`案「${text}」を読めません。emphasis.box=tint のように、項目と値を = でつなぎます。複数の値は + でつなぎます。`);
@@ -154,7 +155,7 @@ export function parseVariant(text) {
     }
     set[part.slice(0, i).trim()] = v;
   }
-  return set;
+  return { ...set };
 }
 
 // 見比べに使う図。強調した箱と、グラフの色の付け方が分かる型を既定にする。

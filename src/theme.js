@@ -18,8 +18,11 @@ const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 export const isColor = (v) => typeof v === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
 // #rgb を #rrggbb にする。透明度を後ろに足す使い方（字幕の帯の「#rrggbbcc」など）があるため、読むときにそろえる。
 const long = (c) => (c.length === 4 ? `#${[...c.slice(1)].map((x) => x + x).join('')}` : c).toLowerCase();
-// フォントの指定は、CSS と SVG の style にそのまま入る。宣言や要素の外へ出られる文字を通さない。
-const isFont = (v) => typeof v === 'string' && v.trim() !== '' && !/[;{}<>\\\n\r]/.test(v);
+// フォントの指定は、CSS と SVG の style にそのまま入る。宣言や要素の外へ出られる文字、注釈（/* */）、閉じていない引用符を通さないため、
+// 「"名前"」「'名前'」「引用符の無い名前」をカンマで並べた形だけを認める。
+const FONT_NAME = String.raw`\s*(?:"[^"\\;{}<>/*\n\r]*"|'[^'\\;{}<>/*\n\r]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ -]*)\s*`;
+const FONT = new RegExp(`^${FONT_NAME}(?:,${FONT_NAME})*$`, 'u');
+const isFont = (v) => typeof v === 'string' && v.trim() !== '' && FONT.test(v);
 
 // 長さを変えられる配列と、選べる数。ここに無い配列は、既定と同じ数の色で書く。
 const LENGTHS = { 'gradient.stops': [0, 2, 3, 4, 5], 'chart.series': [3, 4, 5], 'video.figure.chart.series': [3, 4, 5] };
@@ -67,7 +70,7 @@ function overlay(base, over, at, problems) {
       else problems.push(`${key} の「${v}」は色ではありません。#rrggbb か #rgb で書きます。`);
     } else if (k === 'font') {
       if (isFont(v)) out[k] = v;
-      else problems.push(`${key} は、CSS の font-family の形で書きます。; { } < > \\ と改行は使えません。`);
+      else problems.push(`${key} は、CSS の font-family の形（"名前", sans-serif のように、引用符で囲んだ名前か英数字の名前をカンマで並べる）で書きます。; { } < > \\ / * と改行は使えません。`);
     } else if (typeof v === 'string' && /^[\w-]+$/.test(v)) out[k] = v;
     else problems.push(`${key} は、英数字とハイフンの名前で書きます。`);
   }
@@ -77,11 +80,17 @@ function overlay(base, over, at, problems) {
 // テーマのフォルダを読む。dir が null なら、テーマなし（contract/tokens.json のまま）。
 // name はテーマの名前で、rules.md の # 見出しか、フォルダの名前。
 // over に、名前を点でつないだ値（{ 'emphasis.box': 'tint' }）を書き込む。
-function withSet(over, set) {
+// __proto__ などの名前でたどると、すべてのオブジェクトの元を書き換えてしまうので、誤りにする。
+const UNSAFE = ['__proto__', 'constructor', 'prototype'];
+function withSet(over, set, problems) {
   for (const [key, v] of Object.entries(set)) {
     const keys = key.split('.');
+    if (keys.some((k) => UNSAFE.includes(k))) {
+      problems.push(`${key} という項目はありません。`);
+      continue;
+    }
     let o = over;
-    for (const k of keys.slice(0, -1)) o = isObj(o[k]) ? o[k] : (o[k] = {});
+    for (const k of keys.slice(0, -1)) o = Object.hasOwn(o, k) && isObj(o[k]) ? o[k] : (o[k] = {});
     o[keys.at(-1)] = v;
   }
   return over;
@@ -99,7 +108,7 @@ export function readTheme(dir, { set = {} } = {}) {
   if (!dir) {
     // テーマなしでも、案（set）は試せる。
     const problems = [];
-    const tokens = Object.keys(set).length ? overlay(base, withSet({}, set), '', problems) : base;
+    const tokens = Object.keys(set).length ? overlay(base, withSet({}, set, problems), '', problems) : base;
     problems.push(...gradientProblems(tokens));
     return { dir: null, name: null, tokens, rules: '', types: [], problems };
   }
@@ -112,7 +121,7 @@ export function readTheme(dir, { set = {} } = {}) {
   if (fs.existsSync(file) || Object.keys(set).length) {
     try {
       const over = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
-      if (isObj(over)) tokens = overlay(base, withSet(over, set), '', problems);
+      if (isObj(over)) tokens = overlay(base, withSet(over, set, problems), '', problems);
       else problems.push('tokens.json は JSON のオブジェクトで書きます。');
       problems.push(...gradientProblems(tokens));
     } catch (e) {

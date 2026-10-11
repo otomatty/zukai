@@ -146,7 +146,7 @@ function lintTerms(doc, terms, source, limits, ctx) {
     if (b.kind === 'figure' && b.spec && ctx.types[b.spec.type] && !b.parseError && !ctx.types[b.spec.type].validate(b.spec, limits, ctx).length) {
       const t = ctx.types[b.spec.type];
       // texts を持つ型（テーマの独自の型）は、図に出る文字をすべて返す。長さの検査は型の側で済んでいるので、labels と notes には入れない。
-      for (const x of t.texts?.(b.spec) ?? [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
+      for (const x of t.texts?.(b.spec, ctx) ?? [...(t.labels?.(b.spec) ?? []), ...(t.notes?.(b.spec) ?? [])]) texts.push({ text: x, line: b.line });
     }
     // 表は、資料にも動画にも出るので、セルの文字を行ごとに調べる。区切りの行（|---|）は飛ばす。
     if (b.kind === 'table') {

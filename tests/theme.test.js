@@ -55,6 +55,9 @@ test('無い項目、変えられない値、色でない値、外へ出られ�
   assert.equal(r.tokens.figure.width, baseTokens().figure.width);
   assert.equal(r.tokens.color.ink, baseTokens().color.ink);
   assert.match(readTheme(path.join(tmp('none'), 'nothing')).problems[0], /がありません/);
+  // 注釈（/* */）と、閉じていない引用符は、後ろの規則を壊すので通さない。
+  for (const font of ['foo/*', '"Noto Sans JP', "'a', b'", 'a, , b']) assert.match(readTheme(themeDir({ font })).problems.join('\n'), /font は、CSS の font-family の形/, font);
+  for (const font of [baseTokens().font, 'ヒラギノ角ゴ ProN, sans-serif', "'BIZ UDPGothic', system-ui"]) assert.deepEqual(readTheme(themeDir({ font })).problems, [], font);
 });
 
 test('既定の値は見た目の検査を通り、読めない文字は error、見分けにくい系列は warn にする', async () => {
@@ -372,6 +375,12 @@ test('案は、項目=値 を + でつなぎ、値は JSON として読めれば
   assert.match(readTheme(themeDir(GRAD), { set: { 'emphasis.box': 'shiny' } }).problems.join('\n'), /emphasis.box は、flat、fill、tint、outline のどれか/);
   assert.equal(readTheme(themeDir(GRAD), { set: { 'emphasis.box': 'tint' } }).tokens.emphasis.box, 'tint');
   assert.equal(readTheme(null, { set: { 'chart.mode': 'neutral' } }).tokens.chart.mode, 'neutral');
+  // __proto__ などでたどる案は誤りにし、すべてのオブジェクトの元を書き換えない。
+  for (const v of ['__proto__.emphasis={"box":"tint"}', '__proto__={"emphasis":{"box":"tint"}}', 'constructor.prototype.x=1']) {
+    assert.match(readTheme(themeDir(GRAD), { set: parseVariant(v) }).problems.join('\n'), /という項目はありません/, v);
+  }
+  assert.equal({}.emphasis, undefined);
+  assert.equal(readTheme(themeDir(GRAD), { set: parseVariant('emphasis.box=tint') }).tokens.emphasis.box, 'tint');
 });
 
 test('theme compare は、今のテーマと案を、検査の結果と図と色覚の見え方で並べる', () => {
@@ -421,6 +430,16 @@ test('独自の型の文字も、用語の表記（P007）の検査を受ける'
   const p7 = r.findings.filter((f) => f.rule === 'P007');
   assert.equal(p7.length, 1, JSON.stringify(r.findings));
   assert.match(p7[0].message, /印/);
+
+  // 属性にだけ使う値は、読み手に見えないので調べない。
+  const attr = typedProject({
+    'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, key: { type: 'string', max: 10, desc: '図の名前' } } },
+    'figure.svg': STAT['figure.svg'].replace('<g>', '<g id="{{key}}">'),
+  });
+  fs.writeFileSync(path.join(attr.dir, 'zukai.config.json'), JSON.stringify({ theme: 'brand', terms: [{ use: 'トークン', avoid: ['印'] }] }));
+  fs.writeFileSync(path.join(attr.dir, 'a.md'), statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数\nkey: 印'));
+  const hidden = JSON.parse(run(['lint', 'a.md', '--no-log', '--no-textlint', '--json'], { cwd: attr.dir, home: attr.home }).out)[0];
+  assert.deepEqual(hidden.findings.filter((f) => f.rule === 'P007'), []);
 });
 
 test('#rgb の色は #rrggbb にそろえる。透明度を後ろに足す使い方があるため', () => {
