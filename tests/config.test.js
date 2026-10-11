@@ -197,6 +197,8 @@ test('URL は接続先のホスト名まで検査し、setup の同じ設定の�
   const url = specOf('confluence.base');
   assert.ok(invalid(url, 'https://'));
   assert.ok(invalid(url, 'ftp://example.com'));
+  assert.ok(invalid(url, 'https://ex.atlassian.net/wiki?homepageId=123'));
+  assert.ok(invalid(url, 'https://ex.atlassian.net/wiki#top'));
   assert.equal(invalid(url, 'https://ex.atlassian.net/wiki'), null);
   const { equivalent } = await import('../src/setup.js');
   const answers = { skills: null, values: {}, credentials: {} };

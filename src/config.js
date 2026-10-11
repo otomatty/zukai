@@ -114,6 +114,8 @@ export function invalid(s, v) {
       } catch {
         // URL として読めない。
       }
+      // ? や # を含む URL は、後ろに API のパスを足すと、そのパスが問い合わせの一部になり、別の宛先に届く。
+      if (u && (u.search || u.hash)) return '? や # を含まない URL を書いてください（例: https://example.atlassian.net/wiki）。';
       return u && /^https?:$/.test(u.protocol) && u.hostname ? null : 'http か https で始まり、接続先のホスト名を含む URL を書いてください。';
     }
     case 'number':
