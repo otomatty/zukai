@@ -17,11 +17,20 @@ function withHome(fn) {
   const home = tmp('home');
   Object.assign(process.env, { HOME: home, USERPROFILE: home });
   delete process.env.GEMINI_API_KEY;
-  try {
-    return fn(home);
-  } finally {
+  const restore = () => {
     for (const [k, v] of Object.entries(saved)) v === undefined ? delete process.env[k] : (process.env[k] = v);
+  };
+  let r;
+  try {
+    r = fn(home);
+  } catch (e) {
+    restore();
+    throw e;
   }
+  // 非同期の関数は、終わってから戻す。
+  if (r?.then) return r.finally(restore);
+  restore();
+  return r;
 }
 const run = (args, { cwd, home, input } = {}) => {
   const r = spawnSync(process.execPath, [cli, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, GEMINI_API_KEY: '' } });
@@ -119,3 +128,51 @@ test('setup --yes は質問せずに、チームの設定とスキルを書き�
   const list = run(['config', 'list', '--json'], { cwd: project, home });
   assert.equal(JSON.parse(list.out).values['gemini.apiKey'].value, '********');
 });
+
+test('null は既定値が「なし」の項目にだけ書け、__proto__ などの名前は受け付けない', () =>
+  withHome((home) => {
+    const project = tmp('null');
+    fs.mkdirSync(path.join(home, '.zukai'));
+    fs.writeFileSync(path.join(home, '.zukai', 'config.json'), JSON.stringify({ output: 'video', video: { bgm: '/music/a.mp3' } }));
+    fs.writeFileSync(path.join(project, 'zukai.config.json'), JSON.stringify({ output: null, video: { bgm: null } }));
+    const cfg = loadConfig(project);
+    assert.match(cfg.problems.find((p) => p.key === 'output')?.message ?? '', /null は書けません/);
+    assert.equal(cfg.values.output, 'video');
+    // BGM は既定値が「なし」なので、チームの null で PC の曲を消せる。
+    assert.deepEqual([cfg.values['video.bgm'], cfg.origins['video.bgm']], [null, 'team']);
+    fs.writeFileSync(path.join(project, 'zukai.config.json'), '{"repos":{"__proto__":{"link":"https://evil/{path}"}}}');
+    assert.match(loadConfig(project).problems[0].message, /はありません/);
+    assert.equal({}.link, undefined);
+    assert.throws(() => setValue(project, 'repos.__proto__.link', 'x'), /はありません/);
+    assert.equal({}.link, undefined);
+  }));
+
+test('setup は、手元の設定で同じ値になっていても、--scope=team ならチームの値を変える', () => {
+  const home = tmp('scope-home');
+  const project = tmp('scope');
+  fs.writeFileSync(path.join(project, 'zukai.config.json'), JSON.stringify({ output: 'document' }));
+  fs.mkdirSync(path.join(project, '.zukai'));
+  fs.writeFileSync(path.join(project, '.zukai', 'config.json'), JSON.stringify({ output: 'video' }));
+  const r = run(['setup', 'output', '--output=video', '--scope=team', '--yes'], { cwd: project, home });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(project, 'zukai.config.json'), 'utf8')).output, 'video');
+});
+
+test('publish は、設定の URL からページの URL を組み立てる', () =>
+  withHome(async () => {
+    const project = tmp('publish');
+    fs.writeFileSync(path.join(project, 'zukai.config.json'), JSON.stringify({ confluence: { base: 'https://ex.atlassian.net/wiki/', spaceId: '1' } }));
+    setValue(project, 'confluence.email', 'a@b.c', 'credentials');
+    setValue(project, 'confluence.token', 't', 'credentials');
+    const file = path.join(project, 'a.md');
+    fs.writeFileSync(file, '# 題名\n\n導入です。\n');
+    const saved = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({ id: '42' }), { status: 200 });
+    try {
+      const { publish } = await import('../src/confluence.js');
+      const r = await publish(file);
+      assert.equal(r.url, 'https://ex.atlassian.net/wiki/pages/viewpage.action?pageId=42');
+    } finally {
+      globalThis.fetch = saved;
+    }
+  }));

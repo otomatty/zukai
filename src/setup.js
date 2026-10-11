@@ -123,17 +123,22 @@ export async function setup({ sections, opt, has }) {
   const answers = ask ? await askAll(want, cfg, opt) : fromFlags(want, cfg, opt);
 
   // チームの設定を変える値は、チームに共有するか、自分だけにするかを1回だけ聞く。1人目の初回は聞かずにチームに書く。
-  const changed = Object.entries(answers.values).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(cfg.values[k]));
+  // 対話では、今効いている値から変えたものだけを候補にする。フラグで渡した値は、すべて候補にする。
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const candidates = Object.entries(answers.values).filter(([k, v]) => !ask || !same(v, cfg.values[k]));
   let scope = scopeFlag ?? 'team';
-  if (changed.length && !scopeFlag && ask && teamExists) {
+  if (candidates.length && !scopeFlag && ask && teamExists) {
     scope = await (await ui()).select({
-      message: `変える値（${changed.map(([k]) => k).join('、')}）を、どこに書きますか`,
+      message: `変える値（${candidates.map(([k]) => k).join('、')}）を、どこに書きますか`,
       choices: [
         { name: 'チームに共有する（zukai.config.json。コミットして共有する）', value: 'team' },
         { name: '自分だけ（.zukai/config.json。Git の管理に入らない）', value: 'local' },
       ],
     });
   }
+  // 書く置き場所までを重ねた値と比べる。手元の設定や環境変数で同じ値になっていても、チームに書くときはチームの値を変える。
+  const atScope = loadConfig(project, { upTo: scope }).values;
+  const changed = candidates.filter(([k, v]) => !same(v, atScope[k]));
 
   const plan = planOf(project, cfg, answers, changed, scope, want);
   printPlan(plan);
@@ -207,7 +212,10 @@ async function askAll(want, cfg, opt) {
         { name: 'Confluence にも登録する', value: 'confluence' },
       ],
     });
-    if (on === 'confluence') {
+    if (on === 'file') {
+      // ファイルだけにしたときは、接続先を「なし」にする。doctor が、使わない Confluence の認証を求めないようにするため。
+      for (const k of ['confluence.base', 'confluence.spaceId', 'confluence.parentId']) if (cfg.values[k] !== null) answers.values[k] = null;
+    } else {
       answers.values['confluence.base'] = await askValue('confluence.base', cfg, 'Confluence の URL（例: https://example.atlassian.net/wiki）');
       answers.values['confluence.spaceId'] = await askValue('confluence.spaceId', cfg, 'ページを作るスペースの ID');
       answers.values['confluence.parentId'] = await askValue('confluence.parentId', cfg, '親ページの ID（空ならスペースの直下）');

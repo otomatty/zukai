@@ -62,7 +62,8 @@ export function stateDir(project, ...sub) {
 }
 
 // 項目の名前から仕様を引く。* は任意の名前（英数字、下線、ハイフン）に当たる。
-const SEGMENT = /^[\w-]+$/;
+// __proto__ などは名前に使えない。入れ子の値を組み立てるときに、すべてのオブジェクトの元を書き換えないため。
+const SEGMENT = /^(?!(?:__proto__|constructor|prototype)$)[\w-]+$/;
 export function specOf(key) {
   if (spec[key]) return { name: key, ...spec[key] };
   const k = key.split('.');
@@ -93,9 +94,11 @@ const unknownKey = (key) => {
   return `項目「${key}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}項目の一覧は zukai help config で確かめられます。`;
 };
 
-// 値の検査。誤りがあれば、その理由を返す。null は「この置き場所では未設定」として、どの項目でも受け付ける。
+// 値の検査。誤りがあれば、その理由を返す。
+// null は「なし」を明示する値で、既定値が「なし」の項目（BGM、Confluence の URL など）にだけ書ける。下の置き場所の値を「なし」で上書きする。
+// output のように既定値がある項目には書けない。下の置き場所の値が、黙って失われないようにするため。
 export function invalid(s, v) {
-  if (v === null) return null;
+  if (v === null) return s.default === null || !('default' in s) ? null : `null は書けません。既定値（${JSON.stringify(s.default)}）に戻すときは、zukai config unset で項目を消します。`;
   switch (s.type) {
     case 'enum':
       return s.values.includes(v) ? null : `${s.values.join('、')} のどれかを書いてください。`;
@@ -165,7 +168,8 @@ const resolvePath = (scope, project, v) => (v === null ? null : path.resolve(sco
 
 // 設定を読む。values は項目ごとの値、origins はその値の出どころ、settings は入れ子にした値、problems は設定の誤り。
 // project が null のときは、この PC の設定と環境変数だけを読む。
-export function loadConfig(project) {
+// upTo を書くと、その置き場所までを重ね、それより優先する置き場所と環境変数は読まない。setup が、書く置き場所での今の値と比べるときに使う。
+export function loadConfig(project, { upTo = null } = {}) {
   const files = project ? filesOf(project) : { user: filesOf('.').user, credentials: filesOf('.').credentials };
   const problems = [];
   const values = {};
@@ -177,7 +181,8 @@ export function loadConfig(project) {
       origins[name] = 'default';
     }
   }
-  for (const scope of LAYERS) {
+  const layers = upTo ? LAYERS.slice(0, LAYERS.indexOf(upTo) + 1) : LAYERS;
+  for (const scope of layers) {
     if (!files[scope]) continue;
     const { data, error } = readJson(files[scope]);
     if (error) problems.push({ file: files[scope], key: null, message: error });
@@ -188,7 +193,7 @@ export function loadConfig(project) {
     }
   }
   for (const [name, s] of Object.entries(spec)) {
-    const v = s.env && process.env[s.env];
+    const v = !upTo && s.env && process.env[s.env];
     if (!v) continue;
     const why = invalid(s, v);
     if (why) problems.push({ file: null, key: name, message: `環境変数 ${s.env} の値が正しくありません。${why}` });

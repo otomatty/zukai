@@ -59,6 +59,8 @@ export async function doctor(project) {
   const conf = cfg.values['confluence.base'] || cfg.values['confluence.spaceId'];
   const lack = ['confluence.base', 'confluence.email', 'confluence.token'].filter((k) => !cfg.values[k]);
   add('Confluence', !conf ? 'skip' : lack.length ? 'ng' : 'ok', !conf ? '使わない設定です' : lack.length ? `${lack.join('、')} がありません` : cfg.values['confluence.base'], !conf ? '' : lack.includes('confluence.base') ? 'zukai setup confluence' : lack.length ? 'zukai login confluence' : '');
+  // スペース ID は、初回の publish でページを作るときに要る。--space-id でも渡せるので、足りなくても warn にする。
+  if (conf && !lack.length && !cfg.values['confluence.spaceId']) add('Confluence のスペース ID', 'warn', 'ありません。初回の publish でページを作れません', 'zukai config set confluence.spaceId スペースID（publish に --space-id=スペースID を付けてもよい）');
 
   return { project, ok: !checks.some((c) => c.status === 'ng'), checks };
 }

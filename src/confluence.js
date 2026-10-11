@@ -27,7 +27,7 @@ function client(conf) {
   if (!base) throw new Error('Confluence の URL がありません。zukai setup confluence を実行するか、zukai config set confluence.base https://example.atlassian.net/wiki を実行してください。');
   if (!email || !token) throw new Error('Confluence のメールアドレスか API トークンがありません。zukai login confluence を実行してください。');
   const auth = `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`;
-  return async (method, url, { json, form } = {}) => {
+  const call = async (method, url, { json, form } = {}) => {
     const headers = { Authorization: auth, Accept: 'application/json' };
     if (json) headers['Content-Type'] = 'application/json';
     if (form) headers['X-Atlassian-Token'] = 'nocheck';
