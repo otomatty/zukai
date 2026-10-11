@@ -244,10 +244,33 @@
             const before = w.innerHTML;
             const mine = { hooks: [], cues: [] };
             let done = false;
+            let broken = false;
+            // 図を元に戻して、自動の動きにする。t を渡すと、作り直した動きをその時刻に合わせる（毎コマの処理の途中で壊れたとき）。
+            const fallback = (t) => {
+              broken = true;
+              w.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+              w.innerHTML = before;
+              const fresh = w.querySelector('svg');
+              animateFigure(sc, w, fresh ? tagParts(fresh) : []);
+              if (t === undefined) return;
+              w.getAnimations({ subtree: true }).forEach((a) => {
+                a.pause();
+                a.currentTime = t * 1000;
+              });
+            };
             guard(sc.id, `型 ${w.dataset.type} の動き（motion.js）`, () => {
               motion(w, {
                 svg, parts, times, start: times[0] ?? sc.narrStart, scene: sc,
-                frame: (f) => mine.hooks.push({ id: sc.id, frame: (t, root, info) => f(t, info) }),
+                // 毎コマの処理が例外を出したら、それ以降は呼ばずに、図を元に戻して自動の動きにする。
+                frame: (f) => mine.hooks.push({ id: sc.id, frame: (t, root, info) => {
+                  if (broken) return;
+                  try {
+                    f(t, info);
+                  } catch (e) {
+                    fallback(t);
+                    throw new Error(`型 ${w.dataset.type} の動き（motion.js）の毎コマの処理で例外が起きたので、自動の動きにしました。${e?.message ?? e}`);
+                  }
+                } }),
                 sfx: (kind, at) => mine.cues.push({ scene: sc.id, t: at, kind }),
               });
               done = true;
@@ -255,12 +278,7 @@
             if (done) {
               hooks.push(...mine.hooks);
               cues.push(...mine.cues);
-            } else {
-              w.getAnimations({ subtree: true }).forEach((a) => a.cancel());
-              w.innerHTML = before;
-              const fresh = w.querySelector('svg');
-              animateFigure(sc, w, fresh ? tagParts(fresh) : []);
-            }
+            } else fallback();
           } else animateFigure(sc, w, parts);
         });
         // data-sfx を付けた要素は、最初のアニメーションが始まる時刻に音を鳴らす。2つ目からは、浮く動きのような続きの動きとみなす。

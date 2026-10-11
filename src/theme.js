@@ -193,6 +193,8 @@ function readTypes(dir) {
     for (const k of ['summary', 'when']) if (typeof json[k] !== 'string' || !json[k].trim()) say(`type.json の ${k} を文で書きます。`);
     fieldProblems(json.fields, 'fields').forEach(say);
     if (!isObj(json.example)) say('type.json の example に、図の仕様の例を { } で書きます（type は書かない）。');
+    // 例の type は型の名前を上書きし、zukai type が別の型の例を出してしまう。
+    else if (Object.hasOwn(json.example, 'type')) say('type.json の example に type は書きません。型の名前はフォルダの名前から付きます。');
     let template = null;
     try {
       template = compile(fs.readFileSync(path.join(tdir, 'figure.svg'), 'utf8'));
@@ -275,6 +277,9 @@ export const distance = (a, b, m = null) => Math.hypot(...lab(a, m).map((x, i) =
 const TEXT = 4.5;
 const SERIES_BG = 2.5;
 export const SERIES_GAP = 23;
+// chart.mode が neutral のときの灰色（chart.muted）は、強調した1つを引き立てるため、系列の色より淡くてよい。
+// 既定の灰色（#a8b0b9）が白地で 2.2:1 なので、それは通し、紙と見分けにくい色だけを知らせる。
+const MUTED_BG = 2;
 
 // 見た目の検査。severity は error（文字が読めない）か warn（見分けにくい）。
 export async function checkTheme(t) {
@@ -306,6 +311,8 @@ export async function checkTheme(t) {
     if (t.emphasis.box === 'outline' || t.emphasis.chart === 'gradient') stops.forEach((s, i) => pair('グラデーションの色', s, c.paper, `gradient.stops[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
     const chartAt = at.replace(/color$/, 'chart');
     chart.series.forEach((s, i) => pair('系列の色', s, c.paper, `${chartAt}.series[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
+    // neutral では、強調しない棒や線を chart.muted（と、それを紙の色に寄せた色）で描く。
+    if (chart.mode === 'neutral') pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {
         for (let j = i + 1; j < chart.series.length; j++) {

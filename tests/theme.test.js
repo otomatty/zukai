@@ -337,6 +337,8 @@ test('独自の型の誤りは、テーマを確かめるときに知らせる',
   const c = run(['theme', 'check'], { cwd: color.dir, home: color.home });
   assert.equal(c.code, 1);
   assert.match(c.out, /型 stat の例が検査を通りません。.*色「#123456」は使えません/);
+  const typed = typedProject({ 'type.json': { ...STAT['type.json'], example: { ...STAT['type.json'].example, type: 'flow' } } });
+  assert.match(run(['theme', 'check'], { cwd: typed.dir, home: typed.home }).out, /example に type は書きません/);
   const motion = typedProject({ 'motion.js': 'ctx.parts.forEach((p) => {' });
   assert.match(run(['theme', 'check'], { cwd: motion.dir, home: motion.home }).out, /motion.js を読めません/);
 });
@@ -479,6 +481,15 @@ test('ひな形の閉じていない {{ と、対応の無い }} は止める', 
   assert.doesNotThrow(() => compile('<text>{{value}}</text>'));
 });
 
+test('neutral の灰色は、紙と見分けられるかを確かめる', async () => {
+  const grey = (muted, mode = 'neutral') => checkTheme(readTheme(themeDir({ chart: { mode, muted } })).tokens).then((f) => f.filter((x) => x.what === '灰色の系列'));
+  // 動画の図は、暗い紙に自分の灰色を持つので、資料の図だけを知らせる。
+  const white = await grey('#ffffff');
+  assert.deepEqual(white.map((x) => [x.severity, /chart\.muted（#ffffff）と color\.paper/.test(x.message)]), [['warn', true]]);
+  assert.deepEqual(await grey('#a8b0b9'), []);
+  assert.deepEqual(await grey('#ffffff', 'series'), []);
+});
+
 test('字幕の文字は、背景に重ねた半透明の帯の色で確かめる', async () => {
   // 帯は不透明なら 4.69:1 だが、白い背景に 80% で重ねると #333333 になり、2.8:1 しかない。
   const t = readTheme(themeDir({ video: { background: '#ffffff', subtitle: { band: '#000000', ink: '#777777' } } })).tokens;
@@ -489,27 +500,52 @@ test('字幕の文字は、背景に重ねた半透明の帯の色で確かめ�
 // Playwright と Chromium がある環境でだけ動かす。
 const hasBrowser = await import('playwright').then(() => true, () => false);
 test('型の動きが例外を出したら、図を元に戻して自動の動きにする', { skip: !hasBrowser && 'Playwright がありません', timeout: 120000 }, async () => {
-  const { dir } = typedProject({ 'motion.js': "fig.querySelector('svg').style.visibility = 'hidden'; ctx.frame(() => {}); throw new Error('bad motion');" });
   const { scenesOf, timeline, estimateVoice } = await import('../src/video/script.js');
   const { pageHtml } = await import('../src/video/encode.js');
   const { tokensFor, themeFor } = await import('../src/theme.js');
-  const file = path.join(dir, 'a.md');
-  fs.writeFileSync(file, statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数'));
-  const scenes = scenesOf(fs.readFileSync(file, 'utf8'), file);
-  const plan = { ...timeline(scenes, scenes.map((s) => estimateVoice(s.lines))), width: 1920, height: 1080, fps: 30, motions: Object.fromEntries(themeFor(dir).types.map((d) => [d.name, d.motion])) };
   const { chromium } = await import('playwright');
   const browser = await chromium.launch();
-  try {
+  // motion.js を差し替えたテーマで、型の図の入ったページを開き、check(page) で確かめる。
+  const open = async (motion) => {
+    const { dir } = typedProject({ 'motion.js': motion });
+    const file = path.join(dir, 'a.md');
+    fs.writeFileSync(file, statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数'));
+    const scenes = scenesOf(fs.readFileSync(file, 'utf8'), file);
+    const plan = { ...timeline(scenes, scenes.map((s) => estimateVoice(s.lines))), width: 1920, height: 1080, fps: 30, motions: Object.fromEntries(themeFor(dir).types.map((d) => [d.name, d.motion])) };
     const page = await browser.newPage();
     await page.setContent(pageHtml(plan, tokensFor(dir)));
-    const r = await page.evaluate(() => {
-      const init = window.zkInit();
-      const svg = document.querySelector('[data-type="stat"] svg');
-      return { errors: init.errors.map((e) => e.message), hidden: svg.style.visibility, animated: svg.getAnimations({ subtree: true }).length };
-    });
+    return { page, plan };
+  };
+  const state = () => {
+    const svg = document.querySelector('[data-type="stat"] svg');
+    return { hidden: svg.style.visibility, animated: svg.getAnimations({ subtree: true }).length };
+  };
+  try {
+    // 動きの準備の途中で例外を出す。
+    const a = await open("fig.querySelector('svg').style.visibility = 'hidden'; ctx.frame(() => {}); throw new Error('bad motion');");
+    const r = await a.page.evaluate((s) => ({ errors: window.zkInit().errors.map((e) => e.message), ...eval(s)() }), `(${state})`);
     assert.ok(r.errors.some((m) => /bad motion/.test(m)), JSON.stringify(r.errors));
     assert.equal(r.hidden, '');
     assert.ok(r.animated > 0);
+
+    // 準備は通り、毎コマの処理で図を隠してから例外を出す。それ以降の処理は呼ばない。
+    const b = await open("let n = 0; ctx.frame(() => { n++; window.calls = n; fig.querySelector('svg').style.visibility = 'hidden'; throw new Error('bad frame'); });");
+    const at = b.plan.scenes.find((x) => x.figureType === 'stat');
+    const f = await b.page.evaluate(
+      ([s, t0, t1]) => {
+        const init = window.zkInit();
+        window.zkSeek(t0);
+        window.zkSeek(t1);
+        return { init: init.errors.length, errors: window.zkErrors().map((e) => e.message), calls: window.calls, ...eval(s)() };
+      },
+      [`(${state})`, at.start + 0.5, at.start + 1],
+    );
+    assert.equal(f.init, 0);
+    assert.equal(f.errors.length, 1, JSON.stringify(f.errors));
+    assert.match(f.errors[0], /bad frame/);
+    assert.equal(f.calls, 1);
+    assert.equal(f.hidden, '');
+    assert.ok(f.animated > 0);
   } finally {
     await browser.close();
   }
