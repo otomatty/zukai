@@ -17,7 +17,7 @@ export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'
 const plainLang = (lang) => !(lang && knownLang(lang)) || ['text', 'txt', 'plaintext', 'plain'].includes(lang);
 
 const css = (t) => `
-:root{--ink:${t.color.ink};--sub:${t.color.sub};--line:${t.color.line};--surface:${t.color.surface};--paper:${t.color.paper};--accent:${t.color.accent};--on-accent:${t.color.onAccent};--border:${t.page.border};--error:${t.page.error};--mark:${t.screenshot.note}}
+:root{--ink:${t.color.ink};--sub:${t.color.sub};--line:${t.color.line};--surface:${t.color.surface};--paper:${t.color.paper};--accent:${t.color.accent};--on-accent:${t.color.onAccent};--border:${t.page.border};--error:${t.page.error};--mark:${t.screenshot.note};--on-mark:${t.screenshot.onNote}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:${t.font};line-height:1.85;font-feature-settings:"palt";-webkit-text-size-adjust:100%}
 main{max-width:800px;margin:0 auto;padding:56px 24px 96px}
@@ -38,7 +38,7 @@ pre{background:var(--surface)!important;padding:14px 16px;border-radius:8px;over
 pre code{background:none;padding:0}
 a{color:var(--accent)}
 .meta{font-size:.78rem;color:var(--sub);margin:4px 0}.right{margin-left:auto}
-.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;border-radius:11px;background:var(--accent);color:var(--on-accent);font-size:.75rem;font-weight:700}.num.note{background:var(--mark)}
+.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;border-radius:11px;background:var(--accent);color:var(--on-accent);font-size:.75rem;font-weight:700}.num.note{background:var(--mark);color:var(--on-mark)}
 ol.marks{list-style:none;margin:-4px 0 6px;padding:0}ol.marks li{display:flex;gap:10px;align-items:flex-start;margin:6px 0;color:var(--ink);font-size:.92rem}
 .refs{margin:22px 0 18px}.refs-h{font-size:.8rem;font-weight:700;color:var(--sub);margin-bottom:8px}
 .ref{padding:14px 16px;border:1px solid var(--border);border-radius:8px;margin-top:10px;break-inside:avoid}.ref p{color:var(--ink);font-size:.9rem;margin:8px 0}

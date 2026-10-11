@@ -342,7 +342,8 @@ export async function checkTheme(t) {
   };
   figure(t.color, t.chart, 'color');
   pair('ページ', t.page.error, t.color.paper, 'page.error', 'color.paper');
-  pair('画面の注釈', t.color.onAccent, t.screenshot.note, 'color.onAccent', 'screenshot.note');
+  // 画面の注釈の番号は、資料でも動画でも screenshot.onNote で書く。動画の図は color を差し替えるので、onAccent を使うと動画でだけ色が変わる。
+  pair('画面の注釈', t.screenshot.onNote, t.screenshot.note, 'screenshot.onNote', 'screenshot.note');
   const v = t.video;
   figure({ ...t.color, ...v.figure.color }, { ...t.chart, ...v.figure.chart }, 'video.figure.color');
   pair('動画の文字', v.ink, v.background, 'video.ink', 'video.background');

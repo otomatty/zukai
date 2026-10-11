@@ -87,7 +87,7 @@ marks:
       const [fx, fy] = [Math.max(1, x - 6), Math.max(1, y - 6)];
       const [bx, by] = [Math.max(12, fx), Math.max(12, fy)];
       out.push(`<rect x="${fx}" y="${fy}" width="${Math.min(t.figure.width - 1 - fx, w + 12)}" height="${Math.min(h - 1 - fy, hh + 12)}" rx="6" fill="none" stroke="${t.screenshot.note}" stroke-width="2"/>`);
-      out.push(`<circle cx="${bx}" cy="${by}" r="11" fill="${t.screenshot.note}"/><text class="zk-note" x="${bx}" y="${mid(by, 12)}" text-anchor="middle" style="fill:${t.color.onAccent};font-weight:700">${i + 1}</text>`);
+      out.push(`<circle cx="${bx}" cy="${by}" r="11" fill="${t.screenshot.note}"/><text class="zk-note" x="${bx}" y="${mid(by, 12)}" text-anchor="middle" style="fill:${t.screenshot.onNote};font-weight:700">${i + 1}</text>`);
     });
     out.push(close());
     return out.join('');

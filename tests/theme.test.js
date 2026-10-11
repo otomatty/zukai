@@ -525,6 +525,23 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   }
 });
 
+test('画面の注釈の番号は、資料でも動画でも screenshot.onNote で書き、印の色と確かめる', async () => {
+  // 動画の図は color を差し替えるので、onAccent で書くと、動画でだけ番号の色が変わる。
+  const { videoTokens } = await import('../src/video/script.js');
+  const { types } = await import('../src/figures/index.js');
+  const t = readTheme(themeDir({ screenshot: { onNote: '#000000' } })).tokens;
+  // 撮影済みの画面（corpus/good/shots）を使う。
+  const spec = { type: 'screenshot', image: 'shots/login.png', marks: [{ selector: '.alert', note: '残り時間を表示します。' }] };
+  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good/', import.meta.url)) };
+  for (const tokens of [t, videoTokens(t)]) {
+    const svg = types.screenshot.render(spec, tokens, ctx);
+    assert.match(svg, /style="fill:#000000;font-weight:700">1</);
+  }
+  const f = await checkTheme(readTheme(themeDir({ screenshot: { note: '#141f4f', onNote: '#141f4f' } })).tokens);
+  assert.ok(f.some((x) => x.what === '画面の注釈' && /screenshot\.onNote/.test(x.message)), JSON.stringify(f));
+  assert.deepEqual((await checkTheme(baseTokens())).filter((x) => x.what === '画面の注釈'), []);
+});
+
 test('字幕の文字は、背景に重ねた半透明の帯の色で確かめる', async () => {
   // 帯は不透明なら 4.69:1 だが、白い背景に 80% で重ねると #333333 になり、2.8:1 しかない。
   const t = readTheme(themeDir({ video: { background: '#ffffff', subtitle: { band: '#000000', ink: '#777777' } } })).tokens;
