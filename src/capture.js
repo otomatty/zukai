@@ -2,6 +2,7 @@
 // 撮影には Playwright を使う。zukai の通常の依存には入れていないので、使う人だけが入れる。
 import fs from 'node:fs';
 import path from 'node:path';
+import { machineSetting } from './config.js';
 import { parse } from './parse.js';
 
 export async function capture(docFile) {
@@ -15,7 +16,8 @@ export async function capture(docFile) {
   const doc = parse(fs.readFileSync(docFile, 'utf8'));
   const shots = doc.sections.flatMap((s) => s.blocks).filter((b) => b.kind === 'figure' && b.spec?.type === 'screenshot' && b.spec.url);
   if (!shots.length) return [];
-  const browser = await chromium.launch(process.env.ZUKAI_CHROMIUM ? { executablePath: process.env.ZUKAI_CHROMIUM } : {});
+  const executablePath = machineSetting('chromium');
+  const browser = await chromium.launch(executablePath ? { executablePath } : {});
   const results = [];
   try {
     for (const { spec, line } of shots) {

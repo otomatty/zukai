@@ -6,8 +6,9 @@ import { root, readJson } from './lint/index.js';
 import { termsTable } from './terms.js';
 
 // type は、型の書き方を取り出すコマンド。zukai を入れていない環境では、node と CLI のパスを含めて渡す。
-// video を true にすると、動画の書き方（prompts/video.md）を足す。terms は用語集（zukai.config.json の terms）。
-export function buildPrompt({ full = false, only = null, type = 'zukai type', video = false, terms = [] } = {}) {
+// video を true にすると、動画の書き方（prompts/video.md）を足す。terms は用語集（設定の terms）。
+// voice は、ナレーションを読み上げられるか（Gemini の API キーがあるか）。無いときは、AI が利用者に知らせられるよう指示に書く。
+export function buildPrompt({ full = false, only = null, type = 'zukai type', video = false, terms = [], voice = true } = {}) {
   const limits = readJson('contract/limits.json');
   const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8').trim();
   const fill = (s) =>
@@ -48,5 +49,6 @@ export function buildPrompt({ full = false, only = null, type = 'zukai type', vi
       .replaceAll('{{maxElements}}', v.maxElements)
       .replaceAll('{{maxScene}}', v.maxSceneSeconds)
       .replaceAll('{{maxTotal}}', v.maxTotalSeconds);
-  return [fill(read('prompts/base.md')), termsTable(terms), catalog, video ? videoGuide() : '', notes ? `## 追加の指示\n\n${notes}` : ''].filter(Boolean).join('\n\n') + '\n';
+  const silent = video && !voice ? '## この環境の状態\n\nGemini の API キーが無いので、動画は字幕だけの無音になります。動画を作ったら、そのことと、利用者が自分で `zukai login gemini` を実行すればナレーションが付くことを、チャットで伝えます。キーをチャットで尋ねません。' : '';
+  return [fill(read('prompts/base.md')), termsTable(terms), catalog, video ? videoGuide() : '', silent, notes ? `## 追加の指示\n\n${notes}` : ''].filter(Boolean).join('\n\n') + '\n';
 }

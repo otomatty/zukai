@@ -1,0 +1,164 @@
+{
+  "$comment": "設定の項目の仕様。読み込み、検査、zukai config、zukai help config、zukai setup が、すべてこのファイルを使う。scopes は書ける置き場所（team は zukai.config.json、local は .zukai/config.json、user は ~/.zukai/config.json、credentials は ~/.zukai/credentials.json）。最初の置き場所が、config set の既定の書き先になる。* は任意の名前。",
+  "items": {
+    "output": {
+      "group": "出力",
+      "type": "enum",
+      "values": ["document", "video"],
+      "labels": { "document": "資料だけ", "video": "資料と動画" },
+      "default": "document",
+      "scopes": ["team", "local", "user"],
+      "description": "返答を資料だけにするか、解説動画も作るか。video にすると、zukai prompt が動画の書き方を含める"
+    },
+    "video.model": {
+      "group": "動画",
+      "type": "string",
+      "default": "gemini-3.8-flash-tts",
+      "scopes": ["team", "local", "user"],
+      "description": "ナレーションを読み上げる Gemini TTS のモデル"
+    },
+    "video.voice": {
+      "group": "動画",
+      "type": "string",
+      "default": "Kore",
+      "suggest": ["Kore", "Puck", "Charon", "Aoede", "Fenrir", "Leda", "Orus", "Zephyr"],
+      "scopes": ["team", "local", "user"],
+      "description": "ナレーションの声の名前"
+    },
+    "video.style": {
+      "group": "動画",
+      "type": "string",
+      "default": "落ち着いた声で、好奇心をくすぐるように語る",
+      "scopes": ["team", "local", "user"],
+      "description": "動画全体の語り口。行ごとの語り口は、原稿の style に書く"
+    },
+    "video.bgm": {
+      "group": "動画",
+      "type": "path",
+      "default": null,
+      "scopes": ["team", "local", "user"],
+      "description": "BGM の曲のファイル。ナレーションの間は、bgmVolume の3割まで下げる"
+    },
+    "video.bgmVolume": {
+      "group": "動画",
+      "type": "number",
+      "min": 0,
+      "max": 1,
+      "default": 0.2,
+      "scopes": ["team", "local", "user"],
+      "description": "BGM の音量（0〜1）"
+    },
+    "video.sfx.enabled": {
+      "group": "動画",
+      "type": "boolean",
+      "default": true,
+      "scopes": ["team", "local", "user"],
+      "description": "効果音を鳴らすか"
+    },
+    "video.sfx.volume": {
+      "group": "動画",
+      "type": "number",
+      "min": 0,
+      "max": 1,
+      "default": 0.5,
+      "scopes": ["team", "local", "user"],
+      "description": "効果音の音量（0〜1）"
+    },
+    "video.sfx.files.*": {
+      "group": "動画",
+      "type": "path",
+      "scopes": ["team", "local", "user"],
+      "description": "名前の付いた効果音（appear など）を、手元の音のファイルに差し替える"
+    },
+    "confluence.base": {
+      "group": "Confluence",
+      "type": "url",
+      "default": null,
+      "env": "CONFLUENCE_BASE",
+      "scopes": ["team", "local", "user"],
+      "description": "Confluence の URL（例: https://example.atlassian.net/wiki）"
+    },
+    "confluence.spaceId": {
+      "group": "Confluence",
+      "type": "string",
+      "default": null,
+      "scopes": ["team", "local", "user"],
+      "description": "初回の publish でページを作るスペースの ID"
+    },
+    "confluence.parentId": {
+      "group": "Confluence",
+      "type": "string",
+      "default": null,
+      "scopes": ["team", "local", "user"],
+      "description": "初回の publish でページを置く親ページの ID。無ければスペースの直下に置く"
+    },
+    "confluence.email": {
+      "group": "Confluence",
+      "type": "string",
+      "default": null,
+      "env": "CONFLUENCE_EMAIL",
+      "scopes": ["credentials"],
+      "description": "Atlassian アカウントのメールアドレス。zukai login confluence で保存する"
+    },
+    "confluence.token": {
+      "group": "Confluence",
+      "type": "string",
+      "secret": true,
+      "default": null,
+      "env": "CONFLUENCE_TOKEN",
+      "scopes": ["credentials"],
+      "description": "Atlassian の API トークン。zukai login confluence で保存する"
+    },
+    "gemini.apiKey": {
+      "group": "動画",
+      "type": "string",
+      "secret": true,
+      "default": null,
+      "env": "GEMINI_API_KEY",
+      "scopes": ["credentials"],
+      "description": "ナレーションの読み上げに使う Gemini の API キー。無ければ字幕だけの無音の動画になる。zukai login gemini で保存する"
+    },
+    "terms": {
+      "group": "原稿",
+      "type": "terms",
+      "default": [],
+      "scopes": ["team", "local"],
+      "description": "用語集。{ use, avoid, except, examples, actual } の配列。zukai.config.json に直接書く"
+    },
+    "repos.*.path": {
+      "group": "原稿",
+      "type": "path",
+      "scopes": ["team", "local"],
+      "description": "コード参照に使うリポジトリの手元のクローン。人によって場所が違うときは --scope=local で上書きする"
+    },
+    "repos.*.host": {
+      "group": "原稿",
+      "type": "enum",
+      "values": ["github", "codecommit"],
+      "scopes": ["team", "local"],
+      "description": "リポジトリの置き場所。省略するとクローンのリモート origin から読み取る"
+    },
+    "repos.*.org": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "GitHub の組織かユーザーの名前。省略するとリモートから読み取る" },
+    "repos.*.name": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "リポジトリの名前。省略するとリモートから読み取る" },
+    "repos.*.region": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "CodeCommit のリージョン。省略するとリモートから読み取る" },
+    "repos.*.branch": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "pin が false のときにリンクが指すブランチ" },
+    "repos.*.link": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "行へのリンクのひな形。{ref}、{path}、{from}、{to} を置き換える" },
+    "repos.*.pin": { "group": "原稿", "type": "boolean", "scopes": ["team", "local"], "description": "false にすると、コミットを固定せず作業中のファイルを読む" },
+    "png.font": {
+      "group": "この PC",
+      "type": "string",
+      "default": null,
+      "env": "ZUKAI_PNG_FONT",
+      "scopes": ["user"],
+      "description": "図の PNG に使う日本語フォント。省略すると OS の標準（ヒラギノ角ゴ、Yu Gothic UI、Noto Sans CJK JP）"
+    },
+    "chromium": {
+      "group": "この PC",
+      "type": "path",
+      "default": null,
+      "env": "ZUKAI_CHROMIUM",
+      "scopes": ["user"],
+      "description": "capture、video、frames が使う Chromium の実行ファイル。省略すると Playwright が入れたものを使う"
+    }
+  }
+}

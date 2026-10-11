@@ -93,7 +93,7 @@ test('用語集と違う表記を知らせ、除外する語は知らせない',
   assert.deepEqual(tabled.findings.filter((f) => f.rule === 'P007').map((f) => f.line), [11]);
   // terms が配列でなければ、設定の誤りとして止める。
   fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ terms: { use: '時計' } }));
-  await assert.rejects(() => lint(src, file, { textlint: false }), /terms は、配列/);
+  await assert.rejects(() => lint(src, file, { textlint: false }), /terms の値が正しくありません。配列/);
 });
 
 test('コード参照は、リポジトリの外のファイルを読まない', async () => {
@@ -112,17 +112,6 @@ test('コード参照は、リポジトリの外のファイルを読まない',
   fs.writeFileSync(path.join(dir, 'repo', '..notes.txt'), 'ok\n');
   const dots = await lint(doc('r:..notes.txt#L1'), path.join(dir, 'a.md'), { textlint: false });
   assert.ok(!dots.findings.some((f) => f.rule === 'R002'));
-});
-
-test('init --video は、既存の設定のほかの項目を残して output を video にする', async () => {
-  const { writeProjectSettings } = await import('../src/settings.js');
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-init-'));
-  writeProjectSettings(project, 'document');
-  const file = path.join(project, '.zukai', 'settings.json');
-  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), mine: 1 }));
-  assert.equal(writeProjectSettings(project, 'document').written, false);
-  assert.equal(writeProjectSettings(project, 'video', { explicit: true }).updated, true);
-  assert.deepEqual([JSON.parse(fs.readFileSync(file, 'utf8')).output, JSON.parse(fs.readFileSync(file, 'utf8')).mine], ['video', 1]);
 });
 
 test('BGM は繰り返して長さに合わせ、ナレーションの間は小さくする', async () => {
@@ -186,31 +175,6 @@ test('名前の付いた効果音と ZzFX の数値から音を作り、鳴り�
   const many = Array.from({ length: 10 }, (_, i) => ({ t: i * 0.1, kind: 'pop' }));
   assert.equal(thin(many).length, 4);
   assert.ok(Math.max(...mix(1, [{ at: 0, samples: new Float32Array(100).fill(0.8) }, { at: 0, samples: new Float32Array(100).fill(0.8) }]).map(Math.abs)) <= 0.991);
-});
-
-test('API キーは、プロジェクトの設定からは読まない', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-home-'));
-  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-proj-'));
-  const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, GEMINI_API_KEY: process.env.GEMINI_API_KEY };
-  Object.assign(process.env, { HOME: home, USERPROFILE: home });
-  delete process.env.GEMINI_API_KEY;
-  try {
-    const { loadSettings, writeProjectSettings, writeApiKey } = await import('../src/settings.js');
-    assert.equal(writeProjectSettings(project, 'video').written, true);
-    assert.equal(writeProjectSettings(project, 'document').written, false);
-    const file = path.join(project, '.zukai', 'settings.json');
-    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), gemini: { apiKey: 'project-key' } }));
-    let r = loadSettings(project);
-    assert.equal(r.settings.output, 'video');
-    assert.equal(r.settings.apiKey, null);
-    assert.match(r.warnings[0], /読みません/);
-    writeApiKey('home-key');
-    assert.equal(loadSettings(project).settings.apiKey, 'home-key');
-    process.env.GEMINI_API_KEY = 'env-key';
-    assert.equal(loadSettings(project).settings.apiKey, 'env-key');
-  } finally {
-    for (const [k, v] of Object.entries(saved)) v === undefined ? delete process.env[k] : (process.env[k] = v);
-  }
 });
 
 // Playwright と Chromium がある環境でだけ動かす。

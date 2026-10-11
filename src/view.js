@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { render, CSP } from './render.js';
 import { lint } from './lint/index.js';
 import { parse } from './parse.js';
+import { stateDir } from './config.js';
 
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
 const IDLE_MS = 30 * 60 * 1000;
@@ -19,13 +20,7 @@ export const answersDir = (project) => path.join(project, '.zukai', 'answers');
 export const portOf = (project) => 4800 + (parseInt(crypto.createHash('sha256').update(path.resolve(project)).digest('hex').slice(0, 8), 16) % 1000);
 
 // 資料の置き場所を作る。.zukai の中に .gitignore を置き、プロジェクトの .gitignore を書き換えずに Git の管理から外す。
-export function ensureDir(project) {
-  const dir = answersDir(project);
-  fs.mkdirSync(dir, { recursive: true });
-  const ignore = path.join(project, '.zukai', '.gitignore');
-  if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, '*\n');
-  return dir;
-}
+export const ensureDir = (project) => stateDir(project, 'answers');
 
 // 資料の版。原稿と、原稿が読む screenshot の画像と枠の記録（.json）のうち、最も新しい更新時刻にする。
 // capture で撮り直しても原稿は変わらないので、原稿の更新時刻だけでは古い画面が残る。

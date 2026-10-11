@@ -1,15 +1,16 @@
 // Lint の実行を1行ずつ記録し、ルールごとの実績を集計する。ルールを削る判断はこの数字で行う。
+// 記録は ~/.zukai/logs に置く。zukai のフォルダには書き込まない。どのプロジェクトの原稿も、同じ記録に集まる。
 import fs from 'node:fs';
 import path from 'node:path';
-import { root } from './lint/index.js';
+import { homeDir } from './config.js';
 
-const file = path.join(root, 'logs/runs.jsonl');
+const file = path.join(homeDir(), 'logs', 'runs.jsonl');
 
 export function record(result, model) {
   const count = (list) => list.reduce((acc, f) => ((acc[f.rule] = (acc[f.rule] ?? 0) + 1), acc), {});
   const entry = {
     at: new Date().toISOString(),
-    file: path.relative(root, path.resolve(result.file)),
+    file: path.resolve(result.file),
     model: model ?? null,
     sections: result.sections,
     figures: result.figures ?? {},
