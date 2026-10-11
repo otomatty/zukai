@@ -144,6 +144,9 @@ test('null は既定値が「なし」の項目にだけ書け、__proto__ な�
     assert.match(loadConfig(project).problems[0].message, /はありません/);
     assert.equal({}.link, undefined);
     assert.throws(() => setValue(project, 'repos.__proto__.link', 'x'), /はありません/);
+    // オブジェクトが元から持つ名前を一番上に書いても、落ちずに「項目はありません」と知らせる。
+    fs.writeFileSync(path.join(project, 'zukai.config.json'), '{"toString":{},"__proto__":{},"constructor":1}');
+    assert.equal(loadConfig(project).problems.filter((p) => /はありません/.test(p.message)).length, 3);
     assert.equal({}.link, undefined);
   }));
 

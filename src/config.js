@@ -65,7 +65,8 @@ export function stateDir(project, ...sub) {
 // __proto__ などは名前に使えない。入れ子の値を組み立てるときに、すべてのオブジェクトの元を書き換えないため。
 const SEGMENT = /^(?!(?:__proto__|constructor|prototype)$)[\w-]+$/;
 export function specOf(key) {
-  if (spec[key]) return { name: key, ...spec[key] };
+  // 自分の項目だけを見る。toString や __proto__ のような、オブジェクトが元から持つ名前を項目と取り違えないため。
+  if (Object.hasOwn(spec, key)) return { name: key, ...spec[key] };
   const k = key.split('.');
   for (const [name, s] of Object.entries(spec)) {
     const p = name.split('.');
@@ -336,6 +337,6 @@ export function display(key, v) {
 // 一覧に出す項目。仕様の項目と、設定ファイルに書かれた * の項目（repos.api.path など）。
 export function listedKeys(cfg) {
   const fixed = Object.keys(spec).filter((n) => !n.includes('*'));
-  const dynamic = Object.keys(cfg.values).filter((k) => !spec[k]);
+  const dynamic = Object.keys(cfg.values).filter((k) => !Object.hasOwn(spec, k));
   return [...fixed, ...dynamic.sort()];
 }
