@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { root, settingsFor } from './config.js';
-import { compile } from './template.js';
+import { compile, unknownNames } from './template.js';
 
 export const baseTokens = () => JSON.parse(fs.readFileSync(path.join(root, 'contract/tokens.json'), 'utf8'));
 
@@ -34,7 +34,7 @@ export const CHOICES = {
   'chart.mode': ['series', 'neutral'],
 };
 // 範囲のある数値。ここに無い数値は、0より大きければよい。
-const RANGES = { 'gradient.angle': [0, 360] };
+const RANGES = { 'gradient.angle': [0, 360], 'figure.radius': [0, Infinity] };
 
 // base の形に合う値だけを重ねる。base に無い名前、型の違う値、色でない値は problems に入れ、重ねない。
 function overlay(base, over, at, problems) {
@@ -62,7 +62,8 @@ function overlay(base, over, at, problems) {
       const [min, max] = RANGES[key] ?? [0, Infinity];
       const ok = typeof v === 'number' && Number.isFinite(v) && (RANGES[key] ? v >= min && v <= max : v > 0);
       if (ok) out[k] = v;
-      else problems.push(RANGES[key] ? `${key} は、${min}〜${max} の数値で書きます。` : `${key} は、0より大きい数値で書きます。`);
+      else if (!RANGES[key]) problems.push(`${key} は、0より大きい数値で書きます。`);
+      else problems.push(max === Infinity ? `${key} は、${min}以上の数値で書きます。` : `${key} は、${min}〜${max} の数値で書きます。`);
     } else if (CHOICES[key]) {
       if (CHOICES[key].includes(v)) out[k] = v;
       else problems.push(`${key} は、${CHOICES[key].join('、')} のどれかを書きます。`);
@@ -175,6 +176,16 @@ function fieldProblems(fields, at) {
   });
 }
 
+// 項目の定義（tokens なら値そのもの）から、ひな形の名前を確かめるための形を作る。src/template.js の unknownNames が読む。
+function shapeOf(defs, values = false) {
+  const one = (d) => {
+    if (values) return Array.isArray(d) ? { of: {} } : isObj(d) ? shapeOf(d, true) : {};
+    if (d.type === 'list') return { of: d.of.type === 'object' ? shapeOf(d.of.fields) : {} };
+    return d.type === 'object' ? shapeOf(d.fields) : {};
+  };
+  return { fields: Object.fromEntries(Object.entries(defs).map(([k, d]) => [k, one(d)])) };
+}
+
 // テーマのフォルダの types/<名前>/ を読む。ひな形と動きのスクリプトは、ここで書き方だけを確かめる。
 // スクリプトは動かさない。動くのは、動画を作るときの Chromium の中だけ。
 function readTypes(dir) {
@@ -208,13 +219,19 @@ function readTypes(dir) {
     }
     const before = problems.length;
     for (const k of ['summary', 'when']) if (typeof json[k] !== 'string' || !json[k].trim()) say(`type.json の ${k} を文で書きます。`);
-    fieldProblems(json.fields, 'fields').forEach(say);
+    const fieldErrors = fieldProblems(json.fields, 'fields');
+    fieldErrors.forEach(say);
     if (!isObj(json.example)) say('type.json の example に、図の仕様の例を { } で書きます（type は書かない）。');
     // 例の type は型の名前を上書きし、zukai type が別の型の例を出してしまう。
     else if (Object.hasOwn(json.example, 'type')) say('type.json の example に type は書きません。型の名前はフォルダの名前から付きます。');
     let template = null;
     try {
       template = compile(fs.readFileSync(path.join(tdir, 'figure.svg'), 'utf8'));
+      // 名前の書き間違い（{{#itmes}} など）は、値の無い任意の項目と同じに空になり、図から黙って消える。読むときに止める。
+      if (!fieldErrors.length) {
+        const unknown = unknownNames(template, { fields: { ...shapeOf(json.fields).fields, type: {}, width: {}, theme: shapeOf(baseTokens(), true) } });
+        if (unknown.length) say(`figure.svg: ${unknown.map((n) => `{{${n}}}`).join('、')} は、type.json の fields にも、テーマの値（theme.〜）にもありません。`);
+      }
     } catch (e) {
       say(e.code === 'ENOENT' ? 'figure.svg（図のひな形）がありません。' : `figure.svg: ${e.message}`);
     }

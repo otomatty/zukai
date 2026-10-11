@@ -91,6 +91,53 @@ function render(node, scopes) {
     .join('');
 }
 
+// ひな形が使う名前のうち、shape に無いものを返す。shape は項目の形で、
+// { fields: { 名前: 形 } }（まとまり）、{ of: 形 }（配列）、{}（値）のどれか。繰り返しの中では、要素の項目と @index などが使える。
+const LOCALS = ['@index', '@n', '@count', '@first', '@last'];
+export function unknownNames(tree, shape) {
+  const out = new Set();
+  const find = (scopes, name) => {
+    if (name === '.') return scopes.some((s) => s.dot || s.any) ? {} : null;
+    const [head, ...rest] = name.split('.');
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      const s = scopes[i];
+      if (s.any) return {};
+      if (s.loop && LOCALS.includes(head)) return rest.length ? null : {};
+      if (!s.fields || !Object.hasOwn(s.fields, head)) continue;
+      let cur = s.fields[head];
+      for (const k of rest) cur = cur?.fields && Object.hasOwn(cur.fields, k) ? cur.fields[k] : null;
+      if (cur) return cur;
+    }
+    return null;
+  };
+  const expr = (n, scopes) => {
+    if (n.name && !find(scopes, n.name)) out.add(n.name);
+    n.args?.forEach((a) => expr(a, scopes));
+    for (const k of ['a', 'b']) if (n[k]) expr(n[k], scopes);
+  };
+  const walk = (node, scopes) => {
+    for (const c of node.children) {
+      if (typeof c === 'string') continue;
+      if (c.op === '=') {
+        expr(c.expr, scopes);
+        continue;
+      }
+      const s = find(scopes, c.name);
+      if (!s) out.add(c.name);
+      if (c.op === 'value') continue;
+      // 繰り返しと、まとまりの中では、その項目の名前が使える。値の項目は、値があるときだけ書く条件になる。
+      // 名前の分からない区切りの中は、その名前の誤りだけを知らせ、中の名前は調べない。
+      let inner = scopes;
+      if (!s) inner = [...scopes, { any: true }];
+      else if (c.op === '#' && s.of) inner = [...scopes, s.of.fields ? { fields: s.of.fields, loop: true } : { dot: true, loop: true }];
+      else if (c.op === '#' && s.fields) inner = [...scopes, s];
+      walk(c, inner);
+    }
+  };
+  walk(tree, [shape]);
+  return [...out];
+}
+
 // ひな形を埋める。data は図の仕様と、theme（テーマの値）。
 export const fill = (tree, data) => render(tree, [data]);
 

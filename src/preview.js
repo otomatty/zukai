@@ -185,7 +185,8 @@ export async function compareThemes(dir, variants, { only = null } = {}) {
     if (!c.report) return '';
     const types = typesFor(c.theme);
     const ctx = { baseDir: dir ?? process.cwd(), tokens: c.theme.tokens, types };
-    return drawExample(types[name], c.theme.tokens, ctx);
+    // 図の SVG は背景が透明なので、その案の紙の色の上に置く。暗い紙の案を白の上に置くと、明るい文字が消えて見えるため。
+    return drawExample(types[name], c.theme.tokens, ctx, `display:block;width:100%;height:auto;background:${c.theme.tokens.color.paper}`);
   };
   const row = (label, f) => `<div class="row"><div class="label">${label}</div>${columns.map((c) => cell(c, f(c))).join('')}</div>`;
   const n = columns.length;
@@ -200,7 +201,7 @@ h1{font-size:1.4rem;margin:0 0 6px}.lead{color:#5b6673;margin:0 0 20px;font-size
 .row{display:grid;grid-template-columns:120px repeat(${n},minmax(0,1fr));gap:12px;padding:14px 0;border-top:1px solid #dfe4ea;align-items:start}
 .head .cell{font-weight:700}.head code{font-weight:400;font-size:.82rem;background:#f3f5f7;padding:1px 6px;border-radius:4px;word-break:break-all}
 .label{font-size:.85rem;font-weight:700;color:#5b6673}
-.cell{min-width:0}.cell img{border:1px solid #dfe4ea;border-radius:8px;padding:10px;background:#fff}
+.cell{min-width:0}.cell img{border:1px solid #dfe4ea;border-radius:8px;padding:10px}
 .cell ul{margin:4px 0 0;padding-left:1.1em;font-size:.78rem;color:#5b6673}
 .ok,.warn,.ng{font-weight:700;margin:0;font-size:.9rem}.ok{color:#1a7f37}.warn{color:#9a6700}.ng{color:#b42318}
 @media (max-width:760px){.row{grid-template-columns:1fr}.label{margin-top:4px}}

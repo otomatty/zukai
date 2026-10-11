@@ -57,6 +57,9 @@ test('無い項目、変えられない値、色でない値、外へ出られ�
   assert.match(readTheme(path.join(tmp('none'), 'nothing')).problems[0], /がありません/);
   // 注釈（/* */）と、閉じていない引用符は、後ろの規則を壊すので通さない。
   for (const font of ['foo/*', '"Noto Sans JP', "'a', b'", 'a, , b', '"Bob\'s Font", sans-serif', "'Say \"hi\"'"]) assert.match(readTheme(themeDir({ font })).problems.join('\n'), /font は、CSS の font-family の形/, font);
+  // 角丸は 0（使わない）にできる。負の数は止める。
+  assert.equal(readTheme(themeDir({ figure: { radius: 0 } })).tokens.figure.radius, 0);
+  assert.match(readTheme(themeDir({ figure: { radius: -1 } })).problems.join('\n'), /figure\.radius は、0以上の数値/);
   for (const font of [baseTokens().font, 'ヒラギノ角ゴ ProN, sans-serif', "'BIZ UDPGothic', system-ui"]) assert.deepEqual(readTheme(themeDir({ font })).problems, [], font);
 });
 
@@ -344,7 +347,7 @@ test('テーマの独自の型は、指示に出て、検査を通り、資料�
   assert.ok(bad.findings.some((f) => f.rule === 'F001' && /未定義のキー「color」/.test(f.message)));
 });
 
-test('独自の型の誤りは、テーマを確かめるときに知らせる', () => {
+test('独自の型の誤りは、テーマを確かめるときに知らせる', async () => {
   const tpl = typedProject({ 'figure.svg': '<svg viewBox="0 0 720 100">{{#value}}</svg>' });
   assert.match(run(['theme', 'check'], { cwd: tpl.dir, home: tpl.home }).out, /figure.svg: \{\{#value\}\} が閉じていません/);
   const field = typedProject({ 'type.json': { ...STAT['type.json'], fields: { value: { type: 'string' } } } });
@@ -356,6 +359,14 @@ test('独自の型の誤りは、テーマを確かめるときに知らせる',
   assert.match(c.out, /型 stat の例が検査を通りません。.*色「#123456」は使えません/);
   const typed = typedProject({ 'type.json': { ...STAT['type.json'], example: { ...STAT['type.json'].example, type: 'flow' } } });
   assert.match(run(['theme', 'check'], { cwd: typed.dir, home: typed.home }).out, /example に type は書きません/);
+  // ひな形の名前の書き間違いは、図から黙って消えるので止める。繰り返しの中の要素の名前、@index、テーマの値は通す。
+  const names = typedProject({ 'figure.svg': STAT['figure.svg'].replace('{{#tags}}', '{{#tgas}}').replace('{{/tags}}', '{{/tgas}}').replace('{{label}}</text>', '{{label}} {{= width(lable, 15)}} {{theme.color.acent}}</text>') });
+  const nm = run(['theme', 'check'], { cwd: names.dir, home: names.home }).out;
+  assert.match(nm, /figure\.svg: \{\{lable\}\}、\{\{theme\.color\.acent\}\}、\{\{tgas\}\} は、type\.json の fields にも/);
+  const { compile, unknownNames } = await import('../src/template.js');
+  const shape = { fields: { rows: { of: { fields: { name: {} } } }, theme: { fields: { color: { fields: { accent: {} } } } } } };
+  assert.deepEqual(unknownNames(compile('{{#rows}}{{name}}{{@n}}{{theme.color.accent}}{{/rows}}'), shape), []);
+  assert.deepEqual(unknownNames(compile('{{name}}{{@n}}{{.}}'), shape), ['name', '@n', '.']);
   // 定義の名前の書き間違いは、任意の項目として黙って通さない。
   // 範囲が逆の項目と、字数や個数に負の数や小数を書いた項目は、どの値も通らなくなるので止める。
   const bounds = typedProject({ 'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, n: { type: 'number', min: 10, max: 1 }, tags: { type: 'list', max: 2.5, of: { type: 'string', max: -1 } } } } });
@@ -428,6 +439,13 @@ test('theme compare は、今のテーマと案を、検査の結果と図と色
   assert.match(html, /src="data:image\/svg\+xml;base64,/);
   assert.match(run(['theme', 'check', 'emphasis.box=fill'], { cwd: dir, home }).err, /案（emphasis.box=fill）を書けるのは compare だけ/);
   assert.match(run(['theme', 'compare'], { cwd: dir, home }).err, /見比べる案を書いてください/);
+});
+
+test('見比べの図は、それぞれの案の紙の色の上に置く', async () => {
+  const { compareThemes } = await import('../src/preview.js');
+  const html = await compareThemes(themeDir(GRAD), ['color.paper="#111111"+color.ink="#f5f5f5"+color.sub="#cccccc"'], { only: ['flow'] });
+  assert.match(html, /background:#ffffff" src="data:image\/svg\+xml/);
+  assert.match(html, /background:#111111" src="data:image\/svg\+xml/);
 });
 
 test('見本の動画の図は画像にし、資料の図の色を変えない', () => {
