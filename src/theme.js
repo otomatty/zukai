@@ -312,7 +312,8 @@ export async function checkTheme(t) {
   const v = t.video;
   figure({ ...t.color, ...v.figure.color }, { ...t.chart, ...v.figure.chart }, 'video.figure.color');
   pair('動画の文字', v.ink, v.background, 'video.ink', 'video.background');
-  pair('字幕', v.subtitle.ink, v.subtitle.band, 'video.subtitle.ink', 'video.subtitle.band');
+  // 字幕の帯は、透明度 80%（cc）で背景に重ねて描く。重ねた色で確かめる。
+  pair('字幕', v.subtitle.ink, blend(v.subtitle.band, v.background, 0.8), 'video.subtitle.ink', 'video.subtitle.band を video.background に重ねた色');
   try {
     const { bundledThemes } = await import('shiki');
     if (!(t.codeTheme in bundledThemes)) out.push({ severity: 'error', what: 'コードの配色', message: `codeTheme「${t.codeTheme}」は Shiki にありません。github-light、github-dark、one-light などの名前を書きます。` });

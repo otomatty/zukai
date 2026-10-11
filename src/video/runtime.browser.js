@@ -239,7 +239,28 @@
           if (w.hasAttribute('data-manual')) return;
           if (motion) {
             const times = partTimes(sc, parts);
-            guard(sc.id, `型 ${w.dataset.type} の動き（motion.js）`, () => motion(w, { svg, parts, times, start: times[0] ?? sc.narrStart, scene: sc, frame: (f) => hooks.push({ id: sc.id, frame: (t, root, info) => f(t, info) }), sfx: (kind, at) => cues.push({ scene: sc.id, t: at, kind }) }));
+            // 動きが途中で例外を出したら、図を動かす前の形に戻して、自動の動きに切り替える。
+            // 途中まで書き換えた図（隠した部品や、付けた動き）を、そのまま書き出さないため。
+            const before = w.innerHTML;
+            const mine = { hooks: [], cues: [] };
+            let done = false;
+            guard(sc.id, `型 ${w.dataset.type} の動き（motion.js）`, () => {
+              motion(w, {
+                svg, parts, times, start: times[0] ?? sc.narrStart, scene: sc,
+                frame: (f) => mine.hooks.push({ id: sc.id, frame: (t, root, info) => f(t, info) }),
+                sfx: (kind, at) => mine.cues.push({ scene: sc.id, t: at, kind }),
+              });
+              done = true;
+            });
+            if (done) {
+              hooks.push(...mine.hooks);
+              cues.push(...mine.cues);
+            } else {
+              w.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+              w.innerHTML = before;
+              const fresh = w.querySelector('svg');
+              animateFigure(sc, w, fresh ? tagParts(fresh) : []);
+            }
           } else animateFigure(sc, w, parts);
         });
         // data-sfx を付けた要素は、最初のアニメーションが始まる時刻に音を鳴らす。2つ目からは、浮く動きのような続きの動きとみなす。

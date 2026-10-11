@@ -451,3 +451,47 @@ test('見本と見比べは、テーマから来る文字を HTML として出�
   const r = run(['theme', 'compare', 'size.label=100', '--types=flow,stat'], { cwd: dir, home });
   assert.equal(r.code, 0, r.err);
 });
+
+test('ひな形の閉じていない {{ と、対応の無い }} は止める', async () => {
+  const { compile } = await import('../src/template.js');
+  assert.throws(() => compile('<text>{{value</text>'), /閉じていない \{\{/);
+  assert.throws(() => compile('<text>value}}</text>'), /閉じていない \{\{/);
+  assert.throws(() => compile('{{#items}}<text>{{label</text>{{/items}}'));
+  assert.doesNotThrow(() => compile('<text>{{value}}</text>'));
+});
+
+test('字幕の文字は、背景に重ねた半透明の帯の色で確かめる', async () => {
+  // 帯は不透明なら 4.69:1 だが、白い背景に 80% で重ねると #333333 になり、2.8:1 しかない。
+  const t = readTheme(themeDir({ video: { background: '#ffffff', subtitle: { band: '#000000', ink: '#777777' } } })).tokens;
+  const f = await checkTheme(t);
+  assert.ok(f.some((x) => x.what === '字幕' && x.severity === 'error'), JSON.stringify(f));
+});
+
+// Playwright と Chromium がある環境でだけ動かす。
+const hasBrowser = await import('playwright').then(() => true, () => false);
+test('型の動きが例外を出したら、図を元に戻して自動の動きにする', { skip: !hasBrowser && 'Playwright がありません', timeout: 120000 }, async () => {
+  const { dir } = typedProject({ 'motion.js': "fig.querySelector('svg').style.visibility = 'hidden'; ctx.frame(() => {}); throw new Error('bad motion');" });
+  const { scenesOf, timeline, estimateVoice } = await import('../src/video/script.js');
+  const { pageHtml } = await import('../src/video/encode.js');
+  const { tokensFor, themeFor } = await import('../src/theme.js');
+  const file = path.join(dir, 'a.md');
+  fs.writeFileSync(file, statDoc('type: stat\nvalue: "300"\nlabel: 導入企業数'));
+  const scenes = scenesOf(fs.readFileSync(file, 'utf8'), file);
+  const plan = { ...timeline(scenes, scenes.map((s) => estimateVoice(s.lines))), width: 1920, height: 1080, fps: 30, motions: Object.fromEntries(themeFor(dir).types.map((d) => [d.name, d.motion])) };
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(pageHtml(plan, tokensFor(dir)));
+    const r = await page.evaluate(() => {
+      const init = window.zkInit();
+      const svg = document.querySelector('[data-type="stat"] svg');
+      return { errors: init.errors.map((e) => e.message), hidden: svg.style.visibility, animated: svg.getAnimations({ subtree: true }).length };
+    });
+    assert.ok(r.errors.some((m) => /bad motion/.test(m)), JSON.stringify(r.errors));
+    assert.equal(r.hidden, '');
+    assert.ok(r.animated > 0);
+  } finally {
+    await browser.close();
+  }
+});

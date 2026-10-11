@@ -33,6 +33,9 @@ export function compile(src) {
   }
   if (stack.length > 1) throw new Error(`{{#${stack.at(-1).name}}} が閉じていません。`);
   if (last < src.length) root.children.push(src.slice(last));
+  // 閉じていない {{ や、対応の無い }} は、文字としてそのまま図に出てしまうので止める。
+  const stray = (node) => node.children.some((c) => (typeof c === 'string' ? /\{\{|\}\}/.test(c) : c.children && stray(c)));
+  if (stray(root)) throw new Error('閉じていない {{ か、対応の無い }} があります。');
   return root;
 }
 
