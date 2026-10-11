@@ -131,22 +131,27 @@ export const commands = [
   {
     name: 'theme',
     group: '設定',
-    summary: 'デザインのテーマ（色、フォント、描き方のルール）のフォルダを作り、確かめ、見本を描く。資料からの取り込みは zukai-theme スキルが行う',
+    summary: 'デザインのテーマ（色、フォント、描き方のルール）のフォルダを作り、確かめ、見本を描き、案を見比べる。資料からの取り込みは zukai-theme スキルが行う',
     args: [
-      { name: '操作', required: true, desc: 'init（フォルダを作る）、check（値と見た目を確かめる）、preview（見本の HTML を書き出す）' },
-      { name: 'フォルダ', desc: 'テーマのフォルダ。省略すると、init はプロジェクトの根の zukai-theme、check と preview は設定の theme' },
+      { name: '操作', required: true, desc: 'init（フォルダを作る）、check（値と見た目を確かめる）、preview（見本の HTML を書き出す）、compare（案を横に並べた HTML を書き出す）' },
+      { name: 'フォルダと案', many: true, desc: 'テーマのフォルダ。省略すると、init はプロジェクトの根の zukai-theme、ほかは設定の theme。compare では、続けて案（emphasis.box=tint のように項目=値。複数の値は + でつなぐ）を書く' },
     ],
     flags: [
-      { name: 'out', value: 'ファイル', desc: 'preview の書き出す先。既定は .zukai/theme-preview.html' },
+      { name: 'out', value: 'ファイル', desc: 'preview と compare の書き出す先。既定は .zukai/theme-preview.html と .zukai/theme-compare.html' },
+      { name: 'types', value: '型,型...', desc: 'compare で並べる図の型。既定は flow、timeline、bar、line、stack、treemap と、テーマの独自の型' },
       { name: 'json', desc: 'check の結果を JSON で出力する' },
     ],
-    examples: ['zukai theme init zukai-theme', 'zukai theme check zukai-theme', 'zukai theme preview zukai-theme', 'zukai config set theme zukai-theme'],
+    examples: ['zukai theme init zukai-theme', 'zukai theme check zukai-theme', 'zukai theme preview zukai-theme', 'zukai theme compare emphasis.box=fill emphasis.box=tint', "zukai theme compare 'chart.mode=series+emphasis.chart=flat' --types=bar,stack", 'zukai config set theme zukai-theme'],
     settings: ['theme'],
     related: ['config', 'prompt'],
     async run({ args, opt, has }) {
       const { initTheme, themeReport } = await import('./theme.js');
       const { settingsFor, projectOf, stateDir } = await import('./config.js');
-      const [action, folder] = args;
+      const [action, ...rest] = args;
+      // = を含むものは案、それ以外はフォルダ。
+      const variants = rest.filter((a) => a.includes('='));
+      const folder = rest.find((a) => !a.includes('='));
+      if (variants.length && action !== 'compare') throw new Error(`案（${variants[0]}）を書けるのは compare だけです。`);
       const project = projectOf(process.cwd());
       const dir = folder ? path.resolve(folder) : action === 'init' ? path.join(project, 'zukai-theme') : settingsFor(process.cwd()).settings.theme ?? null;
       switch (action) {
@@ -176,10 +181,19 @@ export const commands = [
           if (findings.length) console.log(`確かめた結果  error ${findings.filter((f) => f.severity === 'error').length} / warn ${findings.filter((f) => f.severity === 'warn').length}（詳しくは zukai theme check）`);
           return 0;
         }
+        case 'compare': {
+          if (!variants.length) throw new Error('見比べる案を書いてください。例: zukai theme compare emphasis.box=fill emphasis.box=tint');
+          const { compareThemes } = await import('./preview.js');
+          const html = await compareThemes(dir, variants, { only: opt('types')?.split(',').map((s) => s.trim()).filter(Boolean) ?? null });
+          const out = opt('out') ?? path.join(stateDir(project), 'theme-compare.html');
+          fs.writeFileSync(out, html);
+          console.log(`${out} を書き出しました。今のテーマと、案 ${variants.length} 個を横に並べています。`);
+          return 0;
+        }
         default: {
           const { closest } = await import('./config.js');
-          const near = closest(action, ['init', 'check', 'preview']);
-          throw new Error(`theme の操作「${action}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}init、check、preview のどれかを書きます。`);
+          const near = closest(action, ['init', 'check', 'preview', 'compare']);
+          throw new Error(`theme の操作「${action}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}init、check、preview、compare のどれかを書きます。`);
         }
       }
     },

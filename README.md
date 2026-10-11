@@ -67,6 +67,7 @@ zukai extract 原稿.html             # HTML に埋め込んだ原稿を取り�
 zukai view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
 zukai theme check                  # デザインのテーマの値と見た目（文字のコントラストなど）を確かめる
 zukai theme preview                # テーマで描いた図の見本を、1枚の HTML に書き出す
+zukai theme compare 案 案...        # 今のテーマと案（emphasis.box=tint など）を、同じ図で横に並べる
 zukai corpus                       # Lint 自体が期待どおりに動くか確認する
 zukai stats                        # ルールごとの実績を表示する
 ```
@@ -224,8 +225,11 @@ zukai setup skills                       # zukai-answer と一緒に、zukai-the
 zukai theme init zukai-theme             # テーマのフォルダを作る
 zukai theme check zukai-theme            # 値と見た目を確かめる
 zukai theme preview zukai-theme          # 見本の HTML を書き出し、元の資料と見比べる
+zukai theme compare emphasis.box=fill emphasis.box=tint  # 今のテーマと案を横に並べた HTML を書き出す
 zukai config set theme zukai-theme       # テーマを使う（自分だけなら --scope=local）
 ```
+
+テーマは、AI との対話で決めていけます。スキルは、資料だけでは決まらない値を、黙って決めません。検査と資料の食い違いも同じです。どちらも、案を `zukai theme compare` で並べて見せます。比べられるのは、検査の結果、同じ図の見え方、系列の色の色覚での見え方です。利用者が選んだ値を `tokens.json` に書き、選んだ理由を `rules.md` の `## 決めたこと` に残します。この節と `## 出典` は、AI への指示には入りません。
 
 テーマのフォルダには、次のファイルを置きます。
 

@@ -13,6 +13,7 @@ unit: 万円
 items:
   - label: 実行環境
     value: 12
+    emphasis: true
   - label: データベース
     value: 5
   - label: その他

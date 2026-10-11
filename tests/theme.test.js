@@ -358,3 +358,53 @@ test('動画では、独自の型の図に型の動きを付け、図の中の�
   assert.match(html, /marker-end="url\(#zk2-arrow\)"/);
   assert.doesNotMatch(html, /"motions"/);
 });
+
+// --- 対話で決める ---
+
+test('案は、項目=値 を + でつなぎ、値は JSON として読めればその値にする', async () => {
+  const { parseVariant } = await import('../src/preview.js');
+  assert.deepEqual(parseVariant('emphasis.box=tint'), { 'emphasis.box': 'tint' });
+  assert.deepEqual(parseVariant('chart.mode=series+gradient.angle=180'), { 'chart.mode': 'series', 'gradient.angle': 180 });
+  assert.deepEqual(parseVariant('chart.series=["#000000","#111111","#222222"]'), { 'chart.series': ['#000000', '#111111', '#222222'] });
+  assert.throws(() => parseVariant('tint'), /項目と値を = でつなぎます/);
+  // 案も、tokens.json に書いたときと同じ検査を通る。
+  assert.match(readTheme(themeDir(GRAD), { set: { 'emphasis.box': 'shiny' } }).problems.join('\n'), /emphasis.box は、flat、fill、tint、outline のどれか/);
+  assert.equal(readTheme(themeDir(GRAD), { set: { 'emphasis.box': 'tint' } }).tokens.emphasis.box, 'tint');
+  assert.equal(readTheme(null, { set: { 'chart.mode': 'neutral' } }).tokens.chart.mode, 'neutral');
+});
+
+test('theme compare は、今のテーマと案を、検査の結果と図と色覚の見え方で並べる', () => {
+  const { home, dir } = typedProject();
+  const r = run(['theme', 'compare', 'emphasis.box=fill', 'emphasis.box=tint', 'emphasis.box=shiny', '--types=flow,stat'], { cwd: dir, home });
+  assert.equal(r.code, 0, r.err);
+  const html = fs.readFileSync(path.join(dir, '.zukai/theme-compare.html'), 'utf8');
+  assert.match(html, /<code>emphasis.box=fill<\/code>/);
+  assert.match(html, /<p class="ng">error 4<\/p>/);
+  assert.match(html, /この案は使えません/);
+  assert.match(html, /<div class="label">stat<\/div>/);
+  assert.doesNotMatch(html, /<div class="label">bar<\/div>/);
+  assert.match(html, /1型色覚/);
+  // 図は画像として置く。SVG の style が、ほかの案の図に移らないようにするため。
+  assert.match(html, /src="data:image\/svg\+xml;base64,/);
+  assert.match(run(['theme', 'check', 'emphasis.box=fill'], { cwd: dir, home }).err, /案（emphasis.box=fill）を書けるのは compare だけ/);
+  assert.match(run(['theme', 'compare'], { cwd: dir, home }).err, /見比べる案を書いてください/);
+});
+
+test('見本の動画の図は画像にし、資料の図の色を変えない', () => {
+  const home = tmp('preview-home');
+  const dir = tmp('preview');
+  fs.mkdirSync(path.join(dir, '.git'));
+  assert.equal(run(['theme', 'preview'], { cwd: dir, home }).code, 0);
+  const html = fs.readFileSync(path.join(dir, '.zukai/theme-preview.html'), 'utf8');
+  const video = html.slice(html.indexOf('<h2>動画</h2>'));
+  assert.doesNotMatch(video, /<svg/);
+  assert.match(video, /data:image\/svg\+xml;base64,/);
+  assert.match(html, /<h2>系列の色の見え方<\/h2>/);
+});
+
+test('rules.md の「決めたこと」は、出典と同じく AI への指示に入れない', () => {
+  const theme = readTheme(themeDir(null, '# 名前\n\n## 図\n\n- 角丸は使わない\n\n## 決めたこと\n\n- 2026-10-11 tint にした\n'));
+  const p = rulesPrompt(theme);
+  assert.match(p, /角丸は使わない/);
+  assert.doesNotMatch(p, /tint にした/);
+});

@@ -74,23 +74,45 @@ function overlay(base, over, at, problems) {
 
 // テーマのフォルダを読む。dir が null なら、テーマなし（contract/tokens.json のまま）。
 // name はテーマの名前で、rules.md の # 見出しか、フォルダの名前。
-export function readTheme(dir) {
+// over に、名前を点でつないだ値（{ 'emphasis.box': 'tint' }）を書き込む。
+function withSet(over, set) {
+  for (const [key, v] of Object.entries(set)) {
+    const keys = key.split('.');
+    let o = over;
+    for (const k of keys.slice(0, -1)) o = isObj(o[k]) ? o[k] : (o[k] = {});
+    o[keys.at(-1)] = v;
+  }
+  return over;
+}
+// グラデーションを使う描き方は、グラデーションの色が無いと描けない。
+function gradientProblems(t) {
+  const uses = [t.emphasis.box !== 'flat' && `emphasis.box の ${t.emphasis.box}`, t.emphasis.chart !== 'flat' && `emphasis.chart の ${t.emphasis.chart}`].filter(Boolean);
+  return uses.length && !t.gradient.stops.length ? [`${uses.join('と')}は、グラデーションで描きます。gradient.stops に2〜5個の色を書いてください。`] : [];
+}
+
+// set は、tokens.json の上にさらに重ねる値（{ 'emphasis.box': 'tint' } の形）。theme compare が案を試すときに使う。
+// tokens.json に書いたときと同じ検査を通る。
+export function readTheme(dir, { set = {} } = {}) {
   const base = baseTokens();
-  if (!dir) return { dir: null, name: null, tokens: base, rules: '', types: [], problems: [] };
+  if (!dir) {
+    // テーマなしでも、案（set）は試せる。
+    const problems = [];
+    const tokens = Object.keys(set).length ? overlay(base, withSet({}, set), '', problems) : base;
+    problems.push(...gradientProblems(tokens));
+    return { dir: null, name: null, tokens, rules: '', types: [], problems };
+  }
   const problems = [];
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
     return { dir, name: path.basename(dir), tokens: base, rules: '', types: [], problems: [`テーマのフォルダ ${dir} がありません。zukai theme init ${dir} で作るか、設定の theme を直してください。`] };
   }
   let tokens = base;
   const file = path.join(dir, 'tokens.json');
-  if (fs.existsSync(file)) {
+  if (fs.existsSync(file) || Object.keys(set).length) {
     try {
-      const over = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (isObj(over)) tokens = overlay(base, over, '', problems);
+      const over = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+      if (isObj(over)) tokens = overlay(base, withSet(over, set), '', problems);
       else problems.push('tokens.json は JSON のオブジェクトで書きます。');
-      // グラデーションを使う描き方は、グラデーションの色が無いと描けない。
-      const uses = [tokens.emphasis.box !== 'flat' && `emphasis.box の ${tokens.emphasis.box}`, tokens.emphasis.chart !== 'flat' && `emphasis.chart の ${tokens.emphasis.chart}`].filter(Boolean);
-      if (uses.length && !tokens.gradient.stops.length) problems.push(`${uses.join('と')}は、グラデーションで描きます。gradient.stops に2〜5個の色を書いてください。`);
+      problems.push(...gradientProblems(tokens));
     } catch (e) {
       problems.push(`tokens.json を読めません。${e.message}`);
     }
@@ -203,7 +225,7 @@ export const contrast = (a, b) => {
 };
 
 // 色覚の違いの見え方（Viénot ら、1999）。1型（protan）と2型（deutan）を確かめる。3型は少なく、この近似の精度も低いので見ない。
-const VISION = {
+export const VISION = {
   通常: null,
   '1型色覚': [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
   '2型色覚': [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
@@ -216,6 +238,14 @@ const lab = (h, m) => {
   const [X, Y, Z] = [(0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, 0.2126 * r + 0.7152 * g + 0.0722 * b, (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883];
   return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
 };
+// 色覚の違いでの見え方を、色にする。見本で、見分けにくさを目で確かめるのに使う。
+export function simulate(hex, m) {
+  if (!m) return hex;
+  const v = rgb(hex).map(linear);
+  const out = m.map((row) => Math.min(1, Math.max(0, row[0] * v[0] + row[1] * v[1] + row[2] * v[2])));
+  const gamma = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+  return `#${out.map((c) => Math.round(gamma(c) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
 // 2色の差（CIE76 の ΔE）。
 export const distance = (a, b, m = null) => Math.hypot(...lab(a, m).map((x, i) => x - lab(b, m)[i]));
 
@@ -224,7 +254,7 @@ export const distance = (a, b, m = null) => Math.hypot(...lab(a, m).map((x, i) =
 // 系列どうしの差は ΔE 23。既定の3色の最も近い組（1型色覚で 25）は通し、赤と緑の定番の組（2型色覚で 21）は知らせる。
 const TEXT = 4.5;
 const SERIES_BG = 2.5;
-const SERIES_GAP = 23;
+export const SERIES_GAP = 23;
 
 // 見た目の検査。severity は error（文字が読めない）か warn（見分けにくい）。
 export async function checkTheme(t) {
@@ -284,13 +314,13 @@ export async function checkTheme(t) {
 // --- AI への指示 --------------------------------------------------------------
 
 // rules.md を、zukai prompt の指示の節にする。見出しは1段下げ、HTML のコメントは外す。
-// 「## 動画」で始まる節は、動画を作るときだけ入れる。「## 出典」の節は人が読むためのものなので、入れない。
+// 「## 動画」で始まる節は、動画を作るときだけ入れる。「## 出典」と「## 決めたこと」の節は人が読むためのものなので、入れない。
 export function rulesPrompt(theme, { video = false } = {}) {
   if (!theme?.rules) return '';
   const body = theme.rules.replace(/<!--[\s\S]*?-->/g, '').replace(/^#\s+.+\n?/m, '');
   const parts = body.split(/^(?=##\s)/m);
   const kept = parts
-    .filter((p) => !/^##\s+出典/.test(p) && (video || !/^##\s+動画/.test(p)))
+    .filter((p) => !/^##\s+(出典|決めたこと)/.test(p) && (video || !/^##\s+動画/.test(p)))
     .filter((p) => p.replace(/^##\s.*$/m, '').trim())
     .map((p) => p.trim().replace(/^(#{2,5})(?=\s)/gm, '#$1'));
   if (!kept.length) return '';
@@ -315,6 +345,10 @@ const RULES_TEMPLATE = `# テーマの名前
 ## 出典
 
 <!-- 取り込んだ資料の名前と、そこから決めた値。AI への指示には入れない。資料そのものは、このフォルダにコピーしない。 -->
+
+## 決めたこと
+
+<!-- 利用者と対話して決めたこと。日付、決めたこと、選ばなかった案、理由を1行ずつ書く。AI への指示には入れない。例: 2026-10-11 強調した箱は tint にした（fill は白い文字がマゼンタの上で 3.5:1 しかないため）。 -->
 `;
 
 // テーマのフォルダを作る。tokens.json には、変えられる値をすべて書く。AI と人が、使える項目の一覧として読めるようにするため。
@@ -338,8 +372,8 @@ export function initTheme(dir) {
 }
 
 // テーマの値と見た目を確かめる。値の誤りがあれば、見た目は確かめない。
-export async function themeReport(dir) {
-  const theme = readTheme(dir);
+export async function themeReport(dir, { set = {} } = {}) {
+  const theme = readTheme(dir, { set });
   const findings = theme.problems.map((message) => ({ severity: 'error', what: '値', message }));
   if (!findings.length) findings.push(...(await checkTheme(theme.tokens)));
   // 独自の型は、組み込みの型と名前が重ならず、例が検査を通ること。ひな形と上限の誤りを、原稿を書く前に見つけるため。

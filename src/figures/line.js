@@ -15,6 +15,7 @@ x: [5月, 6月, 7月, 8月, 9月, 10月]
 series:
   - label: パスワード誤り
     values: [320, 340, 330, 210, 150, 120]
+    emphasis: true
   - label: 期限切れ
     values: [60, 55, 70, 65, 58, 62]
 marker:
