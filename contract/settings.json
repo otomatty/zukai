@@ -10,6 +10,13 @@
       "scopes": ["team", "local", "user"],
       "description": "返答を資料だけにするか、解説動画も作るか。video にすると、zukai prompt が動画の書き方を含める"
     },
+    "theme": {
+      "group": "出力",
+      "type": "path",
+      "default": null,
+      "scopes": ["team", "local", "user"],
+      "description": "デザインのテーマのフォルダ。tokens.json（色、フォント）と rules.md（描き方のルール）を置く。zukai-theme スキルが資料から作る。無ければ zukai の既定の見た目"
+    },
     "video.model": {
       "group": "動画",
       "type": "string",

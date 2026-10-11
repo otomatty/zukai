@@ -11,6 +11,7 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 | 役割 | 置き場所 | 内容 |
 |---|---|---|
 | 契約 | `contract/` | 文字数や図の要素数の上限（`limits.json`）、色とフォント（`tokens.json`）、設定の項目（`settings.json`） |
+| テーマ | 設定の `theme` が指すフォルダ | `tokens.json` に重ねる色とフォント、描き方のルール（`rules.md`）。資料から `zukai-theme` スキルが作る |
 | 図の型 | `src/figures/` | 型ごとに、仕様の検証と SVG の描画を1ファイルで持つ |
 | Lint | `src/lint/` | 自作ルール21個と textlint |
 | 指示 | `prompts/` | 書き方の規約と例1つ（`base.md`）、後から足した指示（`model-notes.md`） |
@@ -64,6 +65,8 @@ zukai build 原稿.md --format=confluence  # Confluence 用のフォルダを書
 zukai publish 原稿.md               # Confluence Cloud にページを作る。2回目以降は更新する
 zukai extract 原稿.html             # HTML に埋め込んだ原稿を取り出す
 zukai view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
+zukai theme check                  # デザインのテーマの値と見た目（文字のコントラストなど）を確かめる
+zukai theme preview                # テーマで描いた図の見本を、1枚の HTML に書き出す
 zukai corpus                       # Lint 自体が期待どおりに動くか確認する
 zukai stats                        # ルールごとの実績を表示する
 ```
@@ -99,6 +102,7 @@ zukai login confluence                         # メールアドレスと API �
 | 項目 | 内容 | 既定の書き先 |
 |---|---|---|
 | `output` | `document`（資料だけ）か `video`（資料と動画） | チーム |
+| `theme` | デザインのテーマのフォルダ。無ければ zukai の既定の見た目 | チーム |
 | `video.*` | 声、語り口、BGM、効果音、TTS のモデル | チーム |
 | `confluence.base`、`spaceId`、`parentId` | Confluence の URL と、初回にページを作る場所 | チーム |
 | `terms` | 用語集 | チーム |
@@ -160,7 +164,7 @@ zukai setup skills                                  # 対話で、書く場所�
 zukai setup skills --skills=user --tools=claude --yes  # この PC の全プロジェクトの ~/.claude/skills に書く
 ```
 
-`.claude/skills` は Claude Code、`.agents/skills` は Codex、Cursor、GitHub Copilot、Devin などが読みます。スキルは `zukai` コマンドを呼びます。`zukai` が PATH に無いときだけ、CLI の絶対パスを書きます。zukai を新しくするとスキルの中身が変わることがあります。そのときは `zukai doctor` が知らせるので、`zukai setup skills` で書き直します。
+`setup skills` は、資料からデザインのテーマを作るスキル（`zukai-theme`）も同じ場所に書きます。`.claude/skills` は Claude Code、`.agents/skills` は Codex、Cursor、GitHub Copilot、Devin などが読みます。スキルは `zukai` コマンドを呼びます。`zukai` が PATH に無いときだけ、CLI の絶対パスを書きます。zukai を新しくするとスキルの中身が変わることがあります。そのときは `zukai doctor` が知らせるので、`zukai setup skills` で書き直します。
 
 スキルは、zukai が設定の誤りや足りないもので止まったときに `zukai doctor` の結果を利用者に伝えます。API キーはチャットで尋ねず、利用者に `zukai login` の実行を頼みます。
 
@@ -210,6 +214,39 @@ ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` �
 
 動画を作るには、Playwright と Chromium（`npm install playwright`、`npx playwright install chromium`）と、コマンドのパスに入った ffmpeg が必要です。足りないものは `zukai doctor` が、直すコマンドと一緒に表示します。
 
+## デザインのテーマ
+
+図と動画の見た目（色、フォント、描き方）は、テーマで好きなものに変えられます。テーマは、AI が資料から作ります。元にできるのは、Claude Design で作ったデザインや、手元のブランドガイド、スライドなどの資料です。
+
+```bash
+zukai setup skills                       # zukai-answer と一緒に、zukai-theme スキルも書く
+# AI ツールに「このデザインに合わせて」と資料を渡すと、スキルが次を行う
+zukai theme init zukai-theme             # テーマのフォルダを作る
+zukai theme check zukai-theme            # 値と見た目を確かめる
+zukai theme preview zukai-theme          # 見本の HTML を書き出し、元の資料と見比べる
+zukai config set theme zukai-theme       # テーマを使う（自分だけなら --scope=local）
+```
+
+テーマのフォルダには、2つのファイルを置きます。
+
+| ファイル | 内容 | 使われ方 |
+|---|---|---|
+| `tokens.json` | 色、フォント、線の太さ、コードの配色。`contract/tokens.json` と同じ形で、変える値だけを書けばよい | `contract/tokens.json` に重ね、資料（HTML、Confluence の PNG）と動画の図を描く。自由な図に使える色と、Lint の色の検査も、この値になる |
+| `rules.md` | 描き方のルール。`## 図`、`## 動画`、`## 出典` の節に分ける | `zukai prompt` が AI への指示に入れる。`## 動画` は動画を作るときだけ入れ、`## 出典` は入れない |
+
+取り込みは、スキル（`zukai-theme`）が行います。AI が資料を読んで値とルールを決め、zukai は値を検査するだけです。スキルには、形式ごとの資料の読み方を書いてあります。HTML と CSS は CSS 変数を、PowerPoint はテーマの配色と書体の定義を読み、PDF と画像は見た目から読み取ります。資料そのものはテーマのフォルダにコピーしません。`rules.md` の「出典」には、資料の名前だけを書きます。
+
+| 検査 | 内容 |
+|---|---|
+| 値（読むときに止める） | 無い項目、色でない値、要素の数の違う配列、`;` や `{` を含むフォント。図の幅と動画の大きさ（`figure.width`、`video.width`、`video.height`、`video.fps`）は、Lint の上限が前提にしているので変えられない |
+| 文字（error） | 文字と背景のコントラストが 4.5:1 以上か。図の文字、補足、強調、強調の上の文字、動画の文字と字幕を、資料と動画の両方で確かめる |
+| 系列の色（warn） | 背景と 2.5:1 以上か。3色が、通常の見え方と、1型、2型の色覚で見分けられるか |
+| コードの配色（error） | `codeTheme` が Shiki にある名前か |
+
+`zukai doctor` も、設定したテーマを同じように確かめます。テーマを変えると、自由な図（`svg figure`）に書いた前の色は、Lint の F001 になります。
+
+テーマで変わるのは、zukai が描く部分（図、本文の配色、動画の背景、字幕、図）と、自由な図に使える色です。動画のシーンの絵は AI が書くので、テーマの配色を CSS 変数として渡し、絵柄は `rules.md` の `## 動画` の指示で寄せます。どこまで従ったかは `zukai frames --sheet` で確かめます。
+
 ## Claude Code のプラグイン
 
 このリポジトリは、Claude Code のプラグインとしても読み込めます。読み込むと、資料を作る `zukai` スキルが使えます。
@@ -248,7 +285,7 @@ steps:
 
 ## コードブロック
 
-コードブロックには言語名を書きます。HTML では、生成時に Shiki が色を付けて埋め込みます。配色は `contract/tokens.json` の `codeTheme` で変えます。Confluence では、コードマクロが言語名に従って色を付けます。出力やログのように言語がないものは `text` と書きます。
+コードブロックには言語名を書きます。HTML では、生成時に Shiki が色を付けて埋め込みます。配色は `contract/tokens.json` の `codeTheme` で決まり、テーマの `tokens.json` で変えられます。Confluence では、コードマクロが言語名に従って色を付けます。出力やログのように言語がないものは `text` と書きます。
 
 ## 図の型
 
@@ -315,9 +352,9 @@ steps:
 
 `stats` は、図の型ごとの利用数と、自由な図の題名を表示します。同じ形の自由な図が増えたら型にする候補、使われない型は削る候補です。
 
-`gitgraph` の見た目は、Mermaid の gitGraph（テーマ redux-color）に合わせています。破線のレーン、左端のブランチ名の札、斜めに書くコミットのラベル、荷札の形のタグ、白抜きの取り込みコミットを同じ形で描きます。色は `contract/tokens.json` の `gitgraph` にあり、Mermaid のほかのテーマの色に差し替えられます。
+`gitgraph` の見た目は、Mermaid の gitGraph（テーマ redux-color）に合わせています。破線のレーン、左端のブランチ名の札、斜めに書くコミットのラベル、荷札の形のタグ、白抜きの取り込みコミットを同じ形で描きます。色は `contract/tokens.json` の `gitgraph` にあります。テーマの `tokens.json` で、Mermaid のほかのテーマの色に差し替えられます。
 
-`bar` から `treemap` までの9種類は Apache ECharts で描きます。割合、四分位数、傾向の直線は、原稿の値から自動で計算します。原稿に ECharts の設定は書かず、型の項目（単位、項目、系列）だけを書きます。配色と線の太さは `contract/tokens.json` の `chart` で決まります。チャートは単位（`unit`）が必須で、棒は必ず0から始めます。系列を見分ける3色は、色覚の違いがあっても見分けられる組み合わせを選んでいます。
+`bar` から `treemap` までの9種類は Apache ECharts で描きます。割合、四分位数、傾向の直線は、原稿の値から自動で計算します。原稿に ECharts の設定は書かず、型の項目（単位、項目、系列）だけを書きます。配色と線の太さは `contract/tokens.json` の `chart` で決まり、テーマで変えられます。チャートは単位（`unit`）が必須で、棒は必ず0から始めます。系列を見分ける3色は、色覚の違いがあっても見分けられる組み合わせを選んでいます。
 
 ### アイコン
 

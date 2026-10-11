@@ -48,7 +48,7 @@ items:
           data: spec.items.map((it) => ({ value: it.label, textStyle: { fontWeight: it.emphasis ? 700 : 400 } })), axisLabel: { color: t.color.ink, fontSize: 13, margin: 14 },
         },
         series: [{
-          type: 'bar', barWidth: 16, showBackground: true, backgroundStyle: { color: '#dbe7ef', borderRadius: [0, 4, 4, 0] },
+          type: 'bar', barWidth: 16, showBackground: true, backgroundStyle: { color: t.chart.track, borderRadius: [0, 4, 4, 0] },
           data: spec.items.map((it) => ({ value: it.value, label: { fontWeight: it.emphasis ? 700 : 400 } })),
           itemStyle: { color: t.color.accent, borderRadius: [0, 4, 4, 0] },
           ...(spec.target === undefined ? {} : { markLine: { silent: true, symbol: 'none', lineStyle: { color: t.color.ink, type: 'solid', width: 2 }, label: { formatter: `目標 ${fmt(spec.target)}${spec.unit}`, color: t.color.ink, fontSize: 12, fontWeight: 700, position: 'start', rotate: 0 }, data: [{ xAxis: spec.target }] } }),

@@ -15,7 +15,7 @@ const withPageId = (source, id) => `<!-- zukai-confluence ${id} -->\n${source.re
 // 本文と添付ファイル（図の PNG、原稿）を作る。build と publish の両方が使う。
 export async function bundle(source, file) {
   const page = await renderConfluence(source, file);
-  const files = page.figures.map((fig) => ({ name: fig.name, type: 'image/png', data: toPng(fig.svg).data }));
+  const files = page.figures.map((fig) => ({ name: fig.name, type: 'image/png', data: toPng(fig.svg, page.background).data }));
   files.push({ name: path.basename(file), type: 'text/markdown', data: Buffer.from(source) });
   return { title: page.title, body: page.body, files };
 }

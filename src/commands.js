@@ -129,6 +129,62 @@ export const commands = [
     },
   },
   {
+    name: 'theme',
+    group: '設定',
+    summary: 'デザインのテーマ（色、フォント、描き方のルール）のフォルダを作り、確かめ、見本を描く。資料からの取り込みは zukai-theme スキルが行う',
+    args: [
+      { name: '操作', required: true, desc: 'init（フォルダを作る）、check（値と見た目を確かめる）、preview（見本の HTML を書き出す）' },
+      { name: 'フォルダ', desc: 'テーマのフォルダ。省略すると、init はプロジェクトの根の zukai-theme、check と preview は設定の theme' },
+    ],
+    flags: [
+      { name: 'out', value: 'ファイル', desc: 'preview の書き出す先。既定は .zukai/theme-preview.html' },
+      { name: 'json', desc: 'check の結果を JSON で出力する' },
+    ],
+    examples: ['zukai theme init zukai-theme', 'zukai theme check zukai-theme', 'zukai theme preview zukai-theme', 'zukai config set theme zukai-theme'],
+    settings: ['theme'],
+    related: ['config', 'prompt'],
+    async run({ args, opt, has }) {
+      const { initTheme, themeReport } = await import('./theme.js');
+      const { settingsFor, projectOf, stateDir } = await import('./config.js');
+      const [action, folder] = args;
+      const project = projectOf(process.cwd());
+      const dir = folder ? path.resolve(folder) : action === 'init' ? path.join(project, 'zukai-theme') : settingsFor(process.cwd()).settings.theme ?? null;
+      switch (action) {
+        case 'init': {
+          const written = initTheme(dir);
+          if (!written.length) console.log(`${dir} には、tokens.json と rules.md がすでにあります。何も書いていません。`);
+          written.forEach((f) => console.log(`${f} を書きました。`));
+          console.log(`値を変えたら zukai theme check ${path.relative(process.cwd(), dir) || '.'} で確かめ、zukai config set theme ${path.relative(process.cwd(), dir) || '.'} で使います。`);
+          return 0;
+        }
+        case 'check': {
+          const r = await themeReport(dir);
+          if (has('json')) console.log(JSON.stringify({ dir: r.dir, name: r.name, ok: r.ok, findings: r.findings }, null, 2));
+          else {
+            const errors = r.findings.filter((f) => f.severity === 'error').length;
+            console.log(`${r.dir ? `テーマ「${r.name}」（${r.dir}）` : 'テーマなし（既定の見た目）'}  ${r.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${r.findings.length - errors}`);
+            for (const f of r.findings) console.log(`  ${f.severity.padEnd(5)}  ${f.what}  ${f.message}`);
+          }
+          return r.ok ? 0 : 1;
+        }
+        case 'preview': {
+          const { previewTheme } = await import('./preview.js');
+          const { html, findings } = await previewTheme(dir);
+          const out = opt('out') ?? path.join(stateDir(project), 'theme-preview.html');
+          fs.writeFileSync(out, html);
+          console.log(`${out} を書き出しました。ブラウザで開いて、元の資料と見比べます。`);
+          if (findings.length) console.log(`確かめた結果  error ${findings.filter((f) => f.severity === 'error').length} / warn ${findings.filter((f) => f.severity === 'warn').length}（詳しくは zukai theme check）`);
+          return 0;
+        }
+        default: {
+          const { closest } = await import('./config.js');
+          const near = closest(action, ['init', 'check', 'preview']);
+          throw new Error(`theme の操作「${action}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}init、check、preview のどれかを書きます。`);
+        }
+      }
+    },
+  },
+  {
     name: 'prompt',
     group: '書く',
     summary: 'AI に渡す指示を出力する。図の型は一覧だけを含む',
@@ -138,14 +194,15 @@ export const commands = [
       { name: 'type-command', value: 'コマンド', desc: '指示の中で案内する、型の書き方を取り出すコマンド。既定は zukai type' },
     ],
     examples: ['zukai prompt', 'zukai prompt --full'],
-    settings: ['output', 'terms'],
-    related: ['type', 'lint'],
+    settings: ['output', 'terms', 'theme'],
+    related: ['type', 'lint', 'theme'],
     async run({ opt, has }) {
       const { settingsFor } = await import('./config.js');
       const { buildPrompt } = await import('./prompt.js');
+      const { themeFor } = await import('./theme.js');
       const { settings } = settingsFor(process.cwd());
       const video = has('video') || settings.output === 'video';
-      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey) }));
+      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey), theme: themeFor(process.cwd()) }));
     },
   },
   {
@@ -155,9 +212,11 @@ export const commands = [
     args: [{ name: '型', required: true, many: true, desc: 'flow、bar などの型の名前。zukai prompt の一覧にある' }],
     examples: ['zukai type flow bar'],
     related: ['prompt', 'icons'],
+    settings: ['theme'],
     async run({ args }) {
       const { buildPrompt } = await import('./prompt.js');
-      process.stdout.write(buildPrompt({ only: args }));
+      const { themeFor } = await import('./theme.js');
+      process.stdout.write(buildPrompt({ only: args, theme: themeFor(process.cwd()) }));
     },
   },
   {

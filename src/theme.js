@@ -1,0 +1,238 @@
+// デザインのテーマ。contract/tokens.json の上に、プロジェクトのテーマを重ねる。
+// テーマはフォルダで、設定の theme が指す。中身は2つのファイルで、どちらも zukai-theme スキルが資料から作る。
+//   tokens.json  色、フォント、寸法。contract/tokens.json と同じ形で、変える値だけを書けばよい
+//   rules.md     描き方のルール。zukai prompt が AI への指示に入れる。「## 動画」の節は、動画を作るときだけ入れる
+// 値の誤り（無い項目、型の違い、色でない値）は、読むときに止める。見た目の誤り（文字が背景に沈む色）は、theme check と doctor が知らせる。
+// このファイルは重い依存を読まない。doctor が、依存が欠けた環境でも動く必要があるため。
+import fs from 'node:fs';
+import path from 'node:path';
+import { root, settingsFor } from './config.js';
+
+export const baseTokens = () => JSON.parse(fs.readFileSync(path.join(root, 'contract/tokens.json'), 'utf8'));
+
+// テーマでは変えられない値。図の幅と動画の大きさは、Lint の上限と動画の検査が前提にしている。
+export const FIXED = ['figure.width', 'video.width', 'video.height', 'video.fps'];
+
+const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+export const isColor = (v) => typeof v === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v);
+// フォントの指定は、CSS と SVG の style にそのまま入る。宣言や要素の外へ出られる文字を通さない。
+const isFont = (v) => typeof v === 'string' && v.trim() !== '' && !/[;{}<>\\\n\r]/.test(v);
+
+// base の形に合う値だけを重ねる。base に無い名前、型の違う値、色でない値は problems に入れ、重ねない。
+function overlay(base, over, at, problems) {
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    if (!at && k.startsWith('$')) continue;
+    const key = at ? `${at}.${k}` : k;
+    if (!Object.hasOwn(base, k)) {
+      problems.push(`${key} という項目はありません。使える項目は zukai theme init で作る tokens.json にあります。`);
+      continue;
+    }
+    if (FIXED.includes(key)) {
+      problems.push(`${key} はテーマでは変えられません。図の幅と動画の大きさは、検査の上限が前提にしています。`);
+      continue;
+    }
+    const b = base[k];
+    if (isObj(b)) {
+      if (isObj(v)) out[k] = overlay(b, v, key, problems);
+      else problems.push(`${key} は、{ } の中に項目を書きます。`);
+    } else if (Array.isArray(b)) {
+      if (Array.isArray(v) && v.length === b.length && v.every(isColor)) out[k] = v;
+      else problems.push(`${key} は、${b.length}個の色（#rrggbb）の配列で書きます。`);
+    } else if (typeof b === 'number') {
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = v;
+      else problems.push(`${key} は、0より大きい数値で書きます。`);
+    } else if (isColor(b)) {
+      if (isColor(v)) out[k] = v;
+      else problems.push(`${key} の「${v}」は色ではありません。#rrggbb か #rgb で書きます。`);
+    } else if (k === 'font') {
+      if (isFont(v)) out[k] = v;
+      else problems.push(`${key} は、CSS の font-family の形で書きます。; { } < > \\ と改行は使えません。`);
+    } else if (typeof v === 'string' && /^[\w-]+$/.test(v)) out[k] = v;
+    else problems.push(`${key} は、英数字とハイフンの名前で書きます。`);
+  }
+  return out;
+}
+
+// テーマのフォルダを読む。dir が null なら、テーマなし（contract/tokens.json のまま）。
+// name はテーマの名前で、rules.md の # 見出しか、フォルダの名前。
+export function readTheme(dir) {
+  const base = baseTokens();
+  if (!dir) return { dir: null, name: null, tokens: base, rules: '', problems: [] };
+  const problems = [];
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
+    return { dir, name: path.basename(dir), tokens: base, rules: '', problems: [`テーマのフォルダ ${dir} がありません。zukai theme init ${dir} で作るか、設定の theme を直してください。`] };
+  }
+  let tokens = base;
+  const file = path.join(dir, 'tokens.json');
+  if (fs.existsSync(file)) {
+    try {
+      const over = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (isObj(over)) tokens = overlay(base, over, '', problems);
+      else problems.push('tokens.json は JSON のオブジェクトで書きます。');
+    } catch (e) {
+      problems.push(`tokens.json を読めません。${e.message}`);
+    }
+  }
+  const rulesFile = path.join(dir, 'rules.md');
+  const rules = fs.existsSync(rulesFile) ? fs.readFileSync(rulesFile, 'utf8').trim() : '';
+  const name = rules.match(/^#\s+(.+)$/m)?.[1].trim() ?? path.basename(dir);
+  return { dir, name, tokens, rules, problems: problems.map((p) => `${path.join(dir, 'tokens.json')}: ${p}`) };
+}
+
+// 原稿やフォルダから、そのプロジェクトのテーマを読む。誤りがあれば止める。書き間違いを黙って無視しないため。
+export function themeFor(start) {
+  const theme = readTheme(settingsFor(start).settings.theme ?? null);
+  if (theme.problems.length) throw new Error(`テーマに誤りがあります。\n${theme.problems.map((p) => `  ${p}`).join('\n')}\nzukai theme check で確かめられます。`);
+  return theme;
+}
+export const tokensFor = (start) => themeFor(start).tokens;
+
+// --- 見た目の検査 -------------------------------------------------------------
+
+const rgb = (h) => {
+  const s = h.slice(1).length === 3 ? [...h.slice(1)].map((c) => c + c).join('') : h.slice(1);
+  return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16) / 255);
+};
+const linear = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const luminance = (h) => {
+  const [r, g, b] = rgb(h).map(linear);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+// WCAG のコントラスト比。
+export const contrast = (a, b) => {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+};
+
+// 色覚の違いの見え方（Viénot ら、1999）。1型（protan）と2型（deutan）を確かめる。3型は少なく、この近似の精度も低いので見ない。
+const VISION = {
+  通常: null,
+  '1型色覚': [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  '2型色覚': [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.01182, 0.04294, 0.968881]],
+};
+const lab = (h, m) => {
+  let v = rgb(h).map(linear);
+  if (m) v = m.map((row) => Math.min(1, Math.max(0, row[0] * v[0] + row[1] * v[1] + row[2] * v[2])));
+  const [r, g, b] = v;
+  const f = (x) => (x > 0.008856 ? Math.cbrt(x) : 7.787 * x + 16 / 116);
+  const [X, Y, Z] = [(0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, 0.2126 * r + 0.7152 * g + 0.0722 * b, (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883];
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+};
+// 2色の差（CIE76 の ΔE）。
+export const distance = (a, b, m = null) => Math.hypot(...lab(a, m).map((x, i) => x - lab(b, m)[i]));
+
+// 文字は 4.5:1（WCAG AA）。系列の色は、凡例とラベルが添うので、背景と見分けられる 2.5:1 までにする。
+// 既定の系列の緑（#1baf7a）が白地で 2.8:1 で、図の部品の基準の 3:1 では、検証済みの組み合わせまで知らせてしまうため。
+// 系列どうしの差は ΔE 23。既定の3色の最も近い組（1型色覚で 25）は通し、赤と緑の定番の組（2型色覚で 21）は知らせる。
+const TEXT = 4.5;
+const SERIES_BG = 2.5;
+const SERIES_GAP = 23;
+
+// 見た目の検査。severity は error（文字が読めない）か warn（見分けにくい）。
+export async function checkTheme(t) {
+  const out = [];
+  const pair = (what, fg, bg, kf, kb, min = TEXT, severity = 'error') => {
+    const r = contrast(fg, bg);
+    if (r < min) out.push({ severity, what, message: `${kf}（${fg}）と ${kb}（${bg}）のコントラストが ${r.toFixed(2)}:1 です。${min}:1 以上にしてください。` });
+  };
+  const figure = (c, chart, at) => {
+    pair('図の文字', c.ink, c.paper, `${at}.ink`, `${at}.paper`);
+    pair('図の文字', c.ink, c.surface, `${at}.ink`, `${at}.surface`);
+    pair('図の文字', c.ink, c.accentSurface, `${at}.ink`, `${at}.accentSurface`);
+    pair('図の補足', c.sub, c.paper, `${at}.sub`, `${at}.paper`);
+    pair('図の補足', c.sub, c.surface, `${at}.sub`, `${at}.surface`);
+    pair('強調の文字', c.accent, c.paper, `${at}.accent`, `${at}.paper`);
+    pair('強調の文字', c.accent, c.accentSurface, `${at}.accent`, `${at}.accentSurface`);
+    pair('強調の上の文字', c.onAccent, c.accent, `${at}.onAccent`, `${at}.accent`);
+    pair('強調の上の文字', c.onAccent, c.ink, `${at}.onAccent`, `${at}.ink`);
+    const chartAt = at.replace(/color$/, 'chart');
+    chart.series.forEach((s, i) => pair('系列の色', s, c.paper, `${chartAt}.series[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
+    for (const [vision, m] of Object.entries(VISION)) {
+      for (let i = 0; i < chart.series.length; i++) {
+        for (let j = i + 1; j < chart.series.length; j++) {
+          const d = distance(chart.series[i], chart.series[j], m);
+          if (d < SERIES_GAP) out.push({ severity: 'warn', what: '系列の見分け', message: `${chartAt}.series の ${chart.series[i]} と ${chart.series[j]} は、${vision}で見分けにくい色です（差 ${d.toFixed(0)}、${SERIES_GAP} 以上にする）。明るさか色相を離してください。` });
+        }
+      }
+    }
+  };
+  figure(t.color, t.chart, 'color');
+  pair('ページ', t.page.error, t.color.paper, 'page.error', 'color.paper');
+  pair('画面の注釈', t.color.onAccent, t.screenshot.note, 'color.onAccent', 'screenshot.note');
+  const v = t.video;
+  figure({ ...t.color, ...v.figure.color }, { ...t.chart, ...v.figure.chart }, 'video.figure.color');
+  pair('動画の文字', v.ink, v.background, 'video.ink', 'video.background');
+  pair('字幕', v.subtitle.ink, v.subtitle.band, 'video.subtitle.ink', 'video.subtitle.band');
+  try {
+    const { bundledThemes } = await import('shiki');
+    if (!(t.codeTheme in bundledThemes)) out.push({ severity: 'error', what: 'コードの配色', message: `codeTheme「${t.codeTheme}」は Shiki にありません。github-light、github-dark、one-light などの名前を書きます。` });
+  } catch {
+    // 依存が欠けている。doctor が別に知らせる。
+  }
+  return out;
+}
+
+// --- AI への指示 --------------------------------------------------------------
+
+// rules.md を、zukai prompt の指示の節にする。見出しは1段下げ、HTML のコメントは外す。
+// 「## 動画」で始まる節は、動画を作るときだけ入れる。「## 出典」の節は人が読むためのものなので、入れない。
+export function rulesPrompt(theme, { video = false } = {}) {
+  if (!theme?.rules) return '';
+  const body = theme.rules.replace(/<!--[\s\S]*?-->/g, '').replace(/^#\s+.+\n?/m, '');
+  const parts = body.split(/^(?=##\s)/m);
+  const kept = parts
+    .filter((p) => !/^##\s+出典/.test(p) && (video || !/^##\s+動画/.test(p)))
+    .filter((p) => p.replace(/^##\s.*$/m, '').trim())
+    .map((p) => p.trim().replace(/^(#{2,5})(?=\s)/gm, '#$1'));
+  if (!kept.length) return '';
+  const order = video ? '動画の書き方の「絵柄」と色の選び方は、このルールを優先します。' : '';
+  return `## デザインのルール\n\nこのプロジェクトのテーマ「${theme.name}」の描き方です。自由な図の色と強調${video ? '、動画のシーンの絵柄と配色' : ''}は、このルールに従います。上の書き方（文字数、図の型の上限、検査）と食い違うときは、上の書き方を優先します。${order}テーマの色は、自由な図では zukai type free に出る色として、動画では CSS 変数として使えます。\n\n${kept.join('\n\n')}`;
+}
+
+// --- テーマのフォルダを作る、確かめる -----------------------------------------
+
+const RULES_TEMPLATE = `# テーマの名前
+
+<!-- zukai-theme スキルが、取り込んだ資料から書きます。資料に見られる描き方だけを、具体的に書きます。 -->
+
+## 図
+
+<!-- 自由な図（free）の描き方。例: 強調は1つの図に1か所だけにし、accent で塗る。箱は角丸にせず、線は細くする。 -->
+
+## 動画
+
+<!-- 動画のシーンの絵柄と配色。例: 背景は白地にし、主役はブランドの青で塗る。キャラクターは描かず、図形と文字だけで見せる。 -->
+
+## 出典
+
+<!-- 取り込んだ資料の名前と、そこから決めた値。AI への指示には入れない。資料そのものは、このフォルダにコピーしない。 -->
+`;
+
+// テーマのフォルダを作る。tokens.json には、変えられる値をすべて書く。AI と人が、使える項目の一覧として読めるようにするため。
+// 書いたファイルを返す。すでにあるファイルは上書きしない。
+export function initTheme(dir) {
+  const base = baseTokens();
+  for (const key of FIXED) {
+    const keys = key.split('.');
+    delete keys.slice(0, -1).reduce((o, k) => o[k], base)[keys.at(-1)];
+  }
+  const tokens = { $comment: 'contract/tokens.json に重ねる値。変えない項目は消してもよい。図の幅と動画の大きさは変えられない。zukai theme check で確かめる', ...base };
+  fs.mkdirSync(dir, { recursive: true });
+  const written = [];
+  for (const [name, text] of [['tokens.json', JSON.stringify(tokens, null, 2) + '\n'], ['rules.md', RULES_TEMPLATE]]) {
+    const file = path.join(dir, name);
+    if (fs.existsSync(file)) continue;
+    fs.writeFileSync(file, text);
+    written.push(file);
+  }
+  return written;
+}
+
+// テーマの値と見た目を確かめる。値の誤りがあれば、見た目は確かめない。
+export async function themeReport(dir) {
+  const theme = readTheme(dir);
+  const findings = theme.problems.map((message) => ({ severity: 'error', what: '値', message }));
+  if (!findings.length) findings.push(...(await checkTheme(theme.tokens)));
+  return { dir, name: theme.name, theme, findings, ok: findings.every((f) => f.severity !== 'error') };
+}

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { parse, sentences } from '../parse.js';
 import { types } from '../figures/index.js';
 import { readJson } from '../lint/index.js';
+import { tokensFor } from '../theme.js';
 import MarkdownIt from 'markdown-it';
 
 // 図の代わりに Markdown の表を置いたセクションの表。HTML は書けないようにして描く。
@@ -103,7 +104,7 @@ export const ROLE_NAMES = { question: '疑問', answer: '答え', example: '例'
 // 台本は、オープニングでテーマと疑問を示し、各シーンで疑問を投げかけて根拠と例で答え、エンディングでまとめる。
 export function scenesOf(source, file) {
   const doc = parse(source);
-  const tokens = videoTokens(readJson('contract/tokens.json'));
+  const tokens = videoTokens(tokensFor(path.dirname(path.resolve(file))));
   const limits = readJson('contract/limits.json');
   const ctx = { baseDir: path.dirname(path.resolve(file)) };
   const all = [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)];

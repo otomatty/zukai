@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readJson, root } from '../lint/index.js';
+import { tokensFor } from '../theme.js';
 import { esc } from '../figures/svg.js';
 import { settingsFor, projectOf, stateDir, machineSetting } from '../config.js';
 import { scenesOf, timeline, wrapScripts, DEFAULT_OPTIONS } from './script.js';
@@ -25,12 +26,12 @@ const css = (t, v) => `
 *{box-sizing:border-box}
 html,body{margin:0;width:${v.width}px;height:${v.height}px;overflow:hidden;background:${v.background};font-family:${t.font}}
 .zk-scene{position:absolute;inset:0;width:${v.width}px;height:${v.height}px;transform-origin:50% 50%;overflow:hidden;background:${v.background}}
-.zk-title{position:absolute;left:160px;right:160px;top:420px;margin:0;color:#fff;font-size:80px;line-height:1.3;font-weight:800;text-align:center}
-.zk-claim{position:absolute;left:160px;right:160px;top:96px;margin:0;color:#fff;font-size:50px;line-height:1.38;font-weight:800;text-align:center}
+.zk-title{position:absolute;left:160px;right:160px;top:420px;margin:0;color:${v.ink};font-size:80px;line-height:1.3;font-weight:800;text-align:center}
+.zk-claim{position:absolute;left:160px;right:160px;top:96px;margin:0;color:${v.ink};font-size:50px;line-height:1.38;font-weight:800;text-align:center}
 .zk-scene[data-kind=auto] .zk-fig{position:absolute;left:160px;top:270px;width:1600px;height:560px}
 .zk-fig>svg{width:100%;height:100%;overflow:visible}
 .zk-table{display:flex;align-items:center;justify-content:center}
-.zk-table table{border-collapse:collapse;color:#fff;font-size:34px;line-height:1.4}
+.zk-table table{border-collapse:collapse;color:${v.ink};font-size:34px;line-height:1.4}
 .zk-table th{text-align:left;padding:14px 26px;border-bottom:4px solid var(--zk-yellow)}
 .zk-table td{padding:14px 26px;border-bottom:2px solid rgba(255,255,255,.25)}
 #zk-sub{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:1240px;padding:12px 30px;border-radius:16px;background:${v.subtitle.band}cc;color:${v.subtitle.ink};font-size:40px;line-height:1.45;font-weight:700;text-align:center;visibility:hidden}
@@ -129,7 +130,7 @@ function run(cmd, args, input) {
 
 // 原稿から時間割を作る。動画、コマの書き出し、検査で共通。
 async function prepare(file, project) {
-  const tokens = readJson('contract/tokens.json');
+  const tokens = tokensFor(path.dirname(path.resolve(file)));
   const limits = readJson('contract/limits.json').video;
   const { settings: all } = settingsFor(project);
   const settings = { video: all.video, apiKey: all.gemini?.apiKey ?? null };

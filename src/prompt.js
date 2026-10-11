@@ -4,11 +4,13 @@ import path from 'node:path';
 import { types } from './figures/index.js';
 import { root, readJson } from './lint/index.js';
 import { termsTable } from './terms.js';
+import { readTheme, rulesPrompt } from './theme.js';
 
 // type は、型の書き方を取り出すコマンド。zukai を入れていない環境では、node と CLI のパスを含めて渡す。
 // video を true にすると、動画の書き方（prompts/video.md）を足す。terms は用語集（設定の terms）。
 // voice は、ナレーションを読み上げられるか（Gemini の API キーがあるか）。無いときは、AI が利用者に知らせられるよう指示に書く。
-export function buildPrompt({ full = false, only = null, type = 'zukai type', video = false, terms = [], voice = true } = {}) {
+// theme は、プロジェクトのテーマ（readTheme の結果）。自由な図に使える色と、デザインのルールが変わる。
+export function buildPrompt({ full = false, only = null, type = 'zukai type', video = false, terms = [], voice = true, theme = readTheme(null) } = {}) {
   const limits = readJson('contract/limits.json');
   const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8').trim();
   const fill = (s) =>
@@ -18,7 +20,7 @@ export function buildPrompt({ full = false, only = null, type = 'zukai type', vi
       .replaceAll('{{labelMax}}', limits.figure.labelMaxWidth)
       .replaceAll('{{noteMax}}', limits.figure.noteMaxWidth);
 
-  const tokens = readJson('contract/tokens.json');
+  const tokens = theme.tokens;
   const cap = (t) => Object.entries(limits[t.name]).map(([k, v]) => `${k}=${v}`).join('、');
   const detail = (t) => `### ${t.name}\n\n${t.summary}。使うのは、${t.when}ときです。上限は ${cap(t)} です。\n\n${[...t.fields, ...(t.guide?.(tokens, limits) ?? [])].map((f) => `- ${f}`).join('\n')}\n\n\`\`\`${t.fence ?? 'yaml figure'}\n${t.example}\n\`\`\``;
   if (only) return only.map((name) => (types[name] ? detail(types[name]) : `### ${name}\n\nこの名前の型はありません。使える型は ${Object.keys(types).join('、')} です。`)).join('\n\n') + '\n';
@@ -50,5 +52,5 @@ export function buildPrompt({ full = false, only = null, type = 'zukai type', vi
       .replaceAll('{{maxScene}}', v.maxSceneSeconds)
       .replaceAll('{{maxTotal}}', v.maxTotalSeconds);
   const silent = video && !voice ? '## この環境の状態\n\nGemini の API キーが無いので、動画は字幕だけの無音になります。動画を作ったら、そのことと、利用者が自分で `zukai login gemini` を実行すればナレーションが付くことを、チャットで伝えます。キーをチャットで尋ねません。' : '';
-  return [fill(read('prompts/base.md')), termsTable(terms), catalog, video ? videoGuide() : '', silent, notes ? `## 追加の指示\n\n${notes}` : ''].filter(Boolean).join('\n\n') + '\n';
+  return [fill(read('prompts/base.md')), termsTable(terms), catalog, video ? videoGuide() : '', rulesPrompt(theme, { video }), silent, notes ? `## 追加の指示\n\n${notes}` : ''].filter(Boolean).join('\n\n') + '\n';
 }

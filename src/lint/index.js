@@ -9,6 +9,7 @@ import { bundledLanguages } from 'shiki';
 import { rules, prosePatterns } from './rules.js';
 import { resolveRefs } from '../refs.js';
 import { termsOf, findAvoided } from '../terms.js';
+import { tokensFor } from '../theme.js';
 
 // ハイライトできる言語名。出力やログのように言語がないものは text と書く。
 export const knownLang = (lang) => ['text', 'txt', 'plaintext', 'plain', 'ansi'].includes(lang) || lang in bundledLanguages;
@@ -195,9 +196,11 @@ async function lintWithTextlint(source, file, warnOnly) {
 
 export async function lint(source, file, { textlint = true } = {}) {
   const limits = readJson('contract/limits.json');
-  const tokens = readJson('contract/tokens.json');
   const doc = parse(source);
-  const ctx = { baseDir: path.dirname(path.resolve(file)) };
+  const baseDir = path.dirname(path.resolve(file));
+  // 図の色と文字の大きさは、原稿のプロジェクトのテーマで確かめる。描くときと同じ値にするため。
+  const tokens = tokensFor(baseDir);
+  const ctx = { baseDir, tokens };
   let findings = [...lintProse(doc.lead), ...lintCode(doc.lead)];
 
   for (const section of doc.sections) {

@@ -68,7 +68,7 @@ function option(spec, t) {
   return {
     series: [{
       type: 'treemap', left: 0, right: 0, top: 0, bottom: 0, roam: false, nodeClick: false, breadcrumb: { show: false }, squareRatio: 1.2,
-      label: { show: true, color: '#fff', fontSize: 12, lineHeight: 18, formatter: (p) => `${p.name}\n${fmt(p.value)}${spec.unit}` },
+      label: { show: true, color: t.color.onAccent, fontSize: 12, lineHeight: 18, formatter: (p) => `${p.name}\n${fmt(p.value)}${spec.unit}` },
       upperLabel: { show: true, height: 28, color: t.color.ink, fontSize: 13, fontWeight: 700, formatter: (p) => `${p.name} ${fmt(p.value)}${spec.unit}` },
       levels: [
         { itemStyle: { borderWidth: 0, gapWidth: 10 }, upperLabel: { show: false } },

@@ -38,4 +38,4 @@ export const fmt = (v) => v.toLocaleString('ja-JP');
 export const unitError = (spec, name) => (typeof spec.unit !== 'string' || !spec.unit ? [`${name} には unit（値の単位）が必要です。`] : []);
 
 // 系列を見分ける色。検証済みの3色を順に使い、4つ目からは灰色にする。
-export const seriesColor = (t, i) => t.chart.series[i] ?? (i === t.chart.series.length ? t.chart.muted : '#cdd3d9');
+export const seriesColor = (t, i) => t.chart.series[i] ?? (i === t.chart.series.length ? t.chart.muted : t.chart.rest);
