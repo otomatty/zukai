@@ -171,7 +171,7 @@ export async function compareThemes(dir, variants, { only = null } = {}) {
   const base = columns[0].theme;
   if (base.problems.length) throw new Error(`テーマに誤りがあるので、見比べられません。\n${base.problems.map((p) => `  ${p}`).join('\n')}`);
   const names = only ?? [...COMPARE_TYPES, ...base.types.map((d) => d.name)];
-  const unknown = names.filter((n) => !typesFor(base)[n]);
+  const unknown = names.filter((n) => !Object.hasOwn(typesFor(base), n));
   if (unknown.length) throw new Error(`型 ${unknown.join('、')} はありません。`);
 
   const cell = (c, inner) => `<div class="cell">${inner}</div>`;

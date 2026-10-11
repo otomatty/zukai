@@ -443,6 +443,8 @@ test('theme compare は、今のテーマと案を、検査の結果と図と色
 
 test('見比べの図は、それぞれの案の紙の色の上に置く', async () => {
   const { compareThemes } = await import('../src/preview.js');
+  // オブジェクトが元から持つ名前（constructor など）は、型として通さない。
+  await assert.rejects(compareThemes(themeDir(GRAD), [], { only: ['constructor'] }), /型 constructor はありません/);
   const html = await compareThemes(themeDir(GRAD), ['color.paper="#111111"+color.ink="#f5f5f5"+color.sub="#cccccc"'], { only: ['flow'] });
   assert.match(html, /background:#ffffff" src="data:image\/svg\+xml/);
   assert.match(html, /background:#111111" src="data:image\/svg\+xml/);
