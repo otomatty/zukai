@@ -136,7 +136,7 @@ export async function voiceOf(lines, settings, cacheDir) {
 // すべてのシーンの音声。キーが無いときと、1つでも失敗したときは、全部を見積もりの長さにして無音の動画にする。
 export async function voicesFor(scenes, settings, cacheDir) {
   const silent = (reason) => ({ voices: scenes.map((s) => estimateVoice(s.lines)), silentReason: reason });
-  if (!settings.apiKey) return silent('Gemini の API キーがありません。環境変数 GEMINI_API_KEY を設定するか、zukai init --api-key を実行してください。');
+  if (!settings.apiKey) return silent('Gemini の API キーがありません。zukai login gemini を実行するか、環境変数 GEMINI_API_KEY を設定してください。');
   try {
     const voices = [];
     for (const s of scenes) voices.push(await voiceOf(s.lines, settings, cacheDir));

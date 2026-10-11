@@ -1,246 +1,85 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
-import path from 'node:path';
-import { lint, root } from './lint/index.js';
-import { rules } from './lint/rules.js';
-import { render, extract } from './render.js';
-import { bundle, publish } from './confluence.js';
-import { buildPrompt } from './prompt.js';
-import { record, stats } from './log.js';
-import { searchIcons } from './figures/icons.js';
+// コマンドの入口。引数を定義（commands.js）で検査してから、各コマンドの処理を呼ぶ。
+// ここでは重い依存を読み込まない。help、setup、doctor が、依存の欠けた環境でも動くようにするため。
+import { commandOf } from './commands.js';
+import { closest } from './config.js';
 
-const [cmd, ...rest] = process.argv.slice(2);
-const flags = new Set(rest.filter((a) => a.startsWith('--') && !a.includes('=')));
-const opt = (name) => rest.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
-const files = rest.filter((a) => !a.startsWith('--'));
-
-const usage = `使い方:
-  zukai prompt [--full] [--video] [--type-command=コマンド]  AI に渡す指示を出力する。図の型は一覧だけを含む（--full ですべての書き方、--video か設定の output: video で動画の書き方を含む）
-  zukai type <型...>                   指定した型の書き方と上限を出力する
-  zukai lint <file.md...> [--json] [--model=名前] [--no-log] [--no-textlint]
-  zukai build <file.md> [--out=file.html]                       1枚の HTML を書き出す（原稿を中に埋め込む）
-  zukai build <file.md> --format=confluence [--out=フォルダ]     Confluence 用の本文、図の PNG、原稿をフォルダに書き出す
-  zukai publish <file.md> [--space-id=ID] [--parent-id=ID]      Confluence Cloud にページを作成または更新する
-  zukai capture <file.md>                                       原稿の screenshot の URL を撮影し、枠の位置を記録する
-  zukai extract <file.html> [--out=file.md]                     HTML に埋め込んだ原稿を取り出す
-  zukai view [--no-open]               .zukai/answers の資料を読むページを起動し、URL を出力する（動いていれば URL だけ）
-  zukai init [フォルダ] [--global] [--video]  返答を資料にするスキルを .claude/skills と .agents/skills に書き出し、.zukai/settings.json を作る（--video で動画も出す）
-  zukai init --api-key                 Gemini の API キーを入力させ、~/.zukai/settings.json に保存する
-  zukai video <file.md> [--out=file.mp4] [--draft]  原稿から解説動画を作る（--draft は 960×540、15fps）
-  zukai frames <file.md> [--at=秒,秒...] [--sheet] [--scene=番号]  動画のガードレールで検査し、指定した時刻のコマか、シーンごとのコマの一覧（--sheet）を PNG に書き出す
-  zukai corpus                         corpus/ の原稿で、期待したルールが発火するか確認する
-  zukai stats                          ルールごとの発火・修正・抑制の実績を表示する
-  zukai rules                          自作ルールの一覧を表示する
-  zukai icons [語]                     図に使えるアイコンの名前を探す`;
-
-// 入力した文字を画面に出さずに1行読む。端末でないとき（パイプ）は、標準入力をそのまま読む。
-async function readSecret(question) {
-  const readline = await import('node:readline');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
-  if (process.stdin.isTTY) {
-    process.stdout.write(question);
-    rl._writeToOutput = () => {};
+// --名前=値 はオプション、--名前 は真偽のフラグ、それ以外は引数。-h は --help と同じ。
+function parseArgs(argv) {
+  const opts = new Map();
+  const bools = new Set();
+  const args = [];
+  for (const a of argv) {
+    if (a.startsWith('--')) {
+      const i = a.indexOf('=');
+      if (i > 0) opts.set(a.slice(2, i), a.slice(i + 1));
+      else bools.add(a.slice(2));
+    } else if (a === '-h') bools.add('help');
+    else args.push(a);
   }
-  const answer = await new Promise((ok) => rl.once('line', ok).once('close', () => ok('')));
-  rl.close();
-  if (process.stdin.isTTY) process.stdout.write('\n');
-  return answer.trim();
+  return { opts, bools, args };
 }
 
-// 動画のガードレールの結果。シーンごとに、error と warn を出す。
-function printChecks(results) {
-  const all = results.flatMap((r) => r.findings.map((f) => ({ ...f, r })));
-  console.log(`動画の検査  error ${all.filter((f) => f.severity === 'error').length} / warn ${all.filter((f) => f.severity === 'warn').length}`);
-  for (const f of all) console.log(`  シーン${f.r.id}「${f.r.heading}」  ${f.severity.padEnd(5)}  ${f.rule}  ${f.message}`);
-}
-
-function print(result) {
-  const errors = result.findings.filter((f) => f.severity === 'error').length;
-  const warns = result.findings.length - errors;
-  console.log(`${result.file}  ${result.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${warns} / 抑制 ${result.suppressed.length}`);
-  for (const f of result.findings) console.log(`  L${f.line}  ${f.severity.padEnd(5)}  ${f.rule}  ${f.message}`);
-}
-
-if (cmd === 'prompt') {
-  // 動画の書き方は、--video を付けたときと、設定の output が video のときに含める。
-  const { loadSettings } = await import('./settings.js');
-  const video = flags.has('--video') || loadSettings(process.cwd()).settings.output === 'video';
-  const { termsOf } = await import('./terms.js');
-  process.stdout.write(buildPrompt({ full: flags.has('--full'), type: opt('type-command'), video, terms: termsOf(process.cwd()) }));
-} else if (cmd === 'type' && files.length) {
-  process.stdout.write(buildPrompt({ only: files }));
-} else if (cmd === 'lint' && files.length) {
-  let ok = true;
-  const results = [];
-  for (const file of files) {
-    const result = await lint(fs.readFileSync(file, 'utf8'), file, { textlint: !flags.has('--no-textlint') });
-    if (!flags.has('--no-log')) record(result, opt('model'));
-    results.push(result);
-    ok &&= result.ok;
-  }
-  if (flags.has('--json')) console.log(JSON.stringify(results, null, 2));
-  else results.forEach(print);
-  process.exit(ok ? 0 : 1);
-} else if (cmd === 'build' && files.length === 1) {
-  const source = fs.readFileSync(files[0], 'utf8');
-  const stem = files[0].replace(/\.md$/, '');
-  if (opt('format') === 'confluence') {
-    const dir = opt('out') ?? `${stem}.confluence`;
-    const page = await bundle(source, files[0]);
-    fs.mkdirSync(dir, { recursive: true });
-    for (const f of page.files) fs.writeFileSync(path.join(dir, f.name), f.data);
-    fs.writeFileSync(path.join(dir, 'body.xhtml'), page.body);
-    fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ title: page.title, representation: 'storage', attachments: page.files.map((f) => f.name) }, null, 2) + '\n');
-    console.log(`${dir} に、本文（body.xhtml）、図 ${page.files.length - 1} 枚、原稿を書き出しました。`);
-  } else {
-    const out = opt('out') ?? `${stem}.html`;
-    fs.writeFileSync(out, await render(source, files[0]));
-    console.log(`${out} を書き出しました。`);
-  }
-} else if (cmd === 'publish' && files.length === 1) {
-  // Lint に合格した原稿だけを登録する。
-  const result = await lint(fs.readFileSync(files[0], 'utf8'), files[0], { textlint: !flags.has('--no-textlint') });
-  if (!result.ok) {
-    print(result);
-    console.error('error が残っているため、登録を中止しました。');
-    process.exit(1);
-  }
-  try {
-    const r = await publish(files[0], { spaceId: opt('space-id'), parentId: opt('parent-id') });
-    console.log(`ページを${r.created ? '作成' : '更新'}し、添付 ${r.attachments} 件を登録しました。`);
-    if (r.created) console.log(`${files[0]} の先頭に、ページ ID ${r.pageId} を書き込みました。`);
-    console.log(r.url);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
-} else if (cmd === 'capture' && files.length === 1) {
-  // 原稿の screenshot に書かれた URL を撮影し、枠の位置を記録する。
-  try {
-    const { capture } = await import('./capture.js');
-    const done = await capture(files[0]);
-    if (!done.length) console.log('url のある screenshot が原稿にありません。');
-    for (const r of done) {
-      console.log(`${r.image} を撮影しました。`);
-      for (const sel of r.missing) console.log(`  セレクタ「${sel}」の要素が画面にありません。`);
+// 定義に無いフラグ、値の要るフラグに値が無いもの、引数の過不足を知らせる。
+function checkArgs(c, { opts, bools, args }) {
+  const flags = c.flags ?? [];
+  const names = flags.map((f) => f.name);
+  const see = `使い方は zukai help ${c.name} で表示します。`;
+  for (const name of [...opts.keys(), ...bools]) {
+    const f = flags.find((x) => x.name === name);
+    if (!f) {
+      const near = closest(name, names);
+      return `${c.name} に --${name} はありません。${near ? `--${near} の書き間違いではありませんか。` : ''}${see}`;
     }
-    process.exit(done.some((r) => r.missing.length) ? 1 : 0);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
+    if (f.value && !opts.has(name)) return `--${name} には値が必要です。--${name}=${f.value} の形で書きます。${see}`;
+    if (!f.value && opts.has(name)) return `--${name} は値を取りません。--${name} とだけ書きます。${see}`;
   }
-} else if (cmd === 'extract' && files.length === 1) {
-  const source = extract(fs.readFileSync(files[0], 'utf8'));
-  if (source === null) {
-    console.error('この HTML には原稿が埋め込まれていません。');
-    process.exit(1);
+  const spec = c.args ?? [];
+  const required = spec.filter((a) => a.required).length;
+  const max = spec.some((a) => a.many) ? Infinity : spec.length;
+  if (args.length < required) return `${c.name} には <${spec.filter((a) => a.required).map((a) => a.name).join('> <')}> が必要です。${see}`;
+  if (args.length > max) return `${c.name} の引数が多すぎます（${args.slice(max).join(' ')}）。${see}`;
+  return null;
+}
+
+async function main(argv) {
+  const [name, ...rest] = argv;
+  if (!name || name === '--help' || name === '-h') return (await import('./help.js')).help([]);
+  if (name === '--version' || name === '-v') {
+    const { root } = await import('./config.js');
+    const fs = await import('node:fs');
+    console.log(JSON.parse(fs.readFileSync(`${root}/package.json`, 'utf8')).version);
+    return 0;
   }
-  const out = opt('out') ?? files[0].replace(/\.html$/, '') + '.md';
-  fs.writeFileSync(out, source);
-  console.log(`${out} に原稿を取り出しました。`);
-} else if (cmd === 'view') {
-  const view = await import('./view.js');
-  if (flags.has('--serve')) {
-    // ensure が切り離したプロセスで起動する本体。直接実行すると、起動のエラーを確かめられる。
-    const server = await view.serve(process.cwd());
-    console.log(`http://127.0.0.1:${server.address().port}/`);
+  const c = commandOf(name);
+  if (!c) {
+    console.error((await import('./help.js')).unknownCommand(name));
+    return 1;
+  }
+  const parsed = parseArgs(rest);
+  if (parsed.bools.has('help')) return (await import('./help.js')).help([name]);
+  const bad = checkArgs(c, parsed);
+  if (bad) {
+    console.error(bad);
+    return 1;
+  }
+  const code = await c.run({ args: parsed.args, opt: (n) => parsed.opts.get(n), has: (n) => parsed.bools.has(n) });
+  return code ?? 0;
+}
+
+// 想定したエラーは、スタックトレースを出さずに文だけを出す。ZUKAI_DEBUG=1 のときはスタックトレースも出す。
+try {
+  process.exitCode = await main(process.argv.slice(2));
+} catch (e) {
+  if (e?.name === 'ExitPromptError') {
+    console.error('\n中断しました。何も書き込んでいません。');
+    process.exitCode = 130;
+  } else if (e?.code === 'ERR_MODULE_NOT_FOUND' && !process.env.ZUKAI_DEBUG) {
+    // 依存パッケージが足りない。doctor は依存なしで動くので、そちらへ案内する。
+    console.error(`${e.message}\n依存パッケージが足りません。zukai doctor で足りないものと直し方を確かめられます。`);
+    process.exitCode = 1;
   } else {
-    try {
-      console.log(await view.ensure(process.cwd(), { open: !flags.has('--no-open') }));
-    } catch (e) {
-      console.error(e.message);
-      process.exit(1);
-    }
+    console.error(process.env.ZUKAI_DEBUG ? e.stack : e.message);
+    process.exitCode = 1;
   }
-} else if (cmd === 'init' && flags.has('--api-key')) {
-  // キーは引数で受け取らない。シェルの履歴に残るため。画面では入力した文字を表示しない。
-  const { writeApiKey } = await import('./settings.js');
-  const key = await readSecret('Gemini の API キー: ');
-  if (!key) {
-    console.error('キーが空です。保存しませんでした。');
-    process.exit(1);
-  }
-  console.log(`${writeApiKey(key)} に API キーを保存しました。`);
-} else if (cmd === 'init') {
-  // 返答を資料にするスキルを、Claude Code が読む .claude/skills と、ほかのツールが読む .agents/skills に書く。
-  const base = flags.has('--global') ? (await import('node:os')).homedir() : path.resolve(files[0] ?? '.');
-  const { writeProjectSettings } = await import('./settings.js');
-  const s = writeProjectSettings(base, flags.has('--video') ? 'video' : 'document', { explicit: flags.has('--video') });
-  console.log(s.updated ? `${s.file} の output を video にしました。ほかの項目は変えていません。` : s.written ? `${s.file} を書き出しました。` : `${s.file} はすでにあるので、変えていません。`);
-  const cli = path.join(root, 'src/cli.js').replaceAll('\\', '/');
-  const skill = fs.readFileSync(path.join(root, 'prompts/answer-skill.md'), 'utf8').replaceAll('{{cli}}', cli);
-  for (const d of ['.claude/skills', '.agents/skills']) {
-    const dir = path.join(base, d, 'zukai-answer');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), skill);
-    console.log(`${path.join(dir, 'SKILL.md')} を書き出しました。`);
-  }
-} else if (cmd === 'video' && files.length === 1) {
-  try {
-    const { makeVideo } = await import('./video/encode.js');
-    const r = await makeVideo(files[0], { out: opt('out'), draft: flags.has('--draft'), onProgress: (d, n) => process.stderr.write(`\r${d}/${n} コマ`) });
-    process.stderr.write('\n');
-    r.warnings.forEach((w) => console.error(w));
-    if (r.silentReason) console.log(`音声なしで作りました。${r.silentReason}`);
-    printChecks(r.results);
-    console.log(`${r.file} を書き出しました。${r.duration.toFixed(1)}秒、${r.frames}コマ、効果音のきっかけ ${r.cues} 件。`);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
-} else if (cmd === 'frames' && files.length === 1 && (opt('at') || flags.has('--sheet'))) {
-  try {
-    const { frames } = await import('./video/encode.js');
-    const scene = opt('scene') === undefined ? null : Number(opt('scene'));
-    const r = await frames(files[0], { times: opt('at') ? opt('at').split(',').map(Number) : [], sheet: flags.has('--sheet'), scene });
-    if (r.silentReason) console.log(`音声なしの時間割です。${r.silentReason}`);
-    console.log(`動画の長さ ${r.duration.toFixed(1)}秒`);
-    for (const s of r.scenes) console.log(`  シーン${s.id}  ${s.kind.padEnd(5)}  ${s.start.toFixed(1)}〜${s.end.toFixed(1)}秒  ${s.heading}${Object.keys(s.markers).length ? `  目印 ${Object.entries(s.markers).map(([k, v]) => `${k}=${v.toFixed(2)}秒`).join(' ')}` : ''}`);
-    printChecks(r.results);
-    r.files.forEach((f) => console.log(f));
-    process.exit(r.results.some((x) => x.findings.some((f) => f.severity === 'error')) ? 1 : 0);
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
-} else if (cmd === 'corpus') {
-  const expected = JSON.parse(fs.readFileSync(path.join(root, 'corpus/expected.json'), 'utf8'));
-  let failed = 0;
-  for (const [rel, want] of Object.entries(expected)) {
-    const file = path.join(root, 'corpus', rel);
-    const result = await lint(fs.readFileSync(file, 'utf8'), file);
-    // 自作ルールは、発火したルールの集合が期待と一致すること。textlintClean の原稿は、textlint の error も0件であること。
-    const own = [...new Set(result.findings.filter((f) => !f.rule.startsWith('T:')).map((f) => f.rule))].sort();
-    const textlintErrors = want.textlintClean ? result.findings.filter((f) => f.rule.startsWith('T:') && f.severity === 'error') : [];
-    const same = JSON.stringify(own) === JSON.stringify([...want.own].sort()) && textlintErrors.length === 0;
-    if (!same) failed++;
-    console.log(`${same ? 'ok  ' : 'NG  '} ${rel}  期待 [${want.own.join(', ')}]  実際 [${own.join(', ')}]`);
-    textlintErrors.forEach((f) => console.log(`       L${f.line} ${f.rule} ${f.message}`));
-  }
-  console.log(failed ? `${failed}件が期待と違います。` : 'すべて期待どおりです。');
-  process.exit(failed ? 1 : 0);
-} else if (cmd === 'stats') {
-  const s = stats();
-  console.log(`実行 ${s.runs} 回`);
-  console.log('ルール                発火  ファイル  修正  残存  抑制');
-  for (const r of s.rules) {
-    console.log(`${r.rule.padEnd(20)} ${String(r.fired).padStart(5)} ${String(r.files).padStart(8)} ${String(r.fixed).padStart(5)} ${String(r.remained).padStart(5)} ${String(r.suppressed).padStart(5)}`);
-  }
-  if (s.figures.length) {
-    console.log('\n図の型の利用（ファイルごとに、最後の実行の内容を数えています）');
-    for (const [type, n] of s.figures) console.log(`${type.padEnd(12)} ${String(n).padStart(4)}`);
-  }
-  if (s.free.length) {
-    console.log('\n自由な図の題名（同じ形が増えたら、型にする候補です）');
-    for (const f of s.free) console.log(`${f.file}  ${f.title}`);
-  }
-} else if (cmd === 'icons') {
-  // アイコンの名前を探す。例: zukai icons lambda
-  const found = searchIcons(files[0] ?? '');
-  console.log(found.length ? found.join('\n') : '見つかりません。別の語で探してください。');
-} else if (cmd === 'rules') {
-  for (const [id, r] of Object.entries(rules)) console.log(`${id}  ${r.severity.padEnd(5)}  ${r.title}  （根拠: ${r.basis}）`);
-} else {
-  console.log(usage);
-  process.exit(cmd ? 1 : 0);
 }

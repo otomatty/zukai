@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readJson, root } from '../lint/index.js';
 import { esc } from '../figures/svg.js';
-import { loadSettings } from '../settings.js';
+import { settingsFor, projectOf, stateDir, machineSetting } from '../config.js';
 import { scenesOf, timeline, wrapScripts, DEFAULT_OPTIONS } from './script.js';
 import { voicesFor } from './tts.js';
 import { resolveRefs } from '../refs.js';
@@ -86,7 +86,8 @@ async function launch() {
   } catch {
     throw new Error('動画を作るには Playwright が必要です。npm install playwright と npx playwright install chromium を実行してください。');
   }
-  return chromium.launch(process.env.ZUKAI_CHROMIUM ? { executablePath: process.env.ZUKAI_CHROMIUM } : {});
+  const executablePath = machineSetting('chromium');
+  return chromium.launch(executablePath ? { executablePath } : {});
 }
 
 async function openPage(browser, html, plan, L) {
@@ -130,7 +131,8 @@ function run(cmd, args, input) {
 async function prepare(file, project) {
   const tokens = readJson('contract/tokens.json');
   const limits = readJson('contract/limits.json').video;
-  const { settings, warnings } = loadSettings(project);
+  const { settings: all } = settingsFor(project);
+  const settings = { video: all.video, apiKey: all.gemini?.apiKey ?? null };
   const scenes = scenesOf(fs.readFileSync(file, 'utf8'), file);
   // セクションの根拠（yaml refs）を、Lint と同じ方法で確かめてからシーンに渡す。AI は zk.refs() で読み、画面に出典を示せる。
   const ctx = { baseDir: path.dirname(path.resolve(file)) };
@@ -143,10 +145,10 @@ async function prepare(file, project) {
     );
     delete s.refsBlock;
   }
-  const { voices, silentReason } = await voicesFor(scenes, settings, path.join(project, '.zukai', 'cache', 'tts'));
+  const { voices, silentReason } = await voicesFor(scenes, settings, settings.apiKey ? stateDir(project, 'cache', 'tts') : null);
   const v = tokens.video;
   const planOf = (list) => ({ ...timeline(list, voices), width: v.width, height: v.height, fps: v.fps, limits });
-  return { tokens, limits, settings, warnings, voices, silentReason, scenes, planOf };
+  return { tokens, limits, settings, voices, silentReason, scenes, planOf };
 }
 
 // 自由なシーンを、自動の動きに差し替える。
@@ -235,7 +237,8 @@ async function guarded(browser, prep) {
 }
 
 // 指定した時刻のコマを PNG に書き出す。sheet にすると、シーンごとに6つの時刻を並べた1枚の画像にする。検査の結果も返す。
-export async function frames(file, { times = [], sheet = false, scene = null, project = process.cwd() } = {}) {
+// project を省略したときは、原稿のフォルダからプロジェクトの根を探す。
+export async function frames(file, { times = [], sheet = false, scene = null, project = projectOf(path.dirname(path.resolve(file))) } = {}) {
   const prep = await prepare(file, project);
   const browser = await launch();
   const stem = file.replace(/\.md$/, '');
@@ -309,7 +312,7 @@ async function composeSheet(browser, sc, imgs) {
   return png;
 }
 
-export async function makeVideo(file, { out, project = process.cwd(), draft = false, onProgress = () => {} } = {}) {
+export async function makeVideo(file, { out, project = projectOf(path.dirname(path.resolve(file))), draft = false, onProgress = () => {} } = {}) {
   const prep = await prepare(file, project);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-video-'));
   const workers = Math.max(1, Math.min(4, Math.floor(os.cpus().length / 2)));
@@ -327,7 +330,7 @@ export async function makeVideo(file, { out, project = process.cwd(), draft = fa
         const r = await render(browsers, plan, prep, { tmp, draft, onProgress });
         const target = out ?? file.replace(/\.md$/, '') + '.mp4';
         await mux(r, plan, prep, tmp, target);
-        return { file: target, duration: plan.duration, frames: r.total, silentReason: prep.silentReason, warnings: prep.warnings, cues: r.cues.length, results };
+        return { file: target, duration: plan.duration, frames: r.total, silentReason: prep.silentReason, cues: r.cues.length, results };
       } catch (e) {
         if (!(e.runaway && attempt < 2)) throw e;
         prep.scenes = prep.scenes.map((s, i) => (e.runaway.includes(i) && s.kind === 'free' ? fallback(s) : s));
@@ -421,7 +424,7 @@ async function mux(r, plan, prep, tmp, target) {
     const gain = settings.video.sfx.volume * 0.25;
     for (const p of await voiceCues(all, files)) parts.push({ ...p, gain });
   }
-  // BGM。settings.json の video.bgm に書いた曲を、ナレーションの間だけ小さくして流す。
+  // BGM。設定の video.bgm に書いた曲を、ナレーションの間だけ小さくして流す。
   if (settings.video.bgm) {
     const raw = await run('ffmpeg', ['-loglevel', 'error', '-i', settings.video.bgm, '-f', 'f32le', '-ac', '1', '-ar', String(RATE), '-']);
     const song = new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length));

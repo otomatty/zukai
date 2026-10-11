@@ -10,35 +10,107 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 
 | 役割 | 置き場所 | 内容 |
 |---|---|---|
-| 契約 | `contract/` | 文字数や図の要素数の上限（`limits.json`）、色とフォント（`tokens.json`） |
+| 契約 | `contract/` | 文字数や図の要素数の上限（`limits.json`）、色とフォント（`tokens.json`）、設定の項目（`settings.json`） |
 | 図の型 | `src/figures/` | 型ごとに、仕様の検証と SVG の描画を1ファイルで持つ |
 | Lint | `src/lint/` | 自作ルール21個と textlint |
 | 指示 | `prompts/` | 書き方の規約と例1つ（`base.md`）、後から足した指示（`model-notes.md`） |
 | 評価 | `corpus/` | 良い原稿と悪い原稿、発火を期待するルール |
-| 実績 | `logs/` | Lint の実行記録 |
+| 実績 | `~/.zukai/logs/` | Lint の実行記録。どのプロジェクトの原稿も、同じ記録に集まる |
 
 `zukai prompt` と `zukai type` は、`contract/limits.json` と `src/figures/` から指示を組み立てます。型が21種類あるので、最初に渡すのは型の一覧だけにし、書き方の詳細は使う型が決まってから取り出します。上限や図の型を変えると、指示と検査の両方が同時に変わります。
+
+## はじめ方
+
+zukai は npm に公開していません。リポジトリを clone し、`npm link` で `zukai` コマンドとして使えるようにします。
+
+```bash
+git clone <このリポジトリ> && cd zukai
+npm install
+npm link            # zukai コマンドを使えるようにする。フォルダを動かしたら、やり直す
+
+cd /path/to/project
+zukai setup         # 質問に答えて、スキル、出力、動画、Confluence をまとめて設定する
+```
+
+`zukai setup` は端末で実行すると、質問に答えるだけで必要な設定がそろいます。今の値が既定の答えになるので、もう一度実行すると設定を変える画面としても使えます。書き込む前に、どのファイルに何を書くかを表示して確認します。最後に `zukai doctor` の結果と、同じ設定を対話なしで行うコマンドを表示します。
+
+| セクション | 質問すること |
+|---|---|
+| `skills` | スキルを書く場所（このプロジェクトか、この PC の全プロジェクトか）、読ませる AI ツール |
+| `output` | 出力（資料だけか、資料と動画か）。動画にしたときは、`video` の質問も続ける |
+| `video` | 声、語り口、BGM、Gemini の API キー |
+| `confluence` | 共有先。Confluence にも登録するときは、URL、スペース ID、親ページ ID、メールアドレス、API トークン |
+
+`zukai setup video` のようにセクションを書くと、その質問だけに答えられます。AI ツールから実行したとき（端末でないとき）と `--yes` を付けたときは、質問せずにフラグと今の値だけで設定します。
+
+```bash
+zukai setup --output=video --voice=Puck --yes   # 対話なしで設定する
+zukai doctor                                    # 足りないものと、直すコマンドを表示する
+zukai help                                      # コマンドの一覧
+zukai help lint                                 # コマンドの使い方（zukai lint --help と同じ）
+zukai help config                               # 設定の項目の一覧
+```
 
 ## 使い方
 
 ```bash
-npm install
-node src/cli.js prompt                       # AI に渡す指示を出力する（図の型は一覧だけ）
-node src/cli.js type flow bar                # 指定した型の書き方と上限を出力する
-node src/cli.js icons lambda                 # 図に使えるアイコンの名前を探す
-node src/cli.js capture 原稿.md               # screenshot の URL を撮影し、枠の位置を記録する
-node src/cli.js lint 原稿.md --model=モデル名  # 検査する。error が1件でもあれば終了コード1
-node src/cli.js build 原稿.md                 # 原稿.html を書き出す
-node src/cli.js build 原稿.md --format=confluence  # Confluence 用のフォルダを書き出す
-node src/cli.js publish 原稿.md --space-id=ID  # Confluence Cloud にページを作る。2回目以降は更新する
-node src/cli.js extract 原稿.html             # HTML に埋め込んだ原稿を取り出す
-node src/cli.js init [フォルダ] [--global]     # 返答を資料にするスキルを、各 AI ツールが読む場所に書き出す
-node src/cli.js view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
-node src/cli.js corpus                       # Lint 自体が期待どおりに動くか確認する
-node src/cli.js stats                        # ルールごとの実績を表示する
+zukai prompt                       # AI に渡す指示を出力する（図の型は一覧だけ）
+zukai type flow bar                # 指定した型の書き方と上限を出力する
+zukai icons lambda                 # 図に使えるアイコンの名前を探す
+zukai capture 原稿.md               # screenshot の URL を撮影し、枠の位置を記録する
+zukai lint 原稿.md --model=モデル名  # 検査する。error が1件でもあれば終了コード1
+zukai build 原稿.md                 # 原稿.html を書き出す
+zukai build 原稿.md --format=confluence  # Confluence 用のフォルダを書き出す
+zukai publish 原稿.md               # Confluence Cloud にページを作る。2回目以降は更新する
+zukai extract 原稿.html             # HTML に埋め込んだ原稿を取り出す
+zukai view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
+zukai corpus                       # Lint 自体が期待どおりに動くか確認する
+zukai stats                        # ルールごとの実績を表示する
 ```
 
+コマンドは、`src/commands.js` の定義から引数を検査し、help を作ります。書き間違えたコマンドやオプションには、候補を示します。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.js` で同じように動きます。
+
 Claude Code から使う場合は、`skills/zukai/SKILL.md` をスキルとして読み込ませます。SKILL.md は手順だけを持ち、書き方は `zukai prompt` の出力に任せています。
+
+## 設定
+
+設定の置き場所は、だれと共有するかで分けます。設定ファイルには変えた値だけを書き、書いていない項目は既定値になります。あとで zukai の既定値を変えたときに、全員へ届くようにするためです。
+
+| 置き場所 | ファイル | 共有の範囲 |
+|---|---|---|
+| この PC | `~/.zukai/config.json` | この PC の全プロジェクト |
+| チーム | `zukai.config.json` | コミットしてチームで共有する |
+| 手元 | `.zukai/config.json` | この PC のこのプロジェクトだけ。Git の管理に入らない |
+| 本人だけ | `~/.zukai/credentials.json` | API キーとトークン。本人だけが読める権限で置く |
+
+表の下ほど優先し、環境変数はさらに優先します。たとえば、チームで `output` を `video` にしていても、手元で `document` にすれば、自分だけ資料だけになります。
+
+```bash
+zukai config                                   # 対話で、項目を選んで変える
+zukai config list --origin                     # 効いている値と、その出どころ
+zukai config set output video                  # チームの設定に書く（項目ごとの既定の書き先）
+zukai config set output document --scope=local # 自分だけ変える
+zukai config set repos.api.path ../order-api --scope=local  # 手元のクローンの場所だけ変える
+zukai config unset output --scope=local        # 消して、チームの値に戻す
+zukai login gemini                             # API キーを、画面に出さずに入力させて保存する
+zukai login confluence                         # メールアドレスと API トークンを保存する
+```
+
+| 項目 | 内容 | 既定の書き先 |
+|---|---|---|
+| `output` | `document`（資料だけ）か `video`（資料と動画） | チーム |
+| `video.*` | 声、語り口、BGM、効果音、TTS のモデル | チーム |
+| `confluence.base`、`spaceId`、`parentId` | Confluence の URL と、初回にページを作る場所 | チーム |
+| `terms` | 用語集 | チーム |
+| `repos.*` | コード参照に使うリポジトリ | チーム |
+| `png.font`、`chromium` | 図の PNG のフォント、Chromium の場所 | この PC だけに書ける |
+| `gemini.apiKey`、`confluence.email`、`confluence.token` | キーとトークン | 本人だけに書ける。`zukai login` で保存する |
+
+項目の型、既定値、書ける場所、対応する環境変数は、`contract/settings.json` に書いてあります。`zukai help config <項目>` で表示できます。知らない項目、型の誤り、秘密の値を設定ファイルに書いた場合は、黙って無視せずに止めます。
+
+パスの値は、チームと手元の設定ではプロジェクトの根から、この PC の設定では `~/.zukai` から解決します。`config set` で書くパスは、今いるフォルダからのパスで書けます。
+
+プロジェクトの根は、`zukai.config.json` か `.zukai/` が最初に見つかったフォルダです。探し始めるのは原稿のフォルダで、原稿を受け取らないコマンドは今いるフォルダです。そこから上へたどり、どちらも無ければ Git のリポジトリの根にします。`.zukai/` には、資料、キャッシュ、手元の設定を置きます。中に `.gitignore` を置くので、Git の管理には入りません。
 
 ## 共有先ごとの出力
 
@@ -49,21 +121,18 @@ Claude Code から使う場合は、`skills/zukai/SKILL.md` をスキルとし�
 | ファイル | 図を埋め込んだ1枚の HTML。PDF は、ブラウザで開いて印刷する | HTML の中に埋め込む。`extract` で取り出す |
 | Confluence | 本文（`body.xhtml`、ストレージ形式）、図の PNG、`meta.json` を入れたフォルダ | 原稿の `.md` をページに添付する |
 
-PNG の日本語フォントは、OS に標準で入っているもの（macOS はヒラギノ角ゴ、Windows は Yu Gothic UI、それ以外は Noto Sans CJK JP）を使います。変えたいときは、環境変数 `ZUKAI_PNG_FONT` にフォント名を指定します。
+PNG の日本語フォントは、OS に標準で入っているもの（macOS はヒラギノ角ゴ、Windows は Yu Gothic UI、それ以外は Noto Sans CJK JP）を使います。変えたいときは、`zukai config set png.font フォント名 --scope=user` を実行します。環境変数 `ZUKAI_PNG_FONT` でも指定できます。
 
 Confluence のページは、本文に HTML や SVG を直接書けません。図は PNG の添付ファイルにして、本文から参照します。ページの先頭には「このページは生成物で、直接編集すると上書きされる」という注意書きが入ります。
 
 ### Confluence Cloud への登録
 
-`publish` は、Lint に合格した原稿だけを登録します。認証には、Atlassian アカウントのメールアドレスと API トークンを使います。API トークンは環境変数にだけ置き、原稿やリポジトリには書きません。
+`publish` は、Lint に合格した原稿だけを登録します。認証には、Atlassian アカウントのメールアドレスと API トークンを使います。API トークンは、原稿やリポジトリには書きません。`~/.zukai/credentials.json` か環境変数（`CONFLUENCE_TOKEN`）にだけ置きます。
 
 ```bash
-export CONFLUENCE_BASE=https://example.atlassian.net/wiki
-export CONFLUENCE_EMAIL=you@example.com
-export CONFLUENCE_TOKEN=APIトークン
-
-node src/cli.js publish 原稿.md --space-id=スペースID --parent-id=親ページID  # 初回
-node src/cli.js publish 原稿.md                                              # 2回目以降
+zukai setup confluence   # URL、スペース ID、親ページ ID をチームの設定に、メールアドレスと API トークンを本人だけの設定に書く
+zukai publish 原稿.md     # 初回はページを作り、2回目以降は更新する
+zukai publish 原稿.md --space-id=スペースID --parent-id=親ページID  # 設定とは別の場所に作る
 ```
 
 | 回 | `publish` が行うこと |
@@ -87,11 +156,13 @@ Claude Code、Codex、Cursor などの AI ツールで、説明が必要な返�
 手順は、スキル（`zukai-answer`）に書いてあります。モデルは、説明、設計、比較、手順を求められたときと、図解を頼まれたときに資料を書きます。短い質問の答えと、コードを直す作業の途中は、チャットだけで答えます。
 
 ```bash
-node src/cli.js init /path/to/project   # プロジェクトの .claude/skills と .agents/skills に書く
-node src/cli.js init --global           # ホームの ~/.claude/skills と ~/.agents/skills に書く
+zukai setup skills                                  # 対話で、書く場所と AI ツールを選ぶ
+zukai setup skills --skills=user --tools=claude --yes  # この PC の全プロジェクトの ~/.claude/skills に書く
 ```
 
-`.claude/skills` は Claude Code、`.agents/skills` は Codex、Cursor、GitHub Copilot、Devin などが読みます。スキルには、この CLI の絶対パスが入ります。リポジトリを動かしたら `init` をやり直します。
+`.claude/skills` は Claude Code、`.agents/skills` は Codex、Cursor、GitHub Copilot、Devin などが読みます。スキルは `zukai` コマンドを呼びます。`zukai` が PATH に無いときだけ、CLI の絶対パスを書きます。zukai を新しくするとスキルの中身が変わることがあります。そのときは `zukai doctor` が知らせるので、`zukai setup skills` で書き直します。
+
+スキルは、zukai が設定の誤りや足りないもので止まったときに `zukai doctor` の結果を利用者に伝えます。API キーはチャットで尋ねず、利用者に `zukai login` の実行を頼みます。
 
 `zukai view` は、プロジェクトごとのポートで表示用のページを起動し、初回はブラウザで開きます。すでに動いていれば URL だけを出力して終わります。
 
@@ -102,18 +173,19 @@ node src/cli.js init --global           # ホームの ~/.claude/skills と ~/.a
 - ヘッダーの右のアイコンで、`build` と同じ1枚の HTML をダウンロードする
 - 127.0.0.1 だけで待ち受け、`.zukai/answers` の原稿だけを読む。ページへの要求が30分なければ終了する
 
-`.zukai` の中に `.gitignore` を置くので、資料は Git の管理に入りません。
+資料は `.zukai/answers` に置くので、Git の管理に入りません。
 
 ## 動画
 
 同じ原稿から、解説動画（MP4、1920×1080、30fps）も作れます。動画の絵と動きは、AI が1シーンずつ HTML、SVG、CSS、JS で自由に書きます。zukai は背景もキャラクターも描かず、時刻の制御、ナレーション、字幕、シーンの切り替え、効果音、書き出しと、壊れた動画を出さないための検査（ガードレール）だけを受け持ちます。動画の品質は、AI の書くものでそのまま決まります。
 
 ```bash
-node src/cli.js init /path/to/project --video  # .zukai/settings.json に "output": "video" を書く
-node src/cli.js init --api-key                 # Gemini の API キーを ~/.zukai/settings.json に保存する
-node src/cli.js prompt --video                 # 動画の書き方を含めた指示を出力する
-node src/cli.js frames 原稿.md --sheet          # 検査し、シーンごとに6つの時刻のコマを並べた画像を書き出す
-node src/cli.js video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960×540、15fps）
+zukai setup output                  # 出力を「資料と動画」にし、声、語り口、BGM、API キーを設定する
+zukai config set output video       # 対話なしで、チームの出力を動画にする
+zukai login gemini                  # Gemini の API キーを保存する
+zukai prompt --video                # 動画の書き方を含めた指示を出力する
+zukai frames 原稿.md --sheet          # 検査し、シーンごとに6つの時刻のコマを並べた画像を書き出す
+zukai video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960×540、15fps）
 ```
 
 | 原稿のブロック | 内容 |
@@ -134,9 +206,9 @@ node src/cli.js video 原稿.md [--draft]         # MP4 を書き出す（--draf
 
 効果音は ZzFX（MIT、`src/video/vendor/`）で作ります。AI は、名前の付いた12個の音（`appear`、`whoosh`、`chime` など）を選ぶか、ZzFX の数値を書いて新しい音を作ります。音の選び方は `spikes/sfx/` で聞き比べました。
 
-ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（`gemini-3.8-flash-tts`、声は `Kore`）で読み上げ、`.zukai/cache/tts` に保存します。API キーは環境変数 `GEMINI_API_KEY` か `~/.zukai/settings.json` に置き、プロジェクトの設定には置きません。キーが無いときは、字幕だけの無音の動画になります。無料枠のキーでは、送った文が Google の製品改善に使われます。
+ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（既定は `gemini-3.8-flash-tts`、声は `Kore`。`video.model` と `video.voice` で変える）で読み上げ、`.zukai/cache/tts` に保存します。API キーは `zukai login gemini` で `~/.zukai/credentials.json` に保存するか、環境変数 `GEMINI_API_KEY` に置きます。キーが無いときは、字幕だけの無音の動画になります。そのことは `zukai doctor` が知らせ、`zukai prompt` の指示にも書くので、AI がチャットで利用者に伝えます。無料枠のキーでは、送った文が Google の製品改善に使われます。
 
-動画を作るには、Playwright と Chromium（`npm install playwright`、`npx playwright install chromium`）と、コマンドのパスに入った ffmpeg が必要です。
+動画を作るには、Playwright と Chromium（`npm install playwright`、`npx playwright install chromium`）と、コマンドのパスに入った ffmpeg が必要です。足りないものは `zukai doctor` が、直すコマンドと一緒に表示します。
 
 ## Claude Code のプラグイン
 
@@ -263,7 +335,7 @@ AWS のアイコンは、AWS が構成図の作成用に配布しているもの
 
 ## 用語の表記
 
-チームで表記をそろえたい用語は、`zukai.config.json` の `terms` に書きます。モデルによっては、「バージョン」を「版」、「トークン」を「印」のように言い換えるためです。
+チームで表記をそろえたい用語は、チームの設定（`zukai.config.json`）の `terms` に書きます。モデルによっては、「バージョン」を「版」、「トークン」を「印」のように言い換えるためです。
 
 ```json
 {
@@ -313,7 +385,7 @@ AWS のアイコンは、AWS が構成図の作成用に配布しているもの
 | コード | リポジトリの別名、パス、行の範囲、1文の説明 | ファイルと行が実在するか検査する。抜粋を取り込み、行へのリンクを作る |
 | 引用 | 原文、出典の名前、URL、日本語訳 | 出典の本文を取得し、原文がそのまま含まれるか検査する |
 
-リポジトリの場所は、原稿のフォルダか、その上のフォルダに置く `zukai.config.json` に書きます。CodeCommit と GitHub のどちらのリポジトリも参照でき、1つの資料に両方を混ぜられます。
+リポジトリの場所は、プロジェクトの根の `zukai.config.json` の `repos` に書きます。CodeCommit と GitHub のどちらのリポジトリも参照でき、1つの資料に両方を混ぜられます。
 
 ```json
 {
@@ -328,20 +400,20 @@ AWS のアイコンは、AWS が構成図の作成用に配布しているもの
 
 | 項目 | 内容 |
 |---|---|
-| `path` | 手元のクローンの場所。設定ファイルからの相対パス |
+| `path` | 手元のクローンの場所。プロジェクトの根からの相対パス。人によって場所が違うときは、`zukai config set repos.別名.path パス --scope=local` で自分の場所だけを書く |
 | `host`、`org`、`name`、`region` | リモートから読み取れない場合や、読み取った値を変えたい場合に書く。`host` は `github` か `codecommit` |
 | `link` | リンクのひな形を自分で書く場合に使う。`{ref}`、`{path}`、`{from}`、`{to}` を置き換える。GitHub Enterprise など、上の2つ以外の置き場所で使う |
 | `pin` | `false` にすると、コミットを固定せず、作業中のファイルを読む。リンクは `branch` を指す |
 
 既定では、コードの抜粋とリンクは、クローンの最新のコミットに固定します。コードがその後変わっても、資料のリンク先の行はずれません。資料の根拠には、リポジトリの名前と置き場所（GitHub か CodeCommit か）を表示します。
 
-出典の本文は、初回に取得して `.zukai-cache/` に保存します。ログインが必要なページや PDF は取得できないので、本文を保存したテキストファイルを `snapshot` に指定します。出典に接続できない場合は warn（R004）になり、資料には「原文との一致は未確認」と表示します。
+出典の本文は、初回に取得して `.zukai/cache/sources` に保存します。ログインが必要なページや PDF は取得できないので、本文を保存したテキストファイルを `snapshot` に指定します。出典に接続できない場合は warn（R004）になり、資料には「原文との一致は未確認」と表示します。
 
 訳が正しいか、引用やコードが主張の根拠として妥当かは、機械で検査できません。人が確認します。
 
 ## Lint のルール
 
-`node src/cli.js rules` で、自作ルールの ID、重さ、根拠を表示します。
+`zukai rules` で、自作ルールの ID、重さ、根拠を表示します。
 
 | 層 | ID | 検査する内容 |
 |---|---|---|

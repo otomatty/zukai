@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { renderConfluence } from './render.js';
 import { toPng } from './png.js';
+import { settingsFor } from './config.js';
 
 const MARK = /^<!--\s*zukai-confluence\s+(\d+)\s*-->\n?/m;
 
@@ -19,13 +20,12 @@ export async function bundle(source, file) {
   return { title: page.title, body: page.body, files };
 }
 
-function client() {
-  const base = process.env.CONFLUENCE_BASE?.replace(/\/+$/, '');
-  const email = process.env.CONFLUENCE_EMAIL;
-  const token = process.env.CONFLUENCE_TOKEN;
-  if (!base || !email || !token) {
-    throw new Error('環境変数 CONFLUENCE_BASE（例: https://example.atlassian.net/wiki）、CONFLUENCE_EMAIL、CONFLUENCE_TOKEN を設定してください。');
-  }
+// 接続先は設定の confluence.base、メールアドレスとトークンは zukai login confluence で保存した値か環境変数から読む。
+function client(conf) {
+  const base = conf.base?.replace(/\/+$/, '');
+  const { email, token } = conf;
+  if (!base) throw new Error('Confluence の URL がありません。zukai setup confluence を実行するか、zukai config set confluence.base https://example.atlassian.net/wiki を実行してください。');
+  if (!email || !token) throw new Error('Confluence のメールアドレスか API トークンがありません。zukai login confluence を実行してください。');
   const auth = `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`;
   return async (method, url, { json, form } = {}) => {
     const headers = { Authorization: auth, Accept: 'application/json' };
@@ -36,6 +36,8 @@ function client() {
     if (!res.ok) throw new Error(`Confluence が ${res.status} を返しました（${method} ${url}）。${text.slice(0, 300)}`);
     return text ? JSON.parse(text) : {};
   };
+  call.base = base;
+  return call;
 }
 
 async function attach(call, pageId, file) {
@@ -47,14 +49,18 @@ async function attach(call, pageId, file) {
 }
 
 // 原稿に対応するページを作るか、更新する。戻り値はページ ID と URL。
+// スペース ID と親ページ ID は、引数を設定（confluence.spaceId、confluence.parentId）より優先する。
 export async function publish(file, { spaceId, parentId } = {}) {
-  const call = client();
+  const conf = settingsFor(path.dirname(path.resolve(file))).settings.confluence;
+  spaceId ??= conf.spaceId;
+  parentId ??= conf.parentId;
+  const call = client(conf);
   let source = fs.readFileSync(file, 'utf8');
   let pageId = pageIdOf(source);
   const created = !pageId;
 
   if (created) {
-    if (!spaceId) throw new Error('初回の登録には --space-id=スペースID が必要です。');
+    if (!spaceId) throw new Error('初回の登録には、スペース ID が必要です。--space-id=スペースID を付けるか、zukai config set confluence.spaceId スペースID を実行してください。');
     const first = await bundle(source, file);
     const page = await call('POST', '/api/v2/pages', {
       json: { spaceId: String(spaceId), status: 'current', title: first.title, ...(parentId ? { parentId: String(parentId) } : {}), body: { representation: 'storage', value: first.body } },
@@ -76,5 +82,5 @@ export async function publish(file, { spaceId, parentId } = {}) {
       json: { id: String(pageId), status: 'current', title, version: { number: number + 1 }, body: { representation: 'storage', value: body } },
     });
   }
-  return { pageId, created, attachments: files.length, url: `${process.env.CONFLUENCE_BASE.replace(/\/+$/, '')}/pages/viewpage.action?pageId=${pageId}` };
+  return { pageId, created, attachments: files.length, url: `${call.base}/pages/viewpage.action?pageId=${pageId}` };
 }

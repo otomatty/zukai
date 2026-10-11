@@ -4,15 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { settingsFor, stateDir } from './config.js';
 
-// 設定ファイル（zukai.config.json）を、原稿のフォルダから上へたどって探す。
-export function loadConfig(baseDir) {
-  for (let dir = baseDir; ; dir = path.dirname(dir)) {
-    const p = path.join(dir, 'zukai.config.json');
-    if (fs.existsSync(p)) return { ...JSON.parse(fs.readFileSync(p, 'utf8')), dir };
-    if (dir === path.dirname(dir)) return { repos: {}, dir: baseDir };
-  }
-}
+// リポジトリの別名と場所。原稿のフォルダからプロジェクトの根を探し、その設定（repos）を読む。repos の path は解決済み。
+const reposOf = (baseDir) => {
+  const cfg = settingsFor(baseDir);
+  return { repos: cfg.settings.repos, dir: cfg.project };
+};
 
 // 行へのリンク。サービスごとに形式が違うので、ひな形から組み立てる。設定の link で上書きできる。
 const templates = {
@@ -121,7 +119,7 @@ async function sourceText(ref, ctx, config) {
     return { text: fs.readFileSync(p, 'utf8'), fetched: null };
   }
   // 取得した本文は保存しておく。Lint のたびに出典へアクセスしない。
-  const cacheDir = path.join(config.dir, '.zukai-cache');
+  const cacheDir = path.join(config.dir, '.zukai', 'cache', 'sources');
   const cacheFile = path.join(cacheDir, `${crypto.createHash('sha1').update(ref.url).digest('hex')}.json`);
   if (fs.existsSync(cacheFile)) return JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
   try {
@@ -129,7 +127,7 @@ async function sourceText(ref, ctx, config) {
     if (!res.ok) return { unreachable: `出典が ${res.status} を返しました。` };
     const d = new Date();
     const entry = { url: ref.url, fetched: `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`, text: toText(await res.text()) };
-    fs.mkdirSync(cacheDir, { recursive: true });
+    stateDir(config.dir, 'cache', 'sources');
     fs.writeFileSync(cacheFile, JSON.stringify(entry));
     return entry;
   } catch {
@@ -153,7 +151,7 @@ async function resolveQuote(ref, ctx, config, limits) {
 // 根拠のブロックを検証し、表示に必要な情報を揃える。
 export async function resolveRefs(block, ctx, limits) {
   if (block.parseError || !Array.isArray(block.list)) return { errors: [{ rule: 'R001', error: block.parseError ? `YAML を読めません。${block.parseError}` : '根拠は、項目の配列で書いてください。' }], items: [] };
-  const config = loadConfig(ctx.baseDir);
+  const config = reposOf(ctx.baseDir);
   const items = [];
   for (const ref of block.list) {
     const allowed = ref?.code !== undefined ? ['code', 'note'] : ['quote', 'ja', 'source', 'url', 'license', 'snapshot', 'translator'];

@@ -1,17 +1,13 @@
-// 用語集。用語の表記と具体例を、zukai.config.json の terms に書く。
+// 用語集。用語の表記と具体例を、設定の terms（ふつうは zukai.config.json）に書く。
 // { "use": "バージョン", "avoid": ["版"], "except": ["初版"] } と書くと、「版」を見つけたら「バージョン」と書くよう知らせる。
 // except は、避ける表記を含むが正しい語。「印」を避けても「矢印」は知らせないようにするために使う。
 // { "use": "認証サービス", "examples": ["Amazon Cognito", "Auth0"], "actual": "Amazon Cognito" } と書くと、
 // 用語を説明するときの具体例（examples）と、このシステムが実際に使っているもの（actual）を AI に渡す。
-import { loadConfig } from './refs.js';
+import { settingsFor } from './config.js';
 
-// terms が無いときは空にする。配列でないときは、書き間違いを黙って無視しないよう、設定の誤りとして止める。
+// 形の誤りは、設定を読むときに検査して止める。書き間違いを黙って無視しないため。
 export function termsOf(baseDir) {
-  const config = loadConfig(baseDir);
-  const terms = config.terms;
-  if (terms == null) return [];
-  if (!Array.isArray(terms)) throw new Error(`${config.dir} の zukai.config.json の terms は、配列で書いてください。`);
-  return terms.filter((t) => typeof t?.use === 'string' && t.use);
+  return settingsFor(baseDir).settings.terms ?? [];
 }
 
 // 文の中の、避ける表記を返す。使う表記と except の語の中に現れたものは数えない。

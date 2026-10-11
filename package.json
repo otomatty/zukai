@@ -14,10 +14,11 @@
     "build": "node src/cli.js build",
     "corpus": "node src/cli.js corpus",
     "stats": "node src/cli.js stats",
-    "test": "node --test tests/view.test.js tests/video.test.js"
+    "test": "node --test tests/config.test.js tests/view.test.js tests/video.test.js"
   },
   "license": "MIT",
   "dependencies": {
+    "@inquirer/prompts": "^8.7.3",
     "@resvg/resvg-js": "^2.6.2",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
     "aws-icons": "^3.3.0",
