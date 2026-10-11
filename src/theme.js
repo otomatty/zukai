@@ -20,7 +20,8 @@ export const isColor = (v) => typeof v === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f
 const long = (c) => (c.length === 4 ? `#${[...c.slice(1)].map((x) => x + x).join('')}` : c).toLowerCase();
 // フォントの指定は、CSS と SVG の style にそのまま入る。宣言や要素の外へ出られる文字、注釈（/* */）、閉じていない引用符を通さないため、
 // 「"名前"」「'名前'」「引用符の無い名前」をカンマで並べた形だけを認める。
-const FONT_NAME = String.raw`\s*(?:"[^"\\;{}<>/*\n\r]*"|'[^'\\;{}<>/*\n\r]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ -]*)\s*`;
+// 図の SVG では " を ' に置き換えて書くので、名前の中には、どちらの引用符も入れられない。
+const FONT_NAME = String.raw`\s*(?:"[^"'\\;{}<>/*\n\r]*"|'[^"'\\;{}<>/*\n\r]*'|[\p{L}\p{N}_-][\p{L}\p{N}_ -]*)\s*`;
 const FONT = new RegExp(`^${FONT_NAME}(?:,${FONT_NAME})*$`, 'u');
 const isFont = (v) => typeof v === 'string' && v.trim() !== '' && FONT.test(v);
 
@@ -138,6 +139,8 @@ export function readTheme(dir, { set = {} } = {}) {
 // --- 独自の型 -----------------------------------------------------------------
 
 const FIELD_TYPES = ['string', 'number', 'boolean', 'list', 'object'];
+// 項目の種類ごとに、type、required、desc のほかに書ける名前。
+const FIELD_KEYS = { string: ['max'], number: ['min', 'max'], boolean: [], list: ['min', 'max', 'of'], object: ['fields'] };
 // type.json の fields の形を確かめる。誤りを返す。
 function fieldProblems(fields, at) {
   if (!isObj(fields) || !Object.keys(fields).length) return [`${at} は、項目の名前と定義の { } で書きます。`];
@@ -146,6 +149,12 @@ function fieldProblems(fields, at) {
     if (!/^[A-Za-z][\w]*$/.test(k) || k === 'type' || k === 'theme' || k === 'width') return [`${where}: 項目の名前は英字で始め、type、theme、width 以外にします。`];
     if (!isObj(def) || !FIELD_TYPES.includes(def.type)) return [`${where}: type は ${FIELD_TYPES.join('、')} のどれかを書きます。`];
     const out = [];
+    // 書き間違えた名前（requred など）は、黙って無視すると任意の項目として AI に伝わるので、誤りにする。
+    const allowed = ['type', 'required', 'desc', ...FIELD_KEYS[def.type]];
+    const unknown = Object.keys(def).filter((n) => !allowed.includes(n));
+    if (unknown.length) out.push(`${where}: ${unknown.join('、')} は使えません。${def.type} の項目に書けるのは ${allowed.join('、')} です。`);
+    if (def.required !== undefined && typeof def.required !== 'boolean') out.push(`${where}.required は true か false で書きます。`);
+    if (def.desc !== undefined && typeof def.desc !== 'string') out.push(`${where}.desc は文で書きます。`);
     for (const n of ['min', 'max']) if (def[n] !== undefined && (typeof def[n] !== 'number' || !Number.isFinite(def[n]))) out.push(`${where}.${n} は数値で書きます。`);
     if (def.type === 'string' && def.max === undefined) out.push(`${where}: 文字の項目には max（全角の字数の上限）が要ります。図からはみ出さないことを、上限で保証するため。`);
     if (def.type === 'list') {
@@ -279,6 +288,7 @@ const SERIES_BG = 2.5;
 export const SERIES_GAP = 23;
 // chart.mode が neutral のときの灰色（chart.muted）は、強調した1つを引き立てるため、系列の色より淡くてよい。
 // 既定の灰色（#a8b0b9）が白地で 2.2:1 なので、それは通し、紙と見分けにくい色だけを知らせる。
+// 2つ目からの灰色は、chart.muted を文字の色に寄せて作る（src/figures/chart.js の grey）。紙からは chart.muted より離れるので、chart.muted だけを確かめればよい。
 const MUTED_BG = 2;
 
 // 見た目の検査。severity は error（文字が読めない）か warn（見分けにくい）。
@@ -311,7 +321,7 @@ export async function checkTheme(t) {
     if (t.emphasis.box === 'outline' || t.emphasis.chart === 'gradient') stops.forEach((s, i) => pair('グラデーションの色', s, c.paper, `gradient.stops[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
     const chartAt = at.replace(/color$/, 'chart');
     chart.series.forEach((s, i) => pair('系列の色', s, c.paper, `${chartAt}.series[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
-    // neutral では、強調しない棒や線を chart.muted（と、それを紙の色に寄せた色）で描く。
+    // neutral では、強調しない棒や線を chart.muted（と、それを文字の色に寄せた色）で描く。
     if (chart.mode === 'neutral') pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {

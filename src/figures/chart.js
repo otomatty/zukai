@@ -60,8 +60,9 @@ export function mix(a, b, p) {
 // テーマが neutral のときに、型の書き方に添える指示。
 export const modeGuide = (t) => (neutral(t) ? ['このテーマは灰色を基本にするので、emphasis: true を付けたものだけに色が付く。注目させたいもの1つに付ける'] : []);
 
-// 灰色の濃淡。k が大きいほど紙の色に近づける。neutral で、強調しないものを見分けるのに使う。
-export const grey = (t, k) => mix(t.chart.muted, t.color.paper, [0, 0.35, 0.55, 0.7, 0.8][Math.min(k, 4)]);
+// 灰色の濃淡。k が大きいほど文字の色に近づける。neutral で、強調しないものを見分けるのに使う。
+// 紙の色には寄せない。どの濃淡も、紙からは chart.muted より離れ、theme check の chart.muted の検査がすべてに効くようにするため。
+export const grey = (t, k) => mix(t.chart.muted, t.color.ink, [0, 0.2, 0.35, 0.5, 0.62][Math.min(k, 4)]);
 
 // 系列を見分ける色。検証済みの3色を順に使い、4つ目からは灰色にする。
 export const seriesColor = (t, i) => t.chart.series[i] ?? (i === t.chart.series.length ? t.chart.muted : t.chart.rest);

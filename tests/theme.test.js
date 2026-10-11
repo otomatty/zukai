@@ -56,7 +56,7 @@ test('無い項目、変えられない値、色でない値、外へ出られ�
   assert.equal(r.tokens.color.ink, baseTokens().color.ink);
   assert.match(readTheme(path.join(tmp('none'), 'nothing')).problems[0], /がありません/);
   // 注釈（/* */）と、閉じていない引用符は、後ろの規則を壊すので通さない。
-  for (const font of ['foo/*', '"Noto Sans JP', "'a', b'", 'a, , b']) assert.match(readTheme(themeDir({ font })).problems.join('\n'), /font は、CSS の font-family の形/, font);
+  for (const font of ['foo/*', '"Noto Sans JP', "'a', b'", 'a, , b', '"Bob\'s Font", sans-serif', "'Say \"hi\"'"]) assert.match(readTheme(themeDir({ font })).problems.join('\n'), /font は、CSS の font-family の形/, font);
   for (const font of [baseTokens().font, 'ヒラギノ角ゴ ProN, sans-serif', "'BIZ UDPGothic', system-ui"]) assert.deepEqual(readTheme(themeDir({ font })).problems, [], font);
 });
 
@@ -339,6 +339,11 @@ test('独自の型の誤りは、テーマを確かめるときに知らせる',
   assert.match(c.out, /型 stat の例が検査を通りません。.*色「#123456」は使えません/);
   const typed = typedProject({ 'type.json': { ...STAT['type.json'], example: { ...STAT['type.json'].example, type: 'flow' } } });
   assert.match(run(['theme', 'check'], { cwd: typed.dir, home: typed.home }).out, /example に type は書きません/);
+  // 定義の名前の書き間違いは、任意の項目として黙って通さない。
+  const typo = typedProject({ 'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, label: { type: 'string', max: 12, requred: true } } } });
+  assert.match(run(['theme', 'check'], { cwd: typo.dir, home: typo.home }).out, /fields\.label: requred は使えません/);
+  const flag = typedProject({ 'type.json': { ...STAT['type.json'], fields: { ...STAT['type.json'].fields, label: { type: 'string', max: 12, required: 'yes' } } } });
+  assert.match(run(['theme', 'check'], { cwd: flag.dir, home: flag.home }).out, /fields\.label\.required は true か false/);
   const motion = typedProject({ 'motion.js': 'ctx.parts.forEach((p) => {' });
   assert.match(run(['theme', 'check'], { cwd: motion.dir, home: motion.home }).out, /motion.js を読めません/);
 });
@@ -488,6 +493,13 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   assert.deepEqual(white.map((x) => [x.severity, /chart\.muted（#ffffff）と color\.paper/.test(x.message)]), [['warn', true]]);
   assert.deepEqual(await grey('#a8b0b9'), []);
   assert.deepEqual(await grey('#ffffff', 'series'), []);
+  // 2つ目からの灰色は、紙から chart.muted より離れる。明るいテーマでも、暗いテーマ（動画の図）でも。
+  const { grey: shade } = await import('../src/figures/chart.js');
+  const base = readTheme(null).tokens;
+  for (const t of [base, { ...base, color: { ...base.color, ...base.video.figure.color }, chart: { ...base.chart, ...base.video.figure.chart } }]) {
+    const r = [0, 1, 2, 3, 4].map((k) => contrast(shade(t, k), t.color.paper));
+    r.slice(1).forEach((x, k) => assert.ok(x > r[k], `${k + 1}: ${r}`));
+  }
 });
 
 test('字幕の文字は、背景に重ねた半透明の帯の色で確かめる', async () => {
