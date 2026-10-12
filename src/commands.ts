@@ -311,17 +311,21 @@ export const commands: Command[] = [
       { name: 'model', value: '名前', desc: '原稿を書いたモデルの名前。実績（zukai stats）に記録する' },
       { name: 'no-log', desc: '実績に記録しない' },
       textlintFlag,
+      { name: 'no-server', desc: '常駐する検査のプロセスを使わず、このプロセスだけで検査する' },
     ],
     examples: ['zukai lint 原稿.md --model=モデル名'],
     settings: ['terms', 'repos.*.path'],
     related: ['build', 'stats', 'rules'],
     async run({ args, opt, has }) {
-      const { lint } = await import('./lint/index.ts');
       const { record } = await import('./log.ts');
+      // 2回目からは、常駐するプロセスで検査する。textlint の辞書を読み込み直さずに済むため。使えなければ、このプロセスで検査する。
+      const { lintOnServer } = await import('./lint/server.ts');
+      const check = async (source: string, file: string, options: { textlint: boolean }) =>
+        (has('no-server') ? null : await lintOnServer(source, file, options)) ?? (await import('./lint/index.ts')).lint(source, file, options);
       let ok = true;
       const results: LintResult[] = [];
       for (const file of args) {
-        const result = await lint(fs.readFileSync(file, 'utf8'), file, { textlint: !has('no-textlint') });
+        const result = await check(fs.readFileSync(file, 'utf8'), file, { textlint: !has('no-textlint') });
         if (!has('no-log')) record(result, opt('model'));
         results.push(result);
         ok &&= result.ok;
