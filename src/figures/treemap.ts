@@ -1,5 +1,6 @@
 import { px } from './svg.ts';
-import { renderChart, layoutOf, fmt, seriesColor, neutral, mix } from './chart.ts';
+import { renderChart, layoutOf, fmt, labelOn } from './chart.ts';
+import { treemapColor } from '../color.ts';
 import { checkSpec, contractLimits, describe } from './schema.ts';
 import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
@@ -92,15 +93,20 @@ function option(spec: TreemapSpec, t: Tokens, ids = false): ChartOption {
   return {
     series: [{
       type: 'treemap', left: 0, right: 0, top: 0, bottom: 0, roam: false, nodeClick: false, breadcrumb: { show: false }, squareRatio: 1.2,
-      // neutral では、塗った面の上に白抜きの文字を載せず、淡い灰色のマスに本文の色で書く。
-      label: { show: true, color: neutral(t) ? t.color.ink : t.color.onAccent, fontSize: 12, lineHeight: 18, formatter: (p) => `${p.name}\n${fmt(p.value as number)}${spec.unit}` },
-      upperLabel: { show: true, height: 28, color: t.color.ink, fontSize: 13, fontWeight: 700, formatter: (p) => `${p.name} ${fmt(p.value as number)}${spec.unit}` },
+      // 文字の色は、上の階層の色ごとに、白抜きか本文の色のうち読みやすいほうを選ぶ（下の data）。
+      label: { show: true, fontSize: 12, lineHeight: 18, formatter: (p) => `${p.name}\n${fmt(p.value as number)}${spec.unit}` },
+      upperLabel: { show: true, height: 28, fontSize: 13, fontWeight: 700, formatter: (p) => `${p.name} ${fmt(p.value as number)}${spec.unit}` },
       levels: [
         { itemStyle: { borderWidth: 0, gapWidth: 10 }, upperLabel: { show: false } },
         { itemStyle: { borderColor: t.color.paper, borderWidth: 0, gapWidth: 2 } },
         { itemStyle: { borderWidth: 0, gapWidth: 0, borderRadius: 3 } },
       ],
-      data: spec.groups.map((g, i) => ({ name: g.label, itemStyle: { color: neutral(t) ? mix(t.chart.muted, t.color.paper, [0.72, 0.8, 0.86][i % 3]) : seriesColor(t, i) }, children: g.items.map((it, j) => ({ name: it.label, value: it.value, ...(ids ? { id: idOf(i, j) } : {}) })) })),
+      data: spec.groups.map((g, i) => {
+        // 上の階層の色で、その見出し（upperLabel）と下の階層の枠を塗る。
+        const color = treemapColor(t, i);
+        const text = labelOn(t, color).color;
+        return { name: g.label, itemStyle: { color }, upperLabel: { color: text }, children: g.items.map((it, j) => ({ name: it.label, value: it.value, label: { color: text }, ...(ids ? { id: idOf(i, j) } : {}) })) };
+      }),
     }],
   };
 }

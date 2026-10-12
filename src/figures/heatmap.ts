@@ -1,5 +1,6 @@
 import { px } from './svg.ts';
-import { renderChart, axisText, fmt, neutral } from './chart.ts';
+import { renderChart, axisText, fmt, neutral, labelOn, mix } from './chart.ts';
+import { TEXT_CONTRAST } from '../color.ts';
 import { checkSpec, contractLimits, describe } from './schema.ts';
 import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
@@ -55,15 +56,22 @@ values:
     const text = axisText(t);
     const max = Math.max(...spec.values.flat());
     const top = `${fmt(max)}${spec.unit}`;
-    const data = spec.values.flatMap((row, i) => row.map((v, j): Cell => [spec.x[j], spec.y[i], v]));
+    // マスの色は、値に応じて ramp の2色を混ぜた色（visualMap）。値がすべて 0 のときは、ECharts は中間の色で塗る。
+    const ramp = neutral(t) ? [t.color.surface, t.chart.muted] : [t.color.accentSurface, t.color.accent];
+    // 値が大きいマスにだけ数値を書く。すべてのマスに書くと読みにくい。
+    // 文字の色は、マスの色に合わせて白抜きか本文の色を選ぶ。どちらでも読めない中間の濃さのマスには書かない。
+    const data = spec.values.flatMap((row, i) => row.map((v, j) => {
+      const label = labelOn(t, mix(ramp[0], ramp[1], max ? v / max : 0.5));
+      const show = v >= max * 0.6 && label.ratio >= TEXT_CONTRAST;
+      return { value: [spec.x[j], spec.y[i], v] as Cell, label: { show, color: label.color } };
+    }));
     return renderChart(
       {
         grid: { left: Math.max(...spec.y.map((y) => px(y, 12))) + 20, right: px(top, 12) + 40, top: 8, bottom: 32 },
         xAxis: { type: 'category', data: spec.x, axisLine: { show: false }, axisTick: { show: false }, axisLabel: text },
         yAxis: { type: 'category', inverse: true, data: spec.y, axisLine: { show: false }, axisTick: { show: false }, axisLabel: text },
-        visualMap: { min: 0, max, calculable: false, orient: 'vertical', right: 8, top: 'middle', itemHeight: Math.min(140, spec.y.length * 24), itemWidth: 14, text: [top, '0'], textStyle: { color: t.color.sub, fontSize: 12 }, inRange: { color: neutral(t) ? [t.color.surface, t.chart.muted] : [t.color.accentSurface, t.color.accent] } },
-        // 値が大きいマスにだけ数値を書く。すべてのマスに書くと読みにくい。
-        series: [{ type: 'heatmap', data, itemStyle: { borderColor: t.color.paper, borderWidth: 2, borderRadius: 3 }, label: { show: true, color: neutral(t) ? t.color.ink : t.color.onAccent, fontSize: 12, fontWeight: 600, formatter: (p) => ((p.value as Cell)[2] >= max * 0.6 ? fmt((p.value as Cell)[2]) : '') } }],
+        visualMap: { min: 0, max, calculable: false, orient: 'vertical', right: 8, top: 'middle', itemHeight: Math.min(140, spec.y.length * 24), itemWidth: 14, text: [top, '0'], textStyle: { color: t.color.sub, fontSize: 12 }, inRange: { color: ramp } },
+        series: [{ type: 'heatmap', data, itemStyle: { borderColor: t.color.paper, borderWidth: 2, borderRadius: 3 }, label: { fontSize: 12, fontWeight: 600, formatter: (p) => fmt((p.value as Cell)[2]) } }],
       },
       t, spec.y.length * 34 + 44, `${spec.y.join('、')}と${spec.x.join('、')}の組み合わせごとの量`,
     );

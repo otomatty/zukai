@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 import type * as Echarts from 'echarts';
 import { gradientVector } from './svg.ts';
+import { mix, seriesColor, textOn } from '../color.ts';
 import type { Tokens } from '../types.ts';
 
 export type ChartOption = Echarts.EChartsOption;
@@ -72,12 +73,9 @@ export function highlight(t: Tokens): ChartColor {
   return { type: 'linear', x: v.x1, y: v.y1, x2: v.x2, y2: v.y2, colorStops: stops.map((color, i) => ({ offset: i / (stops.length - 1), color })) };
 }
 
-// 2つの色を混ぜる。p は b の割合。
-export function mix(a: string, b: string, p: number): string {
-  const ch = (h: string) => [1, 3, 5].map((i) => parseInt((h.length === 4 ? h.replace(/\w/g, (c) => c + c) : h).slice(i, i + 2), 16));
-  const [x, y] = [ch(a), ch(b)];
-  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * p).toString(16).padStart(2, '0')).join('')}`;
-}
+// 2つの色を混ぜる。p は b の割合。計算は src/color.ts にある（テーマの検査も同じ式で地色を作るため）。
+export { mix };
+
 // テーマが neutral のときに、型の書き方に添える指示。
 export const modeGuide = (t: Tokens): string[] => (neutral(t) ? ['このテーマは灰色を基本にするので、emphasis: true を付けたものだけに色が付く。注目させたいもの1つに付ける'] : []);
 
@@ -85,5 +83,8 @@ export const modeGuide = (t: Tokens): string[] => (neutral(t) ? ['このテー�
 // 紙の色には寄せない。どの濃淡も、紙からは chart.muted より離れ、theme check の chart.muted の検査がすべてに効くようにするため。
 export const grey = (t: Tokens, k: number): string => mix(t.chart.muted, t.color.ink, [0, 0.2, 0.35, 0.5, 0.62][Math.min(k, 4)]);
 
-// 系列を見分ける色。検証済みの3色を順に使い、4つ目からは灰色にする。
-export const seriesColor = (t: Tokens, i: number): string => t.chart.series[i] ?? (i === t.chart.series.length ? t.chart.muted : t.chart.rest);
+// 塗った面の上に書く文字の色。白抜きの文字（color.onAccent）と本文の色（color.ink）のうち、地色とのコントラストが高いほう。
+export const labelOn = (t: Tokens, bg: string): { color: string; ratio: number } => textOn(bg, [t.color.onAccent, t.color.ink]);
+
+// 系列を見分ける色。計算は src/color.ts にある（テーマの検査も同じ色を確かめるため）。
+export { seriesColor };
