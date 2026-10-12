@@ -19,8 +19,9 @@ test('相対パスの import は、実在するファイルを指す', () => {
   const missing: string[] = [];
   for (const file of [...files('src'), ...files('tests')]) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
-    for (const m of text.matchAll(/(?:\bfrom\s+|\bimport\s*\(\s*)'(\.{1,2}\/[^']+)'/g)) {
-      if (!fs.existsSync(path.resolve(root, path.dirname(file), m[1]))) missing.push(`${file}: ${m[1]}`);
+    // from '…'、import '…'（読み込むだけ）、import('…') の、どちらの引用符でも拾う。
+    for (const m of text.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.{1,2}\/[^'"]+)\1/g)) {
+      if (!fs.existsSync(path.resolve(root, path.dirname(file), m[2]))) missing.push(`${file}: ${m[2]}`);
     }
   }
   assert.deepEqual(missing, []);
