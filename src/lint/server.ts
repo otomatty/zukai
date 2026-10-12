@@ -9,7 +9,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { root, homeDir, spec } from '../config.ts';
+import { root, homeDir } from '../config.ts';
 import type { LintResult } from './index.ts';
 
 // 使われないまま、この時間がたったら終わる。
@@ -24,8 +24,9 @@ interface Request {
   file: string;
   textlint: boolean;
   cwd: string;
-  // 設定に効く環境変数。常駐する側の環境変数ではなく、呼んだ側の値で検査するため。設定されていない変数は null（JSON では undefined が消えるため）。
-  env: Record<string, string | null>;
+  // 呼んだ側の環境変数すべて。常駐する側が受け継いだ値ではなく、呼んだ側の値で検査するため。
+  // 設定の変数だけでなく、検査が起動する git なども、呼んだ側の PATH や GIT_* で動かす。
+  env: Record<string, string>;
 }
 type Response = { result: LintResult } | { error: string } | { denied: true };
 
@@ -99,9 +100,6 @@ function readSecret(create: boolean): string | null {
 // 接続先。本人だけが入れるフォルダに置く Unix ソケット。
 export const socketPath = (): string => path.join(runDir(), `lint-${versionKey()}.sock`);
 
-// 設定に効く環境変数の名前。contract/settings.json の env。
-const envNames = (): string[] => Object.values(spec).flatMap((s) => (s.env ? [s.env] : []));
-
 // --- 接続する側 -------------------------------------------------------------
 
 // 常駐するプロセスで検査する。使えなければ null を返し、裏で起動する。呼んだ側は、自分で検査する。
@@ -115,7 +113,7 @@ export async function lintOnServer(source: string, file: string, { textlint = tr
     return null;
   }
   const sock = socketPath();
-  const req: Request = { secret, source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(envNames().map((n) => [n, process.env[n] ?? null])) };
+  const req: Request = { secret, source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)) };
   let res: Response;
   try {
     res = await send(sock, req);
@@ -173,13 +171,12 @@ async function serve(): Promise<void> {
     timer = setTimeout(() => server.close(() => process.exit(0)), IDLE_MS);
   };
   const handle = async (req: Request): Promise<Response> => {
-    const saved = Object.fromEntries(Object.keys(req.env).map((n) => [n, process.env[n] ?? null]));
+    const saved = { ...process.env };
     const cwd = process.cwd();
-    const set = (env: Record<string, string | null | undefined>) => {
-      for (const [n, v] of Object.entries(env)) {
-        if (v == null) delete process.env[n];
-        else process.env[n] = v;
-      }
+    // 環境変数を、渡された値だけに入れ替える。渡されなかった変数は消す。
+    const set = (env: NodeJS.ProcessEnv) => {
+      for (const n of Object.keys(process.env)) if (!(n in env)) delete process.env[n];
+      Object.assign(process.env, env);
     };
     try {
       set(req.env);

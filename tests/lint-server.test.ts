@@ -57,6 +57,19 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
       assert.equal(viaServer.status, local.status, file);
       assert.equal(viaServer.stdout, local.stdout, file);
     }
+    // 検査が起動する git も、呼んだ側の環境変数で動かす。GIT_DIR が読めない場所を指すと、どちらもコードの根拠を R002 にする。
+    const project = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-server-refs-'));
+    const gitIn = (...args: string[]) => spawnSync('git', ['-C', project, '-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { encoding: 'utf8' });
+    fs.writeFileSync(path.join(project, 'a.ts'), 'export const a = 1;\n');
+    fs.writeFileSync(path.join(project, 'zukai.config.json'), JSON.stringify({ repos: { app: { path: '.', host: 'github', org: 'o', name: 'n' } } }));
+    fs.writeFileSync(path.join(project, 'doc.md'), '# 題名\n\n導入です。\n\n## 節\n\n主張です。\n\n```yaml refs\n- code: app:a.ts#L1-L1\n  note: 値を決める処理です。\n```\n');
+    gitIn('init', '-q');
+    gitIn('add', 'a.ts');
+    gitIn('commit', '-q', '-m', 'a');
+    const refs = (...flags: string[]) => spawnSync(process.execPath, [cli, 'lint', 'doc.md', '--json', '--no-log', '--no-textlint', ...flags], { cwd: project, env: { ...env, GIT_DIR: path.join(project, 'missing') }, encoding: 'utf8' });
+    const refsLocal = refs('--no-server');
+    assert.match(refsLocal.stdout, /R002/);
+    assert.equal(refs().stdout, refsLocal.stdout);
     // 設定の誤りは、呼んだ側の環境変数で判断し、同じ文で止める。
     const bad = spawnSync(process.execPath, [cli, 'lint', 'corpus/good/free.md', '--no-log'], { cwd: root, env: { ...env, CONFLUENCE_BASE: 'notaurl' }, encoding: 'utf8' });
     assert.equal(bad.status, 1);
