@@ -9,7 +9,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { root, homeDir } from '../config.ts';
+import { root, homeDir, applyMessageLang } from '../config.ts';
+import { messageLang, setMessageLang } from '../messages.ts';
 import type { LintResult } from './index.ts';
 
 // 使われないまま、この時間がたったら終わる。
@@ -198,6 +199,7 @@ async function serve(): Promise<void> {
   const handle = async (req: Request): Promise<Response> => {
     const saved = { ...process.env };
     const cwd = process.cwd();
+    const lang = messageLang();
     // 環境変数を、渡された値だけに入れ替える。渡されなかった変数は消す。
     const set = (env: NodeJS.ProcessEnv) => {
       for (const n of Object.keys(process.env)) if (!(n in env)) delete process.env[n];
@@ -206,12 +208,15 @@ async function serve(): Promise<void> {
     try {
       set(req.env);
       process.chdir(req.cwd);
+      // 設定とテーマの誤りの文は、呼んだ側のホームの設定の lang で出す。
+      applyMessageLang();
       return { result: await lint(req.source, req.file, { textlint: req.textlint }) };
     } catch (e) {
       return { error: (e as Error).message };
     } finally {
       set(saved);
       process.chdir(cwd);
+      setMessageLang(lang);
     }
   };
   const server = net.createServer((conn) => {

@@ -10,6 +10,7 @@ import { themeReport } from './theme.ts';
 import type { Severity } from './types.ts';
 import { t } from './locale.ts';
 import type { Lang, PhraseKey } from './locale.ts';
+import { messageLang, setMessageLang } from './messages.ts';
 
 // Playwright の型。playwright は入れていない環境もあるので、型は同じ API を持つ playwright-core から取る。
 type Playwright = typeof import('playwright-core');
@@ -48,8 +49,13 @@ export function satisfies(version: string, range: string): boolean {
 export async function doctor(project: string): Promise<DoctorReport> {
   const checks: Check[] = [];
   const add = (id: string, label: string, status: Status, detail = '', fix = '') => checks.push({ id, label, status, detail, fix });
-  const cfg = loadConfig(project);
+  let cfg = loadConfig(project);
   const lang: Lang = cfg.values.lang === 'en' ? 'en' : 'ja';
+  // 設定とテーマの誤りの文も、doctor の表示と同じ言語にする。
+  if (messageLang() !== lang) {
+    setMessageLang(lang);
+    cfg = loadConfig(project);
+  }
   const tr = (key: PhraseKey, vars?: Record<string, unknown>) => t(lang, key, vars);
   const sep = lang === 'en' ? ', ' : '、';
   const inRoot = (cmd: string) => `cd ${JSON.stringify(root)} && ${cmd}`;

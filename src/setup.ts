@@ -10,6 +10,7 @@ import type { RunContext } from './commands.ts';
 import type { Origin, Scope } from './types.ts';
 import { t, hasPhrase, suggestedLang } from './locale.ts';
 import type { Lang, PhraseKey } from './locale.ts';
+import { msg as message, setMessageLang } from './messages.ts';
 
 const SECTIONS = ['skills', 'output', 'video', 'confluence'];
 // セクションを書かずに setup を実行したときに質問するセクション。
@@ -172,6 +173,8 @@ export async function setup({ sections, opt, has }: { sections: string[]; opt: R
   if (langFlag !== undefined && langFlag !== 'ja' && langFlag !== 'en') throw new Error('--lang に書けるのは ja か en です。');
   // 対話では、他の質問の前に言語を選ぶ。選ぶ前なので、この質問だけは日本語と英語を並べる。
   const lang: Lang = langFlag ?? (ask ? await askLang(suggestedLang(cfg)) : cfg.values.lang === 'en' ? 'en' : 'ja');
+  // 値の検査の文も、選んだ言語で出す。
+  setMessageLang(lang);
   const tr = (key: PhraseKey, vars?: Record<string, unknown>) => t(lang, key, vars);
   const teamExists = fs.existsSync(cfg.files.team!);
   console.log(tr('project', { path: project, note: teamExists ? tr('project.team') : tr('project.noteam') }));
@@ -311,7 +314,7 @@ function fromFlags(want: Set<string>, cfg: ProjectConfig, opt: RunContext['opt']
     const v = opt(flag);
     if (v === undefined) continue;
     // 空の値は「なし」。既定値がある項目（output など）は「なし」にできないので止める。
-    if (v === '' && invalid(specOf(key)!, null)) throw new Error(`--${flag} を空にはできません。既定値に戻すときは zukai config unset ${key} を実行します。`);
+    if (v === '' && invalid(specOf(key)!, null)) throw new Error(message('config.emptyFlag', { flag, key }));
     answers.values[key] = v === '' ? null : specOf(key)!.type === 'path' ? path.resolve(v) : coerce(key, v, 'team', cfg.project);
   }
   if (want.has('skills') && opt('skills') !== 'none') {
@@ -421,7 +424,7 @@ export async function config({ args, opt, has }: RunContext): Promise<number> {
     case 'get': {
       if (!key) throw new Error('項目の名前を書いてください。例: zukai config get output');
       const s = specOf(key);
-      if (!s) throw new Error(`項目「${key}」はありません。項目の一覧は zukai help config で表示します。`);
+      if (!s) throw new Error(message('config.getUnknown', { key }));
       const cfg = loadConfig(project);
       const v = cfg.values[key] ?? null;
       if (has('json')) console.log(JSON.stringify({ key, value: s.secret && v ? '********' : v, origin: cfg.origins[key] ?? null }));
@@ -482,7 +485,7 @@ function list(project: string, { origin = false, json = false } = {}): number {
     console.log(`${pad(k, width)}${display(k, cfg.values[k])}${origin ? `  ← ${scopeNames[o] ?? '未設定'}${o === 'env' ? `（${specOf(k)!.env}）` : ''}` : ''}`);
   }
   if (cfg.problems.length) {
-    console.log('\n設定の誤り');
+    console.log(message('config.listProblems'));
     for (const p of cfg.problems) console.log(`  ${p.file ? `${shown(p.file)}: ` : ''}${p.message}`);
   }
   return cfg.problems.length ? 1 : 0;

@@ -158,7 +158,7 @@
       "labels": { "ja": "日本語", "en": "English" },
       "default": "ja",
       "scopes": ["user"],
-      "description": "zukai setup と zukai doctor の表示言語。setup の最初の質問で選ぶ"
+      "description": "zukai setup と zukai doctor の表示言語。どのコマンドでも、設定とテーマを確かめたときの誤りと検査の文をこの言語で出す。setup の最初の質問で選ぶ"
     },
     "png.font": {
       "group": "この PC",

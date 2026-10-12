@@ -206,8 +206,9 @@ export const commands: Command[] = [
           if (has('json')) console.log(JSON.stringify({ dir: r.dir, name: r.name, ok: r.ok, findings: r.findings }, null, 2));
           else {
             const errors = r.findings.filter((f) => f.severity === 'error').length;
-            console.log(`${r.dir ? `テーマ「${r.name}」（${r.dir}）` : 'テーマなし（既定の見た目）'}  ${r.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${r.findings.length - errors}`);
-            for (const f of r.findings) console.log(`  ${f.severity.padEnd(5)}  ${f.what}  ${f.message}`);
+            const { msg, findingLabel } = await import('./messages.ts');
+            console.log(`${r.dir ? msg('theme.head', { name: r.name, dir: r.dir }) : msg('theme.none')}  ${r.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${r.findings.length - errors}`);
+            for (const f of r.findings) console.log(`  ${f.severity.padEnd(5)}  ${findingLabel(f.what)}  ${f.message}`);
           }
           return r.ok ? 0 : 1;
         }
