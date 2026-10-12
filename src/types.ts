@@ -80,6 +80,8 @@ export interface Settings {
   repos: Record<string, Repo>;
   png: { font: string | null };
   chromium: string | null;
+  // setup と doctor の表示言語。
+  lang: 'ja' | 'en';
 }
 
 // ---- 原稿 --------------------------------------------------------------------
