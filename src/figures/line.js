@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.js';
-import { renderChart, axisText, isNumber, fmt } from './chart.js';
+import { renderChart, axisText, isNumber, fmt, highlight, neutral, grey, modeGuide } from './chart.js';
 
 const PLOT_LEFT = 56;
 const PLOT_RIGHT = 72;
@@ -15,6 +15,7 @@ x: [5月, 6月, 7月, 8月, 9月, 10月]
 series:
   - label: パスワード誤り
     values: [320, 340, 330, 210, 150, 120]
+    emphasis: true
   - label: 期限切れ
     values: [60, 55, 70, 65, 58, 62]
 marker:
@@ -26,8 +27,11 @@ marker:
     'series: 系列の配列。値の大きさが数倍違う系列を並べると、小さいほうの変化が読めなくなる。その場合はセクションを分ける',
     'series[].label: 系列の名前（必須）',
     'series[].values: x と同じ個数の数値（必須）',
+    'series[].emphasis: true にすると、その系列を太い線で描く（任意、図全体で1つまで）',
     'marker.at / marker.label: 出来事のあった目盛りと、その名前（任意）',
   ],
+
+  guide: (t) => modeGuide(t),
 
   validate(spec, limits) {
     const errors = [...unknownKeys(spec, ['type', 'unit', 'x', 'series', 'marker'], 'line')];
@@ -44,12 +48,13 @@ marker:
     if (spec.x.length > limits.line.maxPoints) errors.push(`x が${spec.x.length}個あります。上限は${limits.line.maxPoints}個です。期間を絞るか、間隔を広げてください。`);
     if (spec.series.length > limits.line.maxSeries) errors.push(`series が${spec.series.length}本あります。上限は${limits.line.maxSeries}本です。伝えたい系列に絞ってください。`);
     spec.series.forEach((s, i) => {
-      errors.push(...unknownKeys(s, ['label', 'values'], `series[${i}]`));
+      errors.push(...unknownKeys(s, ['label', 'values', 'emphasis'], `series[${i}]`));
       if (typeof s?.label !== 'string') errors.push(`series[${i}] に label がありません。`);
       if (!Array.isArray(s?.values) || s.values.length !== spec.x.length || !s.values.every(isNumber)) {
         errors.push(`series[${i}].values は、x と同じ${spec.x.length}個の数値にしてください。`);
       }
     });
+    if (spec.series.filter((s) => s?.emphasis).length > 1) errors.push('emphasis を付けられる系列は1つまでです。');
     if (spec.marker !== undefined) {
       errors.push(...unknownKeys(spec.marker, ['at', 'label'], 'marker'));
       if (!spec.x.includes(String(spec.marker?.at))) errors.push(`marker.at「${spec.marker?.at}」は x にありません。`);
@@ -70,7 +75,9 @@ marker:
 
   render(spec, t) {
     const many = spec.series.length > 1;
-    const colors = many ? t.chart.series : [t.color.accent];
+    // neutral では、強調した系列だけに色を付け、ほかは灰色の濃淡にする。
+    let k = 0;
+    const colors = neutral(t) ? spec.series.map((s) => (s.emphasis ? highlight(t) : grey(t, k++))) : many ? spec.series.map((s, i) => (s.emphasis ? highlight(t) : t.chart.series[i])) : [spec.series[0].emphasis ? highlight(t) : t.color.accent];
     const text = axisText(t);
     return renderChart(
       {
@@ -83,7 +90,7 @@ marker:
           axisLabel: { ...text, formatter: fmt }, splitLine: { lineStyle: { color: t.chart.grid } },
         },
         series: spec.series.map((s, i) => ({
-          name: s.label, type: 'line', data: s.values, symbol: 'circle', symbolSize: 8, lineStyle: { width: 2 }, itemStyle: { borderColor: t.color.paper, borderWidth: 2 },
+          name: s.label, type: 'line', data: s.values, symbol: 'circle', symbolSize: 8, lineStyle: { width: s.emphasis ? 3 : 2 }, itemStyle: { borderColor: t.color.paper, borderWidth: 2 },
           // 線の右端に最後の値を書く。重なる場合は上下にずらす。
           endLabel: { show: true, distance: 8, color: t.color.ink, fontSize: 12, fontWeight: 600, formatter: (p) => fmt(p.value) },
           labelLayout: { moveOverlap: 'shiftY' },

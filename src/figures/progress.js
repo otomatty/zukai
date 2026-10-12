@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.js';
-import { renderChart, isNumber, fmt, unitError } from './chart.js';
+import { renderChart, isNumber, fmt, unitError, highlight, neutral, modeGuide } from './chart.js';
 
 // progress: 目標に対する達成度を、項目ごとの横棒で示す。
 export default {
@@ -17,6 +17,8 @@ items:
     value: 72
     emphasis: true`,
   fields: ['unit: 値の単位（必須）', 'max: 棒の右端にあたる上限の値（必須）', 'target: 目標値。縦線で示す（任意）', 'items[].label / items[].value: 項目の名前と、0以上 max 以下の数値（必須）', 'items[].emphasis: true にすると名前と値を太字にする（任意、図全体で1つまで）'],
+
+  guide: (t) => modeGuide(t),
 
   validate(spec, limits) {
     const errors = [...unknownKeys(spec, ['type', 'unit', 'max', 'target', 'items'], 'progress'), ...unitError(spec, 'progress')];
@@ -48,9 +50,8 @@ items:
           data: spec.items.map((it) => ({ value: it.label, textStyle: { fontWeight: it.emphasis ? 700 : 400 } })), axisLabel: { color: t.color.ink, fontSize: 13, margin: 14 },
         },
         series: [{
-          type: 'bar', barWidth: 16, showBackground: true, backgroundStyle: { color: '#dbe7ef', borderRadius: [0, 4, 4, 0] },
-          data: spec.items.map((it) => ({ value: it.value, label: { fontWeight: it.emphasis ? 700 : 400 } })),
-          itemStyle: { color: t.color.accent, borderRadius: [0, 4, 4, 0] },
+          type: 'bar', barWidth: 16, showBackground: true, backgroundStyle: { color: t.chart.track, borderRadius: [0, 4, 4, 0] },
+          data: spec.items.map((it) => ({ value: it.value, label: { fontWeight: it.emphasis ? 700 : 400 }, itemStyle: { color: it.emphasis ? highlight(t) : neutral(t) ? t.chart.muted : t.color.accent, borderRadius: [0, 4, 4, 0] } })),
           ...(spec.target === undefined ? {} : { markLine: { silent: true, symbol: 'none', lineStyle: { color: t.color.ink, type: 'solid', width: 2 }, label: { formatter: `目標 ${fmt(spec.target)}${spec.unit}`, color: t.color.ink, fontSize: 12, fontWeight: 700, position: 'start', rotate: 0 }, data: [{ xAxis: spec.target }] } }),
         }, {
           // 値は右端に揃えて書く。棒の先に書くと、目標の線の近くで線と重なる。

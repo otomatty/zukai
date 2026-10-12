@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readJson, root } from '../lint/index.js';
+import { themeFor } from '../theme.js';
 import { esc } from '../figures/svg.js';
 import { settingsFor, projectOf, stateDir, machineSetting } from '../config.js';
 import { scenesOf, timeline, wrapScripts, DEFAULT_OPTIONS } from './script.js';
@@ -21,16 +22,16 @@ import { RATE, mix, voiceCues, wav16, presetOf, checkParams, PRESETS, bgmTrack }
 const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:";
 
 const css = (t, v) => `
-:root{--zk-bg:${v.background};${Object.entries(v.palette).map(([k, c]) => `--zk-${k}:${c}`).join(';')};--zk-ink:${v.figure.color.ink};--zk-sub:${v.figure.color.sub};--zk-line:${v.figure.color.line};--zk-surface:${v.figure.color.surface};--zk-accent:${v.figure.color.accent};--zk-font:${t.font}}
+:root{--zk-bg:${v.background};${Object.entries(v.palette).map(([k, c]) => `--zk-${k}:${c}`).join(';')};--zk-ink:${v.figure.color.ink};--zk-sub:${v.figure.color.sub};--zk-line:${v.figure.color.line};--zk-surface:${v.figure.color.surface};--zk-accent:${v.figure.color.accent};--zk-gradient:${t.gradient.stops.length ? `linear-gradient(${t.gradient.angle}deg,${t.gradient.stops.join(',')})` : v.figure.color.accent};--zk-font:${t.font}}
 *{box-sizing:border-box}
 html,body{margin:0;width:${v.width}px;height:${v.height}px;overflow:hidden;background:${v.background};font-family:${t.font}}
 .zk-scene{position:absolute;inset:0;width:${v.width}px;height:${v.height}px;transform-origin:50% 50%;overflow:hidden;background:${v.background}}
-.zk-title{position:absolute;left:160px;right:160px;top:420px;margin:0;color:#fff;font-size:80px;line-height:1.3;font-weight:800;text-align:center}
-.zk-claim{position:absolute;left:160px;right:160px;top:96px;margin:0;color:#fff;font-size:50px;line-height:1.38;font-weight:800;text-align:center}
+.zk-title{position:absolute;left:160px;right:160px;top:420px;margin:0;color:${v.ink};font-size:80px;line-height:1.3;font-weight:800;text-align:center}
+.zk-claim{position:absolute;left:160px;right:160px;top:96px;margin:0;color:${v.ink};font-size:50px;line-height:1.38;font-weight:800;text-align:center}
 .zk-scene[data-kind=auto] .zk-fig{position:absolute;left:160px;top:270px;width:1600px;height:560px}
 .zk-fig>svg{width:100%;height:100%;overflow:visible}
 .zk-table{display:flex;align-items:center;justify-content:center}
-.zk-table table{border-collapse:collapse;color:#fff;font-size:34px;line-height:1.4}
+.zk-table table{border-collapse:collapse;color:${v.ink};font-size:34px;line-height:1.4}
 .zk-table th{text-align:left;padding:14px 26px;border-bottom:4px solid var(--zk-yellow)}
 .zk-table td{padding:14px 26px;border-bottom:2px solid rgba(255,255,255,.25)}
 #zk-sub{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);max-width:1240px;padding:12px 30px;border-radius:16px;background:${v.subtitle.band}cc;color:${v.subtitle.ink};font-size:40px;line-height:1.45;font-weight:700;text-align:center;visibility:hidden}
@@ -45,8 +46,12 @@ function sceneHtml(sc) {
     ...Object.entries(sc.markers).map(([k, v]) => `--${k}:${v.toFixed(3)}s`),
   ].join(';');
   // manual を付けた図は、自動の動きを付けずに置く。AI が data-label で部品を狙って動かすときに使う。
+  // 図の中の名前（矢印の印やグラデーション）には、シーンの番号を付ける。1つのページに図がいくつも入ると、同じ名前は最初の図を指す。
+  // 矢印の印は参照した場所ではなく定義した場所の見え方を引き継ぐので、前のシーンが隠れると、後のシーンの矢じりまで消えるため。
+  // 同じ図を複数のショットで使うこともあるので、zk- で始まる名前に限らず、すべての名前と参照に付ける。
+  const svg = sc.figureSvg?.replace(/(\bid="|url\((['"]?)#|href="#)/g, (m) => `${m}s${sc.id}-`);
   const fig = (manual) =>
-    sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${manual ? ' data-manual' : ''}>${sc.figureSvg}</div>` : sc.tableHtml ? `<div class="zk-fig zk-table" data-whole="true"${manual ? ' data-manual' : ''}>${sc.tableHtml}</div>` : '';
+    sc.figureSvg ? `<div class="zk-fig" data-whole="${sc.whole}"${sc.figureType ? ` data-type="${esc(sc.figureType)}"` : ''}${manual ? ' data-manual' : ''}>${svg}</div>` : sc.tableHtml ? `<div class="zk-fig zk-table" data-whole="true"${manual ? ' data-manual' : ''}>${sc.tableHtml}</div>` : '';
   let inner;
   if (sc.kind === 'title') inner = `<h1 class="zk-title">${esc(sc.title)}</h1>`;
   else if (sc.kind === 'auto') inner = `<h2 class="zk-claim">${esc(sc.claim)}</h2>${fig(false)}`;
@@ -58,9 +63,13 @@ function sceneHtml(sc) {
 export function pageHtml(plan, tokens, only = null) {
   const v = tokens.video;
   // ページの中では、図とシーンの HTML は DOM に入っているので、時間割からは外す。
-  const lite = { ...plan, scenes: plan.scenes.map(({ figureSvg, tableHtml, motionHtml, findings, ...s }) => s) };
+  const { motions = {}, ...rest } = plan;
+  const lite = { ...rest, scenes: plan.scenes.map(({ figureSvg, tableHtml, motionHtml, findings, ...s }) => s) };
   const runtime = fs.readFileSync(path.join(root, 'src/video/runtime.browser.js'), 'utf8');
   const scenes = plan.scenes.filter((s) => only == null || s.id === only);
+  // ページのシーンで使う独自の型の動きだけを入れる。AI のシーンのスクリプトと同じく、Chromium の中だけで動く。
+  const used = [...new Set(scenes.map((s) => s.figureType).filter((n) => n && motions[n]))];
+  const typeScripts = used.map((n) => `<script>zk.__type(${JSON.stringify(n)}, function (fig, ctx) {\n${motions[n].replace(/<\/script/gi, '<\\/script')}\n});</script>`).join('\n');
   return `<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${CSP}">
@@ -68,6 +77,7 @@ export function pageHtml(plan, tokens, only = null) {
 <script type="application/json" id="zk-plan">${JSON.stringify(lite).replace(/</g, '\\u003c')}</script>
 </head><body>
 <script>${runtime}</script>
+${typeScripts}
 ${scenes.map(sceneHtml).join('\n')}
 <div id="zk-sub"></div><div id="zk-fade"></div>
 </body></html>`;
@@ -129,7 +139,10 @@ function run(cmd, args, input) {
 
 // 原稿から時間割を作る。動画、コマの書き出し、検査で共通。
 async function prepare(file, project) {
-  const tokens = readJson('contract/tokens.json');
+  const theme = themeFor(path.dirname(path.resolve(file)));
+  const tokens = theme.tokens;
+  // テーマの独自の型の動き。型の名前ごとの、motion.js の中身。
+  const motions = Object.fromEntries(theme.types.filter((d) => d.motion).map((d) => [d.name, d.motion]));
   const limits = readJson('contract/limits.json').video;
   const { settings: all } = settingsFor(project);
   const settings = { video: all.video, apiKey: all.gemini?.apiKey ?? null };
@@ -147,7 +160,7 @@ async function prepare(file, project) {
   }
   const { voices, silentReason } = await voicesFor(scenes, settings, settings.apiKey ? stateDir(project, 'cache', 'tts') : null);
   const v = tokens.video;
-  const planOf = (list) => ({ ...timeline(list, voices), width: v.width, height: v.height, fps: v.fps, limits });
+  const planOf = (list) => ({ ...timeline(list, voices), width: v.width, height: v.height, fps: v.fps, limits, motions });
   return { tokens, limits, settings, voices, silentReason, scenes, planOf };
 }
 
@@ -160,6 +173,7 @@ async function probe(browser, plan, tokens, L, id) {
   const dur = sc.end - sc.start;
   const findings = [...sc.findings];
   let broken = false;
+  let dropMotion = false;
   let p;
   try {
     p = await openPage(browser, pageHtml(plan, tokens, id), plan, L);
@@ -204,6 +218,8 @@ async function probe(browser, plan, tokens, L, id) {
     if (sound && sound.peak > 1) findings.push({ severity: 'warn', rule: 'V301', message: `zk.sound の音の最大値が ${sound.peak.toFixed(2)} で、音が割れます。1以下にしてください。` });
     // frame の中の例外は、その時刻だけの問題のことがあるので warn にとどめる。
     for (const e of await p.page.evaluate(() => window.zkErrors())) findings.push({ severity: 'warn', rule: 'V002', message: e.message });
+    // 型の動きが例外を出したシーンは、仕上げでは型の動きを使わない。途中で切り替えると、型の動きが登録した効果音が、自動の動きの音と一緒に残るため。
+    dropMotion = (await p.page.evaluate(() => window.zkMotionFailed())).includes(id);
     drainPageErrors('コマを進めている間に、捕まえられない例外が起きました。');
   } catch (e) {
     if (!(e instanceof Runaway)) throw e;
@@ -212,7 +228,7 @@ async function probe(browser, plan, tokens, L, id) {
   } finally {
     await p?.close();
   }
-  return { id, heading: sc.heading, kind: sc.kind, findings, broken: broken && sc.kind === 'free' };
+  return { id, heading: sc.heading, kind: sc.kind, findings, broken: broken && sc.kind === 'free', dropMotion };
 }
 
 // すべてのシーンを調べ、使えないシーンを自動の動きに差し替えた時間割を返す。
@@ -228,9 +244,13 @@ async function guarded(browser, prep) {
     if (s.role && s.end - s.start > L.maxShotSeconds) results[i].findings.push({ severity: 'warn', rule: 'V107', message: `ショットが${(s.end - s.start).toFixed(1)}秒あります。目安は${L.maxShotSeconds}秒までです。ショットを分けてください。` });
   });
   if (plan.duration > L.maxTotalSeconds) results[0].findings.push({ severity: 'warn', rule: 'V106', message: `動画全体が${plan.duration.toFixed(0)}秒あります。上限の目安は${L.maxTotalSeconds}秒です。` });
-  if (results.some((r) => r.broken)) {
-    prep.scenes = prep.scenes.map((s, i) => (results[i].broken ? fallback(s) : s));
+  if (results.some((r) => r.broken || r.dropMotion)) {
+    prep.scenes = prep.scenes.map((s, i) => {
+      const next = results[i].broken ? fallback(s) : s;
+      return results[i].dropMotion ? { ...next, figureType: null } : next;
+    });
     results.filter((r) => r.broken).forEach((r) => r.findings.push({ severity: 'error', rule: 'V000', message: 'このシーンは、ガードレールに引っかかったため自動の動きに差し替えました。' }));
+    results.filter((r) => r.dropMotion && !r.broken).forEach((r) => r.findings.push({ severity: 'warn', rule: 'V002', message: 'このシーンの図は、型の動き（motion.js）が例外を出したため、自動の動きで書き出します。' }));
     plan = prep.planOf(prep.scenes);
   }
   return { plan, results };

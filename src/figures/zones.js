@@ -1,4 +1,4 @@
-import { open, close, arrow, px, txt, rect, mid, unknownKeys } from './svg.js';
+import { open, close, arrow, px, txt, rect, emRect, mid, unknownKeys } from './svg.js';
 import { iconExists, iconSvg } from './icons.js';
 
 const PAD = 12;
@@ -204,9 +204,9 @@ emphasis: ゲートウェイ`,
         if (nd.note) out.push(txt(t, cx(nd), y(nd) + 83, nd.note));
       } else {
         const em = nd.label === spec.emphasis;
-        out.push(rect(t, g.x0[nd.c], y(nd), g.w, g.blockH, { fill: em ? t.color.accentSurface : t.color.paper, stroke: em ? t.color.accent : t.color.line, sw: t.figure.stroke * (em ? 1.5 : 1) }));
-        out.push(txt(t, cx(nd), mid(cy(nd) - (nd.note ? 9 : 0), t.size.label), nd.label, { cls: 'zk-text', fill: em ? t.color.accent : t.color.ink }));
-        if (nd.note) out.push(txt(t, cx(nd), mid(cy(nd) + 12, t.size.note), nd.note));
+        out.push(em ? emRect(t, g.x0[nd.c], y(nd), g.w, g.blockH) : rect(t, g.x0[nd.c], y(nd), g.w, g.blockH));
+        out.push(txt(t, cx(nd), mid(cy(nd) - (nd.note ? 9 : 0), t.size.label), nd.label, { cls: em ? 'zk-text zk-on-em' : 'zk-text' }));
+        if (nd.note) out.push(txt(t, cx(nd), mid(cy(nd) + 12, t.size.note), nd.note, em ? { cls: 'zk-note zk-on-em-note' } : {}));
       }
     }
     out.push(close());

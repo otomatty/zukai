@@ -67,6 +67,10 @@
   }
 
   const errors = [];
+  // 型の名前は利用者が決めるので、constructor のような、オブジェクトが元から持つ名前を拾わないようにする。
+  const typeMotions = Object.create(null);
+  // 型の動きが例外を出して、自動の動きに切り替えたシーン。エンジンは、仕上げの書き出しでこのシーンの型の動きを使わない。
+  const motionFailed = new Set();
   const cues = [];
   const hooks = [];
   const sounds = [];
@@ -107,6 +111,10 @@
     // 自分で作る音。fn(ctx) に OfflineAudioContext を渡す。ctx の時刻0がシーンの始まり。
     sound(fn) {
       sounds.push({ id: running, fn });
+    },
+    // テーマの独自の型の動き（types/<名前>/motion.js）。エンジンが型ごとに包んで登録する。
+    __type(name, fn) {
+      typeMotions[name] = fn;
     },
     // 図の部品。<zk-figure> で置いた図の中から、ラベルで探す。
     part: (root, label) => root.querySelector(`[data-label="${CSS.escape(label)}"]`),
@@ -227,7 +235,54 @@
           const svg = w.querySelector('svg');
           const parts = svg ? tagParts(svg) : [];
           // 自由なシーンでも、manual を付けなかった図には自動の動きを付ける。
-          if (!w.hasAttribute('data-manual')) animateFigure(sc, w, parts);
+          // テーマの独自の型に動き（motion.js）があれば、自動の動きの代わりにそれを使う。
+          // fig は図を包む要素、ctx.parts は部品、ctx.times は各部品が現れる秒、ctx.frame(f) は毎コマ f(t, info) を呼ぶ。
+          const motion = typeMotions[w.dataset.type];
+          if (w.hasAttribute('data-manual')) return;
+          if (motion) {
+            const times = partTimes(sc, parts);
+            // 動きが途中で例外を出したら、図を動かす前の形に戻して、自動の動きに切り替える。
+            // 途中まで書き換えた図（隠した部品や、付けた動き）を、そのまま書き出さないため。
+            const before = w.innerHTML;
+            const mine = { hooks: [], cues: [] };
+            let done = false;
+            let broken = false;
+            // 図を元に戻して、自動の動きにする。t を渡すと、作り直した動きをその時刻に合わせる（毎コマの処理の途中で壊れたとき）。
+            const fallback = (t) => {
+              broken = true;
+              motionFailed.add(sc.id);
+              w.getAnimations({ subtree: true }).forEach((a) => a.cancel());
+              w.innerHTML = before;
+              const fresh = w.querySelector('svg');
+              animateFigure(sc, w, fresh ? tagParts(fresh) : []);
+              if (t === undefined) return;
+              w.getAnimations({ subtree: true }).forEach((a) => {
+                a.pause();
+                a.currentTime = t * 1000;
+              });
+            };
+            guard(sc.id, `型 ${w.dataset.type} の動き（motion.js）`, () => {
+              motion(w, {
+                svg, parts, times, start: times[0] ?? sc.narrStart, scene: sc,
+                // 毎コマの処理が例外を出したら、それ以降は呼ばずに、図を元に戻して自動の動きにする。
+                frame: (f) => mine.hooks.push({ id: sc.id, frame: (t, root, info) => {
+                  if (broken) return;
+                  try {
+                    f(t, info);
+                  } catch (e) {
+                    fallback(t);
+                    throw new Error(`型 ${w.dataset.type} の動き（motion.js）の毎コマの処理で例外が起きたので、自動の動きにしました。${e?.message ?? e}`);
+                  }
+                } }),
+                sfx: (kind, at) => mine.cues.push({ scene: sc.id, t: at, kind }),
+              });
+              done = true;
+            });
+            if (done) {
+              hooks.push(...mine.hooks);
+              cues.push(...mine.cues);
+            } else fallback();
+          } else animateFigure(sc, w, parts);
         });
         // data-sfx を付けた要素は、最初のアニメーションが始まる時刻に音を鳴らす。2つ目からは、浮く動きのような続きの動きとみなす。
         // data-zzfx には ZzFX の数値を、カンマ区切りで書く。空の値は既定値になる。
@@ -435,4 +490,5 @@
     return out;
   };
   window.zkErrors = () => errors.splice(0);
+  window.zkMotionFailed = () => [...motionFailed];
 })();

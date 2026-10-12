@@ -6,8 +6,8 @@ import { machineSetting } from './config.js';
 // OS ごとに標準で入っているものを選ぶ。変えたいときは、この PC の設定 png.font（zukai config set png.font 名前）か環境変数 ZUKAI_PNG_FONT で指定する。
 export const pngFont = () => machineSetting('png.font') ?? { darwin: 'Hiragino Sans', win32: 'Yu Gothic UI' }[process.platform] ?? 'Noto Sans CJK JP';
 
-// 表示幅の2倍の解像度で書き出す。フォントは実行した PC に入っているものを使う。
-export function toPng(svg) {
-  const img = new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 }, background: '#ffffff', font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render();
+// 表示幅の2倍の解像度で書き出す。フォントは実行した PC に入っているものを使う。背景は、テーマの紙の色にする。
+export function toPng(svg, background = '#ffffff') {
+  const img = new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 }, background, font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render();
   return { data: img.asPng(), width: img.width, height: img.height };
 }

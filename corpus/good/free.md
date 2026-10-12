@@ -18,7 +18,7 @@
   <rect class="zk-box" x="170" y="30" width="240" height="90" rx="6"/>
   <text class="zk-text" x="290" y="80" text-anchor="middle">手順書を用意する</text>
   <rect class="zk-box-em" x="440" y="30" width="240" height="90" rx="6"/>
-  <text class="zk-text zk-em" x="560" y="80" text-anchor="middle">今月中に直す</text>
+  <text class="zk-text zk-on-em" x="560" y="80" text-anchor="middle">今月中に直す</text>
   <rect class="zk-box" x="170" y="150" width="240" height="90" rx="6"/>
   <text class="zk-text" x="290" y="200" text-anchor="middle">記録だけ残す</text>
   <rect class="zk-box" x="440" y="150" width="240" height="90" rx="6"/>

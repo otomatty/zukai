@@ -2,8 +2,9 @@
 // シーンの演出は AI が html motion に自由に書く。ここでは、書かれたものを時間割に載せ、機械的に確かめられる形に整えるだけにする。
 import path from 'node:path';
 import { parse, sentences } from '../parse.js';
-import { types } from '../figures/index.js';
 import { readJson } from '../lint/index.js';
+import { themeFor } from '../theme.js';
+import { typesFor } from '../figures/custom.js';
 import MarkdownIt from 'markdown-it';
 
 // 図の代わりに Markdown の表を置いたセクションの表。HTML は書けないようにして描く。
@@ -103,9 +104,11 @@ export const ROLE_NAMES = { question: '疑問', answer: '答え', example: '例'
 // 台本は、オープニングでテーマと疑問を示し、各シーンで疑問を投げかけて根拠と例で答え、エンディングでまとめる。
 export function scenesOf(source, file) {
   const doc = parse(source);
-  const tokens = videoTokens(readJson('contract/tokens.json'));
+  const theme = themeFor(path.dirname(path.resolve(file)));
+  const tokens = videoTokens(theme.tokens);
   const limits = readJson('contract/limits.json');
-  const ctx = { baseDir: path.dirname(path.resolve(file)) };
+  // 図の検査は資料と同じ値で行い、描くときだけ動画用の配色にする。
+  const ctx = { baseDir: path.dirname(path.resolve(file)), tokens: theme.tokens, types: typesFor(theme) };
   const all = [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)];
   // 根拠と照らし合わせる原稿の文字列。ナレーションとシーンの HTML は除く。
   const rows = source.split('\n');
@@ -128,7 +131,9 @@ export function scenesOf(source, file) {
     if (s.container) continue;
     const fig = s.blocks.find((b) => b.kind === 'figure' && b.spec);
     const claim = s.blocks[0]?.kind === 'paragraph' ? s.blocks[0].text : s.title;
-    const type = types[fig?.spec?.type];
+    const type = ctx.types[fig?.spec?.type];
+    // テーマの独自の型は、型ごとの動き（motion.js）を付けられる。ページで型の名前を印にする。
+    const figureType = type?.custom ? fig.spec.type : null;
     const figureSvg = type && !type.validate(fig.spec, limits, ctx).length ? type.render(fig.spec, tokens, ctx) : null;
     const refsBlock = s.blocks.find((b) => b.kind === 'refs') ?? null;
     // 図の代わりに表を置いたセクションは、表を動画にも出す。代わりの自動の動きと <zk-figure> で使う。
@@ -158,7 +163,7 @@ export function scenesOf(source, file) {
       if (written && lines.length > L.maxShotLines) {
         findings.push({ severity: 'warn', rule: 'V107', message: role ? `このショットは${lines.length}行あります。目安は${L.maxShotLines}行までです。ショットを分けてください。` : `このシーンは${lines.length}行あります。目安は${L.maxShotLines}行までです。疑問（question）、答え（answer）、例（example）、用語（term）のショットに分けてください。` });
       }
-      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, whole: !type || WHOLE.has(fig.spec.type), tableHtml, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
+      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, figureType, whole: !type || WHOLE.has(fig.spec.type), tableHtml, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
     });
     for (const b of extra) {
       out.at(-1).findings.push({ severity: 'error', rule: 'V018', message: `L${b.line} の yaml narration は、このセクションの2つ目の役割の無いナレーションなので、動画に入りません。1つにまとめるか、役割（question、answer、example、term）を付けてショットに分けてください。` });

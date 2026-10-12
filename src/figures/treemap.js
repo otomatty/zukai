@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.js';
-import { renderChart, layoutOf, isNumber, fmt, unitError, seriesColor } from './chart.js';
+import { renderChart, layoutOf, isNumber, fmt, unitError, seriesColor, neutral, mix } from './chart.js';
 
 // treemap: 階層のある内訳を、面積で示す。
 export default {
@@ -68,14 +68,15 @@ function option(spec, t) {
   return {
     series: [{
       type: 'treemap', left: 0, right: 0, top: 0, bottom: 0, roam: false, nodeClick: false, breadcrumb: { show: false }, squareRatio: 1.2,
-      label: { show: true, color: '#fff', fontSize: 12, lineHeight: 18, formatter: (p) => `${p.name}\n${fmt(p.value)}${spec.unit}` },
+      // neutral では、塗った面の上に白抜きの文字を載せず、淡い灰色のマスに本文の色で書く。
+      label: { show: true, color: neutral(t) ? t.color.ink : t.color.onAccent, fontSize: 12, lineHeight: 18, formatter: (p) => `${p.name}\n${fmt(p.value)}${spec.unit}` },
       upperLabel: { show: true, height: 28, color: t.color.ink, fontSize: 13, fontWeight: 700, formatter: (p) => `${p.name} ${fmt(p.value)}${spec.unit}` },
       levels: [
         { itemStyle: { borderWidth: 0, gapWidth: 10 }, upperLabel: { show: false } },
         { itemStyle: { borderColor: t.color.paper, borderWidth: 0, gapWidth: 2 } },
         { itemStyle: { borderWidth: 0, gapWidth: 0, borderRadius: 3 } },
       ],
-      data: spec.groups.map((g, i) => ({ name: g.label, itemStyle: { color: seriesColor(t, i) }, children: g.items.map((it) => ({ name: it.label, value: it.value })) })),
+      data: spec.groups.map((g, i) => ({ name: g.label, itemStyle: { color: neutral(t) ? mix(t.chart.muted, t.color.paper, [0.72, 0.8, 0.86][i % 3]) : seriesColor(t, i) }, children: g.items.map((it) => ({ name: it.label, value: it.value })) })),
     }],
   };
 }

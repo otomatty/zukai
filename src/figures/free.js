@@ -2,13 +2,14 @@
 // 自由に書ける代わりに、型が保証していた品質を検査で確かめる。色は決まった色だけ、文字は最小サイズ以上、
 // 文字どうしが重ならない、箱からはみ出さない、図の外に出ない。使える要素と属性は一覧にあるものだけにする。
 // 出力する SVG は、検査を通った要素と属性から組み立て直す。原稿に書かれた文字列をそのまま HTML に入れない。
-import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { Resvg } from '@resvg/resvg-js';
 import { open, close, esc } from './svg.js';
+import { tokensFor } from '../theme.js';
 
-// 色と文字サイズの検査に使う。validate は契約の tokens を受け取らないので、ここで読む。
-const tokensOf = () => JSON.parse(fs.readFileSync(new URL('../../contract/tokens.json', import.meta.url), 'utf8'));
+// 色と文字サイズの検査に使う。validate は tokens を受け取らないので、原稿のプロジェクトのテーマから読む。
+// ctx.tokens があれば、それを使う。theme preview が、まだ設定していないテーマで描くときに渡す。
+const tokensOf = (ctx) => ctx?.tokens ?? tokensFor(ctx?.baseDir ?? process.cwd());
 
 const ELEMENTS = new Set(['svg', 'g', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'path', 'text', 'title', 'defs', 'marker', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'use']);
 const ATTRS = new Set([
@@ -19,7 +20,8 @@ const ATTRS = new Set([
 ]);
 const COLOR_ATTRS = ['fill', 'stroke', 'stop-color'];
 const HIDDEN = new Set(['defs', 'marker', 'clipPath', 'linearGradient', 'radialGradient', 'title']);
-const CLASSES = ['zk-text', 'zk-note', 'zk-box', 'zk-box-em', 'zk-em', 'zk-band', 'zk-line', 'zk-dash'];
+// zk-on-em と zk-on-em-note は強調した箱（zk-box-em）の上の文字、zk-grad はテーマのグラデーションの塗り（無ければ強調の色）。
+const CLASSES = ['zk-text', 'zk-note', 'zk-box', 'zk-box-em', 'zk-on-em', 'zk-on-em-note', 'zk-em', 'zk-grad', 'zk-band', 'zk-line', 'zk-dash'];
 
 const decode = (s) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&amp;/g, '&');
 
@@ -129,7 +131,7 @@ const free = {
   <rect class="zk-box" x="170" y="30" width="240" height="90" rx="6"/>
   <text class="zk-text" x="290" y="80" text-anchor="middle">手順書を用意する</text>
   <rect class="zk-box-em" x="440" y="30" width="240" height="90" rx="6"/>
-  <text class="zk-text zk-em" x="560" y="80" text-anchor="middle">今月中に直す</text>
+  <text class="zk-text zk-on-em" x="560" y="80" text-anchor="middle">今月中に直す</text>
   <rect class="zk-box" x="170" y="150" width="240" height="90" rx="6"/>
   <text class="zk-text" x="290" y="200" text-anchor="middle">記録だけ残す</text>
   <rect class="zk-box" x="440" y="150" width="240" height="90" rx="6"/>
@@ -151,13 +153,13 @@ const free = {
   guide: (t, limits) => [
     `図の幅は ${t.figure.width}、高さは ${limits.free.maxHeight} まで、文字は ${limits.free.minFontSize}px 以上、text 要素は ${limits.free.maxTexts} 個まで`,
     `使える class: ${CLASSES.join('、')}`,
-    `使える色: 文字と主な線 ${t.color.ink}、補足の文字 ${t.color.sub}、枠線 ${t.color.line}、箱の地色 ${t.color.surface}、背景 ${t.color.paper}、強調 ${t.color.accent}、強調の地色 ${t.color.accentSurface}、系列 ${t.chart.series.join(' ')}、目立たせない要素 ${t.chart.muted}、目盛り線 ${t.chart.grid}`,
+    `使える色: 文字と主な線 ${t.color.ink}、補足の文字 ${t.color.sub}、枠線 ${t.color.line}、箱の地色 ${t.color.surface}、背景 ${t.color.paper}、強調 ${t.color.accent}、強調の地色 ${t.color.accentSurface}、強調の上の文字 ${t.color.onAccent}、系列 ${t.chart.series.join(' ')}、目立たせない要素 ${t.chart.muted}、目盛り線 ${t.chart.grid}`,
     `使える要素: ${[...ELEMENTS].filter((e) => e !== 'svg').join('、')}`,
   ],
 
-  validate(spec, limits) {
+  validate(spec, limits, ctx) {
     if (typeof spec.svg !== 'string' || !spec.svg.trim()) return ['自由な図は、`svg figure` のコードブロックに svg 要素を書きます。'];
-    const t = tokensOf();
+    const t = tokensOf(ctx);
     const parsed = parseXml(spec.svg.trim());
     if (parsed.error) return [`SVG を読めません。${parsed.error}`];
     const svg = parsed.svg;

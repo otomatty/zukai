@@ -1,4 +1,4 @@
-import { open, close, arrow, px, txt, ln, rect, mid, unknownKeys } from './svg.js';
+import { open, close, arrow, px, txt, ln, rect, emRect, mid, unknownKeys } from './svg.js';
 
 const LABEL_W = 128;
 const LANE_H = 88;
@@ -94,8 +94,8 @@ steps:
     }
     spec.steps.forEach((s, i) => {
       const em = s.emphasis;
-      out.push(rect(t, pos[i].x, pos[i].y, w, 48, { fill: em ? t.color.accentSurface : t.color.paper, stroke: em ? t.color.accent : t.color.line, sw: t.figure.stroke * (em ? 1.5 : 1) }));
-      out.push(txt(t, pos[i].cx, mid(pos[i].cy, t.size.label), s.label, { cls: 'zk-text', fill: em ? t.color.accent : t.color.ink }));
+      out.push(em ? emRect(t, pos[i].x, pos[i].y, w, 48) : rect(t, pos[i].x, pos[i].y, w, 48));
+      out.push(txt(t, pos[i].cx, mid(pos[i].cy, t.size.label), s.label, { cls: em ? 'zk-text zk-on-em' : 'zk-text' }));
     });
     out.push(close());
     return out.join('');

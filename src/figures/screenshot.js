@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { open, close, mid, esc, unknownKeys } from './svg.js';
 
-const NOTE = '#c2410c';
 const file = (spec, ctx) => path.resolve(ctx?.baseDir ?? '.', String(spec.image));
 
 // PNG の幅と高さを、ファイルの先頭から読む。
@@ -81,14 +80,14 @@ marks:
     const h = Math.round(size.height * k);
     const out = [open(t, h, `画面の注釈（${spec.marks.length}か所）`)];
     out.push(`<image href="data:image/png;base64,${size.data.toString('base64')}" x="0" y="0" width="${t.figure.width}" height="${h}" preserveAspectRatio="none"/>`);
-    out.push(`<rect x="0.5" y="0.5" width="${t.figure.width - 1}" height="${h - 1}" fill="none" stroke="#cfd6dd" stroke-width="1"/>`);
+    out.push(`<rect x="0.5" y="0.5" width="${t.figure.width - 1}" height="${h - 1}" fill="none" stroke="${t.screenshot.frame}" stroke-width="1"/>`);
     spec.marks.forEach((m, i) => {
       const [x, y, w, hh] = boxOf(m, side).map((v) => v * k);
       // 枠は要素より少し大きく描く。番号は枠の左上に置き、画像の外に出ないようにする。
       const [fx, fy] = [Math.max(1, x - 6), Math.max(1, y - 6)];
       const [bx, by] = [Math.max(12, fx), Math.max(12, fy)];
-      out.push(`<rect x="${fx}" y="${fy}" width="${Math.min(t.figure.width - 1 - fx, w + 12)}" height="${Math.min(h - 1 - fy, hh + 12)}" rx="6" fill="none" stroke="${NOTE}" stroke-width="2"/>`);
-      out.push(`<circle cx="${bx}" cy="${by}" r="11" fill="${NOTE}"/><text class="zk-note" x="${bx}" y="${mid(by, 12)}" text-anchor="middle" style="fill:#fff;font-weight:700">${i + 1}</text>`);
+      out.push(`<rect x="${fx}" y="${fy}" width="${Math.min(t.figure.width - 1 - fx, w + 12)}" height="${Math.min(h - 1 - fy, hh + 12)}" rx="6" fill="none" stroke="${t.screenshot.note}" stroke-width="2"/>`);
+      out.push(`<circle cx="${bx}" cy="${by}" r="11" fill="${t.screenshot.note}"/><text class="zk-note" x="${bx}" y="${mid(by, 12)}" text-anchor="middle" style="fill:${t.screenshot.onNote};font-weight:700">${i + 1}</text>`);
     });
     out.push(close());
     return out.join('');

@@ -176,7 +176,7 @@ marker:
       const lw = px(label, 12) + 12;
       const lx = Math.min(Math.max(mx, left + lw / 2), right - lw / 2);
       out.push(`<line x1="${mx}" y1="${TOP - 4}" x2="${mx}" y2="${bottom}" stroke="${t.color.ink}" stroke-width="1.5" stroke-dasharray="4 3"/>`);
-      out.push(`<rect x="${lx - lw / 2}" y="${bottom + 2}" width="${lw}" height="20" rx="10" fill="${t.color.ink}"/><text x="${lx}" y="${mid(bottom + 12, 12)}" text-anchor="middle" style="${font};font-size:12px;font-weight:600;fill:#fff">${esc(label)}</text>`);
+      out.push(`<rect x="${lx - lw / 2}" y="${bottom + 2}" width="${lw}" height="20" rx="10" fill="${t.color.ink}"/><text x="${lx}" y="${mid(bottom + 12, 12)}" text-anchor="middle" style="${font};font-size:12px;font-weight:600;fill:${t.color.onAccent}">${esc(label)}</text>`);
     }
     out.push(close());
     return out.join('');

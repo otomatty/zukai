@@ -129,6 +129,76 @@ export const commands = [
     },
   },
   {
+    name: 'theme',
+    group: '設定',
+    summary: 'デザインのテーマ（色、フォント、描き方のルール）のフォルダを作り、確かめ、見本を描き、案を見比べる。資料からの取り込みは zukai-theme スキルが行う',
+    args: [
+      { name: '操作', required: true, desc: 'init（フォルダを作る）、check（値と見た目を確かめる）、preview（見本の HTML を書き出す）、compare（案を横に並べた HTML を書き出す）' },
+      { name: 'フォルダと案', many: true, desc: 'テーマのフォルダ。省略すると、init はプロジェクトの根の zukai-theme、ほかは設定の theme。compare では、続けて案（emphasis.box=tint のように項目=値。複数の値は + でつなぐ）を書く' },
+    ],
+    flags: [
+      { name: 'out', value: 'ファイル', desc: 'preview と compare の書き出す先。既定は .zukai/theme-preview.html と .zukai/theme-compare.html' },
+      { name: 'types', value: '型,型...', desc: 'compare で並べる図の型。既定は flow、timeline、bar、line、stack、treemap と、テーマの独自の型' },
+      { name: 'json', desc: 'check の結果を JSON で出力する' },
+    ],
+    examples: ['zukai theme init zukai-theme', 'zukai theme check zukai-theme', 'zukai theme preview zukai-theme', 'zukai theme compare emphasis.box=fill emphasis.box=tint', "zukai theme compare 'chart.mode=series+emphasis.chart=flat' --types=bar,stack", 'zukai config set theme zukai-theme'],
+    settings: ['theme'],
+    related: ['config', 'prompt'],
+    async run({ args, opt, has }) {
+      const { initTheme, themeReport } = await import('./theme.js');
+      const { settingsFor, projectOf, stateDir } = await import('./config.js');
+      const [action, ...rest] = args;
+      // = を含むものは案、それ以外はフォルダ。
+      const variants = rest.filter((a) => a.includes('='));
+      const folder = rest.find((a) => !a.includes('='));
+      if (variants.length && action !== 'compare') throw new Error(`案（${variants[0]}）を書けるのは compare だけです。`);
+      const project = projectOf(process.cwd());
+      const dir = folder ? path.resolve(folder) : action === 'init' ? path.join(project, 'zukai-theme') : settingsFor(process.cwd()).settings.theme ?? null;
+      switch (action) {
+        case 'init': {
+          const written = initTheme(dir);
+          if (!written.length) console.log(`${dir} には、tokens.json と rules.md がすでにあります。何も書いていません。`);
+          written.forEach((f) => console.log(`${f} を書きました。`));
+          console.log(`値を変えたら zukai theme check ${path.relative(process.cwd(), dir) || '.'} で確かめ、zukai config set theme ${path.relative(process.cwd(), dir) || '.'} で使います。`);
+          return 0;
+        }
+        case 'check': {
+          const r = await themeReport(dir);
+          if (has('json')) console.log(JSON.stringify({ dir: r.dir, name: r.name, ok: r.ok, findings: r.findings }, null, 2));
+          else {
+            const errors = r.findings.filter((f) => f.severity === 'error').length;
+            console.log(`${r.dir ? `テーマ「${r.name}」（${r.dir}）` : 'テーマなし（既定の見た目）'}  ${r.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${r.findings.length - errors}`);
+            for (const f of r.findings) console.log(`  ${f.severity.padEnd(5)}  ${f.what}  ${f.message}`);
+          }
+          return r.ok ? 0 : 1;
+        }
+        case 'preview': {
+          const { previewTheme } = await import('./preview.js');
+          const { html, findings } = await previewTheme(dir);
+          const out = opt('out') ?? path.join(stateDir(project), 'theme-preview.html');
+          fs.writeFileSync(out, html);
+          console.log(`${out} を書き出しました。ブラウザで開いて、元の資料と見比べます。`);
+          if (findings.length) console.log(`確かめた結果  error ${findings.filter((f) => f.severity === 'error').length} / warn ${findings.filter((f) => f.severity === 'warn').length}（詳しくは zukai theme check）`);
+          return 0;
+        }
+        case 'compare': {
+          if (!variants.length) throw new Error('見比べる案を書いてください。例: zukai theme compare emphasis.box=fill emphasis.box=tint');
+          const { compareThemes } = await import('./preview.js');
+          const html = await compareThemes(dir, variants, { only: opt('types')?.split(',').map((s) => s.trim()).filter(Boolean) ?? null });
+          const out = opt('out') ?? path.join(stateDir(project), 'theme-compare.html');
+          fs.writeFileSync(out, html);
+          console.log(`${out} を書き出しました。今のテーマと、案 ${variants.length} 個を横に並べています。`);
+          return 0;
+        }
+        default: {
+          const { closest } = await import('./config.js');
+          const near = closest(action, ['init', 'check', 'preview', 'compare']);
+          throw new Error(`theme の操作「${action}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}init、check、preview、compare のどれかを書きます。`);
+        }
+      }
+    },
+  },
+  {
     name: 'prompt',
     group: '書く',
     summary: 'AI に渡す指示を出力する。図の型は一覧だけを含む',
@@ -138,14 +208,15 @@ export const commands = [
       { name: 'type-command', value: 'コマンド', desc: '指示の中で案内する、型の書き方を取り出すコマンド。既定は zukai type' },
     ],
     examples: ['zukai prompt', 'zukai prompt --full'],
-    settings: ['output', 'terms'],
-    related: ['type', 'lint'],
+    settings: ['output', 'terms', 'theme'],
+    related: ['type', 'lint', 'theme'],
     async run({ opt, has }) {
       const { settingsFor } = await import('./config.js');
       const { buildPrompt } = await import('./prompt.js');
+      const { themeFor } = await import('./theme.js');
       const { settings } = settingsFor(process.cwd());
       const video = has('video') || settings.output === 'video';
-      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey) }));
+      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey), theme: themeFor(process.cwd()) }));
     },
   },
   {
@@ -155,9 +226,11 @@ export const commands = [
     args: [{ name: '型', required: true, many: true, desc: 'flow、bar などの型の名前。zukai prompt の一覧にある' }],
     examples: ['zukai type flow bar'],
     related: ['prompt', 'icons'],
+    settings: ['theme'],
     async run({ args }) {
       const { buildPrompt } = await import('./prompt.js');
-      process.stdout.write(buildPrompt({ only: args }));
+      const { themeFor } = await import('./theme.js');
+      process.stdout.write(buildPrompt({ only: args, theme: themeFor(process.cwd()) }));
     },
   },
   {

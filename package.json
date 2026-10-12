@@ -14,7 +14,7 @@
     "build": "node src/cli.js build",
     "corpus": "node src/cli.js corpus",
     "stats": "node src/cli.js stats",
-    "test": "node --test tests/config.test.js tests/view.test.js tests/video.test.js"
+    "test": "node --test tests/config.test.js tests/view.test.js tests/video.test.js tests/theme.test.js"
   },
   "license": "MIT",
   "dependencies": {

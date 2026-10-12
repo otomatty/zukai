@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { root, loadConfig, scopeNames } from './config.js';
 import { zukaiCommand, skillStatus, shown } from './setup.js';
+import { themeReport } from './theme.js';
 
 // package.json の engines.node（「^20.19.0 || >=23.5.0」の形）を、今の Node が満たすか。
 export function satisfies(version, range) {
@@ -41,8 +42,25 @@ export async function doctor(project) {
   const installed = skills.filter((s) => s.state !== 'missing');
   if (!installed.length) add('スキル', 'warn', 'どこにも書かれていません', 'zukai setup skills');
   else {
-    const stale = installed.filter((s) => s.state === 'stale');
-    add('スキル', stale.length ? 'warn' : 'ok', (stale.length ? stale : installed).map((s) => `${shown(s.file)}${s.state === 'stale' ? '（古い）' : ''}`).join('\n'), stale.length ? 'zukai setup skills' : '');
+    // スキルを書いた場所に、あとから足したスキルが無ければ、古いものと同じく書き直しを勧める。
+    const used = new Set(installed.map((s) => `${s.where}/${s.tool}`));
+    const todo = skills.filter((s) => s.state === 'stale' || (s.state === 'missing' && used.has(`${s.where}/${s.tool}`)));
+    const mark = { stale: '（古い）', missing: '（無い）', ok: '' };
+    add('スキル', todo.length ? 'warn' : 'ok', (todo.length ? todo : installed).map((s) => `${shown(s.file)}${mark[s.state]}`).join('\n'), todo.length ? 'zukai setup skills' : '');
+  }
+
+  // テーマは、設定の theme があるときだけ確かめる。無ければ、zukai の既定の見た目で描く。
+  if (!cfg.values.theme) add('テーマ', 'skip', '設定していません。zukai の既定の見た目で描きます');
+  else {
+    // テーマを読めない場合も、残りの確認を続ける。doctor は、壊れた環境を調べるためのコマンドなので。
+    let r;
+    try {
+      r = await themeReport(cfg.values.theme);
+    } catch (e) {
+      r = { name: shown(cfg.values.theme), findings: [{ severity: 'error', message: `テーマを読めません。${e.message}` }] };
+    }
+    const errors = r.findings.filter((f) => f.severity === 'error');
+    add('テーマ', errors.length ? 'ng' : r.findings.length ? 'warn' : 'ok', [`${r.name}（${shown(cfg.values.theme)}）`, ...r.findings.map((f) => `${f.severity} ${f.message}`)].join('\n'), r.findings.length ? `zukai theme check ${shown(cfg.values.theme)}` : '');
   }
 
   // 動画は output が video のときに必要。撮影（capture）も同じ Playwright と Chromium を使う。

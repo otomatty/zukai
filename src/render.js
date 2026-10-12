@@ -5,10 +5,11 @@ import path from 'node:path';
 import MarkdownIt from 'markdown-it';
 import { parse, isFigure, isRefs, isVideoOnly } from './parse.js';
 import { resolveRefs, refsHtml, refsStorage } from './refs.js';
-import { types } from './figures/index.js';
 import { esc } from './figures/svg.js';
 import { createHighlighter } from 'shiki';
 import { readJson, knownLang } from './lint/index.js';
+import { themeFor } from './theme.js';
+import { typesFor } from './figures/custom.js';
 
 // 書き出す HTML で、原稿に書かれたスクリプトやフォームを動かさない。保存したファイルを開いたときも効くように meta で入れる。
 export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'";
@@ -16,7 +17,7 @@ export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'
 const plainLang = (lang) => !(lang && knownLang(lang)) || ['text', 'txt', 'plaintext', 'plain'].includes(lang);
 
 const css = (t) => `
-:root{--ink:${t.color.ink};--sub:${t.color.sub};--line:${t.color.line};--surface:${t.color.surface};--paper:${t.color.paper};--accent:${t.color.accent}}
+:root{--ink:${t.color.ink};--sub:${t.color.sub};--line:${t.color.line};--surface:${t.color.surface};--paper:${t.color.paper};--accent:${t.color.accent};--on-accent:${t.color.onAccent};--border:${t.page.border};--error:${t.page.error};--mark:${t.screenshot.note};--on-mark:${t.screenshot.onNote}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:${t.font};line-height:1.85;font-feature-settings:"palt";-webkit-text-size-adjust:100%}
 main{max-width:800px;margin:0 auto;padding:56px 24px 96px}
@@ -26,21 +27,21 @@ h2{font-size:1.3rem;line-height:1.5;margin:72px 0 10px;padding-top:20px;border-t
 h3{font-size:1.08rem;margin:48px 0 8px;color:var(--accent);break-after:avoid}
 p,li{font-size:.95rem;color:var(--sub);margin:10px 0}
 p.claim{font-size:1.1rem;font-weight:600;color:var(--ink);line-height:1.7;margin:0 0 18px}
-figure{margin:0 0 18px;padding:22px 18px;background:var(--paper);border:1px solid #dfe4ea;border-radius:8px;break-inside:avoid}
+figure{margin:0 0 18px;padding:22px 18px;background:var(--paper);border:1px solid var(--border);border-radius:8px;break-inside:avoid}
 figure>svg{display:block;height:auto}
-figure.error{border-color:#b42318;color:#b42318;font-size:.9rem}
+figure.error{border-color:var(--error);color:var(--error);font-size:.9rem}
 table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:.92rem;break-inside:avoid}
 th{text-align:left;font-weight:600;color:var(--ink);border-bottom:2px solid var(--ink);padding:8px 12px}
-td{color:var(--ink);border-bottom:1px solid #dfe4ea;padding:8px 12px;vertical-align:top}
+td{color:var(--ink);border-bottom:1px solid var(--border);padding:8px 12px;vertical-align:top}
 code{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;font-size:.88em;background:var(--surface);padding:.1em .35em;border-radius:4px;color:var(--ink)}
 pre{background:var(--surface)!important;padding:14px 16px;border-radius:8px;overflow-x:auto;line-height:1.6;font-size:.86rem}
 pre code{background:none;padding:0}
 a{color:var(--accent)}
 .meta{font-size:.78rem;color:var(--sub);margin:4px 0}.right{margin-left:auto}
-.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;border-radius:11px;background:var(--accent);color:#fff;font-size:.75rem;font-weight:700}.num.note{background:#c2410c}
+.num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;border-radius:11px;background:var(--accent);color:var(--on-accent);font-size:.75rem;font-weight:700}.num.note{background:var(--mark);color:var(--on-mark)}
 ol.marks{list-style:none;margin:-4px 0 6px;padding:0}ol.marks li{display:flex;gap:10px;align-items:flex-start;margin:6px 0;color:var(--ink);font-size:.92rem}
 .refs{margin:22px 0 18px}.refs-h{font-size:.8rem;font-weight:700;color:var(--sub);margin-bottom:8px}
-.ref{padding:14px 16px;border:1px solid #dfe4ea;border-radius:8px;margin-top:10px;break-inside:avoid}.ref p{color:var(--ink);font-size:.9rem;margin:8px 0}
+.ref{padding:14px 16px;border:1px solid var(--border);border-radius:8px;margin-top:10px;break-inside:avoid}.ref p{color:var(--ink);font-size:.9rem;margin:8px 0}
 .ref-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.84rem}
 .tag{font-size:.74rem;font-weight:600;color:var(--sub);background:var(--surface);padding:0 8px;border-radius:4px}.mono{font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace}
 .ref pre{margin:8px 0 0}blockquote{margin:10px 0;padding:12px 14px;background:var(--surface);border-radius:6px;font-size:.9rem;color:var(--ink)}.tr-h{font-size:.76rem;font-weight:600;color:var(--sub)}
@@ -53,12 +54,17 @@ async function resolveAllRefs(doc, ctx, limits) {
   for (const b of doc.sections.flatMap((s) => s.blocks).filter((x) => x.kind === 'refs')) map.set(b.line, (await resolveRefs(b, ctx, limits)).items);
   return map;
 }
-const ctxOf = (file) => ({ baseDir: path.dirname(path.resolve(file ?? '.')) });
+// テーマは、原稿のプロジェクトのもの。theme preview は、まだ設定していないテーマを渡す。
+const ctxOf = (file, given) => {
+  const baseDir = path.dirname(path.resolve(file ?? '.'));
+  const theme = given ?? themeFor(baseDir);
+  return { baseDir, tokens: theme.tokens, types: typesFor(theme) };
+};
 
-export async function render(source, file) {
-  const tokens = readJson('contract/tokens.json');
+export async function render(source, file, { theme: given } = {}) {
   const limits = readJson('contract/limits.json');
-  const ctx = ctxOf(file);
+  const ctx = ctxOf(file, given);
+  const tokens = ctx.tokens;
   const doc = parse(source);
   const refs = await resolveAllRefs(doc, ctx, limits);
   // コードの色付けは生成時に行い、HTML に色を埋め込む。閲覧時にスクリプトを読み込まない。
@@ -84,7 +90,7 @@ export async function render(source, file) {
       return highlighter.codeToHtml(tk.content.replace(/\n$/, ''), { lang, theme: tokens.codeTheme }) + '\n';
     }
     const block = doc.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'figure' && b.line === tk.map[0] + 1);
-    const type = types[block?.spec?.type];
+    const type = ctx.types[block?.spec?.type];
     if (!type || type.validate(block.spec, limits, ctx).length) {
       return `<figure class="error">この図は描画できません。<code>zukai lint</code> の F001 を確認してください。</figure>\n`;
     }
@@ -125,9 +131,9 @@ const macro = (name, inner) => `<ac:structured-macro ac:name="${name}">${inner}<
 // Confluence 向け。本文はストレージ形式（XHTML）、図は添付ファイルとして参照する。
 // ページのタイトルは本文と別に持つので、# 見出しは本文から外す。
 export async function renderConfluence(source, sourceName) {
-  const tokens = readJson('contract/tokens.json');
   const limits = readJson('contract/limits.json');
   const ctx = ctxOf(sourceName);
+  const tokens = ctx.tokens;
   const doc = parse(source);
   const refs = await resolveAllRefs(doc, ctx, limits);
   const claimLines = new Set(
@@ -146,7 +152,7 @@ export async function renderConfluence(source, sourceName) {
       return macro('code', `${param}<ac:plain-text-body>${cdata(tk.content)}</ac:plain-text-body>`) + '\n';
     }
     const block = doc.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'figure' && b.line === tk.map[0] + 1);
-    const type = types[block?.spec?.type];
+    const type = ctx.types[block?.spec?.type];
     if (!type || type.validate(block.spec, limits, ctx).length) throw new Error(`L${tk.map[0] + 1} の図を描画できません。先に zukai lint を通してください。`);
     const name = `fig-${String(figures.length + 1).padStart(2, '0')}.png`;
     figures.push({ name, svg: type.render(block.spec, tokens, ctx) });
@@ -172,5 +178,5 @@ export async function renderConfluence(source, sourceName) {
     'info',
     `<ac:rich-text-body><p>このページは zukai で生成しています。内容を変えるときは、添付の原稿「${esc(path.basename(sourceName))}」を編集して、生成し直してください。このページを直接編集すると、次の生成で上書きされます。</p></ac:rich-text-body>`,
   );
-  return { title: doc.title ?? path.basename(sourceName, '.md'), body: `${notice}\n${body}`, figures };
+  return { title: doc.title ?? path.basename(sourceName, '.md'), body: `${notice}\n${body}`, figures, background: tokens.color.paper };
 }

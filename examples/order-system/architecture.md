@@ -90,7 +90,7 @@ groups:
   <rect class="zk-box" x="466" y="148" width="228" height="58" rx="6"/>
   <text class="zk-text" x="580" y="182" text-anchor="middle">注文APIのタスク</text>
   <rect class="zk-box-em" x="156" y="240" width="228" height="58" rx="6"/>
-  <text class="zk-text zk-em" x="270" y="274" text-anchor="middle">注文DB（書き込み用）</text>
+  <text class="zk-text zk-on-em" x="270" y="274" text-anchor="middle">注文DB（書き込み用）</text>
   <rect class="zk-box" x="466" y="240" width="228" height="58" rx="6"/>
   <text class="zk-text" x="580" y="274" text-anchor="middle">注文DB（読み取り用）</text>
   <line class="zk-line" x1="386" y1="269" x2="462" y2="269" marker-end="url(#zk-arrow)"/>

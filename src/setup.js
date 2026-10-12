@@ -39,17 +39,22 @@ export function zukaiCommand() {
 }
 
 export const skillDirs = { claude: '.claude/skills', agents: '.agents/skills' };
-export const skillText = (cmd = zukaiCommand()) => fs.readFileSync(path.join(root, 'prompts/answer-skill.md'), 'utf8').replaceAll('{{zukai}}', cmd);
-export const skillFile = (base, tool) => path.join(base, skillDirs[tool], 'zukai-answer', 'SKILL.md');
+// 書くスキルと、その元の指示。zukai-answer は返答を資料にし、zukai-theme は資料からデザインのテーマを作る。
+export const skillSources = { 'zukai-answer': 'prompts/answer-skill.md', 'zukai-theme': 'prompts/theme-skill.md' };
+export const skillText = (name, cmd = zukaiCommand()) => fs.readFileSync(path.join(root, skillSources[name]), 'utf8').replaceAll('{{zukai}}', cmd);
+export const skillFile = (base, tool, name) => path.join(base, skillDirs[tool], name, 'SKILL.md');
 
-// スキルの状態。場所（project、user）とツールごとに、無い（missing）、古い（stale）、最新（ok）のどれか。
-export function skillStatus(project, text = skillText()) {
+// スキルの状態。場所（project、user）、ツール、スキルごとに、無い（missing）、古い（stale）、最新（ok）のどれか。
+export function skillStatus(project) {
+  const texts = Object.fromEntries(Object.keys(skillSources).map((name) => [name, skillText(name)]));
   const out = [];
   for (const [where, base] of [['project', project], ['user', home]]) {
     for (const tool of Object.keys(skillDirs)) {
-      const file = skillFile(base, tool);
-      const state = !fs.existsSync(file) ? 'missing' : fs.readFileSync(file, 'utf8') === text ? 'ok' : 'stale';
-      out.push({ where, tool, file, state });
+      for (const [name, text] of Object.entries(texts)) {
+        const file = skillFile(base, tool, name);
+        const state = !fs.existsSync(file) ? 'missing' : fs.readFileSync(file, 'utf8') === text ? 'ok' : 'stale';
+        out.push({ where, tool, name, file, state, text });
+      }
     }
   }
   return out;
@@ -169,7 +174,7 @@ async function askAll(want, cfg, opt) {
     const st = skillStatus(cfg.project);
     const installed = (where) => st.some((s) => s.where === where && s.state !== 'missing');
     const where = await p.select({
-      message: 'スキル（返答を資料にする手順）を書く場所',
+      message: 'スキル（返答を資料にする手順と、資料からデザインのテーマを作る手順）を書く場所',
       default: !installed('project') && installed('user') ? 'user' : 'project',
       choices: [
         { name: `このプロジェクト（${shown(cfg.project)}/.claude/skills など）`, value: 'project' },
@@ -262,12 +267,8 @@ function planOf(project, cfg, answers, changed, scope, want) {
   }
   for (const [key, v] of Object.entries(answers.credentials)) items.push({ kind: 'set', file: files.credentials, label: scopeNames.credentials, scope: 'credentials', key, value: v });
   if (answers.skills && answers.skills.where !== 'none') {
-    const text = skillText();
-    const base = answers.skills.where === 'user' ? home : project;
-    for (const tool of answers.skills.tools) {
-      const file = skillFile(base, tool);
-      const state = !fs.existsSync(file) ? 'missing' : fs.readFileSync(file, 'utf8') === text ? 'ok' : 'stale';
-      if (state !== 'ok') items.push({ kind: 'skill', file, text, state });
+    for (const s of skillStatus(project)) {
+      if (s.where === answers.skills.where && answers.skills.tools.includes(s.tool) && s.state !== 'ok') items.push({ kind: 'skill', file: s.file, text: s.text, state: s.state });
     }
   }
   return { project, items };
