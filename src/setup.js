@@ -142,7 +142,10 @@ export async function setup({ sections, opt, has }) {
   const scopeFlag = opt('scope');
   if (scopeFlag && !['team', 'local'].includes(scopeFlag)) throw new Error('--scope に書けるのは team か local です。');
   const answers = ask ? await askAll(want, cfg, opt, lang) : fromFlags(want, cfg, opt);
-  if (lang !== cfg.values.lang) answers.lang = lang;
+  const explicit = Boolean(ask || langFlag !== undefined);
+  // 既定値と同じ ja でも、利用者が選んだ言語は保存する。保存しないと、次回は OS のロケールに戻る。
+  if (explicit) answers.chosenLang = lang;
+  if (lang !== cfg.values.lang || (explicit && cfg.origins.lang === 'default')) answers.lang = lang;
 
   // チームの設定を変える値は、チームに共有するか、自分だけにするかを1回だけ聞く。1人目の初回は聞かずにチームに書く。
   // 対話では、今効いている値から変えたものだけを候補にする。フラグで渡した値は、すべて候補にする。
@@ -348,7 +351,8 @@ export function equivalent(project, answers, changed, scope, want) {
   if (want.size !== DEFAULT_SECTIONS.length || DEFAULT_SECTIONS.some((s) => !want.has(s))) parts.push(...want);
   if (path.resolve(project) !== path.resolve(projectOf(process.cwd()))) parts.push(`--dir=${q(project)}`);
   if (answers.skills) parts.push(`--skills=${answers.skills.where}`, ...(answers.skills.tools.length ? [`--tools=${answers.skills.tools.join(',')}`] : []));
-  if (answers.lang) parts.push(`--lang=${answers.lang}`);
+  const replay = answers.chosenLang ?? answers.lang;
+  if (replay) parts.push(`--lang=${replay}`);
   const flagOf = Object.fromEntries(Object.entries(flagKeys).map(([f, k]) => [k, f]));
   for (const [key, v] of changed) parts.push(`--${flagOf[key]}=${v === null ? "''" : q(specOf(key).type === 'path' ? path.relative(process.cwd(), v) || '.' : v)}`);
   if (changed.length && scope !== 'team') parts.push(`--scope=${scope}`);

@@ -284,4 +284,12 @@ test('setup の表示文は日本語と英語が揃い、--lang=en で英語の�
   const bad = run(['setup', '--lang=fr', '--yes'], { cwd: project, home });
   assert.equal(bad.code, 1);
   assert.match(bad.err, /--lang に書けるのは ja か en です/);
+  const jaHome = tmp('lang-ja-home');
+  const jaProject = tmp('lang-ja');
+  fs.mkdirSync(path.join(jaProject, '.git'));
+  const ja = run(['setup', 'output', '--lang=ja', '--yes'], { cwd: jaProject, home: jaHome });
+  assert.equal(ja.code, 0, ja.err + ja.out);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(jaHome, '.zukai', 'config.json'), 'utf8')).lang, 'ja');
+  const { equivalent } = await import('../src/setup.js');
+  assert.match(equivalent(jaProject, { skills: null, values: {}, credentials: {}, chosenLang: 'en' }, [], 'team', new Set(['skills', 'output', 'confluence'])), /--lang=en /);
 });
