@@ -64,6 +64,9 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     const runProbe = (...args: string[]) => JSON.parse(spawnSync(process.execPath, [...args], { cwd: root, env, encoding: 'utf8' }).stdout);
     const direct = runProbe(probe, path.join(root, 'corpus/bad/prose.md'));
     assert.ok(direct.result?.findings.some((f: { rule: string }) => f.rule === 'P001'));
+    // 常駐するプロセスで検査が例外を出したときは null を返し、呼んだ側が自分で検査し直す（例外の code やスタックを、自分で検査したときと同じにするため）。
+    const failing = spawnSync(process.execPath, [probe, path.join(root, 'corpus/good/free.md')], { cwd: root, env: { ...env, CONFLUENCE_BASE: 'notaurl' }, encoding: 'utf8' });
+    assert.equal(JSON.parse(failing.stdout).result, null);
     assert.notEqual(runProbe('--stack-trace-limit=50', probe).sock, direct.sock);
     // 今いるフォルダが違えば、別の接続先にする。起動するときにだけ読む値の相対パスを、呼んだ側と同じフォルダから読むため。
     assert.notEqual(JSON.parse(spawnSync(process.execPath, [probe], { cwd: home, env, encoding: 'utf8' }).stdout).sock, direct.sock);

@@ -123,7 +123,7 @@ export const socketPath = (): string => path.join(runDir(), `lint-${versionKey()
 // --- 接続する側 -------------------------------------------------------------
 
 // 常駐するプロセスで検査する。使えなければ null を返し、裏で起動する。呼んだ側は、自分で検査する。
-// 検査が例外を出したとき（設定の誤りなど）は、自分で検査したときと同じ文の例外にする。
+// 検査が例外を出したとき（設定の誤り、依存が足りないなど）も null を返す。呼んだ側が自分で検査し直し、同じ例外（code やスタックも）を出す。
 export async function lintOnServer(source: string, file: string, { textlint = true } = {}): Promise<LintResult | null> {
   if (windows || process.env.ZUKAI_LINT_SERVER === 'off') return null;
   const secret = readSecret(false);
@@ -144,7 +144,7 @@ export async function lintOnServer(source: string, file: string, { textlint = tr
     return null;
   }
   if ('denied' in res) return null;
-  if ('error' in res) throw new Error(res.error);
+  if ('error' in res) return null;
   return res.result;
 }
 
