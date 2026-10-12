@@ -1,23 +1,33 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { open, close, mid, esc, unknownKeys } from './svg.ts';
+import { open, close, mid, esc } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureContext, FigureType } from '../types.ts';
 
-export interface ScreenshotMark {
-  selector?: string;
-  // 枠の位置。[左, 上, 幅, 高さ]（画像のピクセル単位）。
-  at?: number[];
-  note: string;
-}
-export interface ScreenshotSpec {
-  type: 'screenshot';
-  image: string;
-  url?: string;
-  viewport?: number;
-  height?: number;
-  mask?: string[];
-  marks: ScreenshotMark[];
-}
+const schema = {
+  image: { type: 'string', required: true, desc: 'PNG 画像のパス。原稿のあるフォルダからの相対パスで書く' },
+  url: { type: 'string', desc: '撮影する画面の URL。書くと zukai capture で撮影できる' },
+  viewport: { type: 'number', desc: '撮影するときの画面の幅。既定は 1280' },
+  height: { type: 'number', desc: '撮影する範囲の高さ。既定は 800' },
+  mask: { type: 'list', of: { type: 'string' }, desc: '撮影の前に塗りつぶす要素の CSS セレクタの配列。個人情報を隠すために使う' },
+  marks: {
+    type: 'list', required: true, min: 1, max: 'screenshot.maxMarks', hint: '画面を分けて撮影してください。', desc: '画像に重ねる枠の配列',
+    of: {
+      type: 'object',
+      fields: {
+        selector: { type: 'string', desc: '枠を付ける要素の CSS セレクタ。位置は zukai capture が取得する' },
+        at: {
+          type: 'tuple', items: [{ type: 'number', min: 0 }, { type: 'number', min: 0 }, { type: 'number', min: 0 }, { type: 'number', min: 0 }],
+          desc: '枠の位置を [左, 上, 幅, 高さ] で直接書く（画像のピクセル単位）。selector の代わりに使う',
+        },
+        note: { type: 'string', required: true, nonEmpty: true, desc: 'その枠の説明。1文' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type ScreenshotSpec = { type: 'screenshot' } & Infer<typeof schema>;
+type ScreenshotMark = ScreenshotSpec['marks'][number];
 // 撮影の記録。marks は、セレクタごとの枠の位置 [左, 上, 幅, 高さ]。
 export interface Sidecar {
   url?: string;
@@ -26,8 +36,7 @@ export interface Sidecar {
   marks?: Record<string, number[]>;
 }
 
-// 検証の途中でも使うので、検証の前の仕様も受け取れる形にする。
-const file = (spec: { readonly image?: unknown }, ctx?: FigureContext) => path.resolve(ctx?.baseDir ?? '.', String(spec.image));
+const file = (spec: ScreenshotSpec, ctx?: FigureContext) => path.resolve(ctx?.baseDir ?? '.', spec.image);
 
 // PNG の幅と高さを、ファイルの先頭から読む。
 function pngSize(p: string) {
@@ -37,7 +46,7 @@ function pngSize(p: string) {
 }
 
 // 撮影の記録（zukai capture が画像の横に書き出す）。セレクタで指定した枠の位置が入っている。
-export const sidecar = (spec: { readonly image?: unknown }, ctx?: FigureContext): Sidecar => {
+export const sidecar = (spec: ScreenshotSpec, ctx?: FigureContext): Sidecar => {
   const p = `${file(spec, ctx)}.json`;
   return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : {};
 };
@@ -57,37 +66,25 @@ marks:
     note: ロック中は、解除までの残り時間を分単位で表示します。
   - at: [224, 340, 160, 24]
     note: 再設定の案内は、失敗が3回を超えた時点から表示します。`,
-  fields: [
-    'image: PNG 画像のパス（必須）。原稿のあるフォルダからの相対パスで書く',
-    'url: 撮影する画面の URL（任意）。書くと zukai capture で撮影できる',
-    'viewport: 撮影するときの画面の幅（任意、既定は 1280）',
-    'height: 撮影する範囲の高さ（任意、既定は 800）',
-    'mask: 撮影の前に塗りつぶす要素の CSS セレクタの配列（任意）。個人情報を隠すために使う',
-    'marks[].selector: 枠を付ける要素の CSS セレクタ。位置は zukai capture が取得する',
-    'marks[].at: 枠の位置を [左, 上, 幅, 高さ] で直接書く（画像のピクセル単位）。selector の代わりに使う',
-    'marks[].note: その枠の説明（必須、1文）',
-  ],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits, ctx) {
-    const errors = [...unknownKeys(spec, ['type', 'image', 'url', 'viewport', 'height', 'mask', 'marks'], 'screenshot')];
-    if (typeof spec.image !== 'string' || !spec.image.endsWith('.png')) return [...errors, 'screenshot には image（PNG 画像のパス）が必要です。'];
-    if (!Array.isArray(spec.marks) || spec.marks.length === 0) return [...errors, 'screenshot には marks が1つ以上必要です。'];
-    if (spec.marks.length > limits.screenshot.maxMarks) errors.push(`marks が${spec.marks.length}個あります。上限は${limits.screenshot.maxMarks}個です。画面を分けて撮影してください。`);
-    spec.marks.forEach((m, i) => {
-      errors.push(...unknownKeys(m, ['selector', 'at', 'note'], `marks[${i}]`));
-      if (typeof m?.note !== 'string' || !m.note) errors.push(`marks[${i}] に note がありません。`);
-      else if (m.note.length > limits.screenshot.noteMaxChars) errors.push(`marks[${i}].note が${m.note.length}字あります。上限は${limits.screenshot.noteMaxChars}字です。`);
-      if ((m?.selector === undefined) === (m?.at === undefined)) errors.push(`marks[${i}] には selector か at のどちらか1つを書いてください。`);
-      if (m?.at !== undefined && !(Array.isArray(m.at) && m.at.length === 4 && m.at.every((v: unknown) => typeof v === 'number' && v >= 0))) errors.push(`marks[${i}].at は [左, 上, 幅, 高さ] の数値にしてください。`);
+    const errors = checkSpec(spec, schema, 'screenshot', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が ScreenshotSpec のとおりだと確かめた。ここからは、書き方の決まりと、画像のファイルを確かめる。
+    const s = spec as ScreenshotSpec;
+    if (!s.image.endsWith('.png')) return ['screenshot には image（PNG 画像のパス）が必要です。'];
+    s.marks.forEach((m, i) => {
+      if (m.note.length > limits.screenshot.noteMaxChars) errors.push(`marks[${i}].note が${m.note.length}字あります。上限は${limits.screenshot.noteMaxChars}字です。`);
+      if ((m.selector === undefined) === (m.at === undefined)) errors.push(`marks[${i}] には selector か at のどちらか1つを書いてください。`);
     });
     if (errors.length) return errors;
-    if (!fs.existsSync(file(spec, ctx))) return [`画像「${spec.image}」がありません。${spec.url ? 'zukai capture を実行して撮影してください。' : '画像を置くか、url を書いて zukai capture で撮影してください。'}`];
-    const size = pngSize(file(spec, ctx));
-    if (!size) return [`画像「${spec.image}」を PNG として読めません。`];
+    if (!fs.existsSync(file(s, ctx))) return [`画像「${s.image}」がありません。${s.url ? 'zukai capture を実行して撮影してください。' : '画像を置くか、url を書いて zukai capture で撮影してください。'}`];
+    const size = pngSize(file(s, ctx));
+    if (!size) return [`画像「${s.image}」を PNG として読めません。`];
     if (size.bytes > limits.screenshot.maxBytes) errors.push(`画像が${Math.round(size.bytes / 1024)}KBあります。上限は${Math.round(limits.screenshot.maxBytes / 1024)}KBです。画面の幅を狭くして撮り直してください。`);
-    const side = sidecar(spec, ctx);
-    // 上の検査で、marks の形を確かめた。
-    (spec as ScreenshotSpec).marks.forEach((m, i) => {
+    const side = sidecar(s, ctx);
+    s.marks.forEach((m, i) => {
       const b = boxOf(m, side);
       if (!b) errors.push(`marks[${i}] のセレクタ「${m.selector}」の位置が記録されていません。zukai capture を実行してください。`);
       else if (b[0] + b[2] > size.width + 1 || b[1] + b[3] > size.height + 1) errors.push(`marks[${i}] の枠が画像（${size.width}×${size.height}）の外に出ています。`);

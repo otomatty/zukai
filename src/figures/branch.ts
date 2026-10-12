@@ -1,18 +1,25 @@
-import { open, close, box, arrow, px, txt, ln, rect, mid, columns, unknownKeys } from './svg.ts';
+import { open, close, box, arrow, px, txt, ln, rect, mid, columns } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface BranchCase {
-  when: string | number;
-  label: string;
-  note?: string;
-  emphasis?: boolean;
-  ref?: unknown;
-}
-export interface BranchSpec {
-  type: 'branch';
-  condition: string;
-  cases: BranchCase[];
-}
+const schema = {
+  condition: { type: 'string', required: true, nonEmpty: true, desc: '分かれ目になる条件' },
+  cases: {
+    type: 'list', required: true, min: 2, max: 'branch.maxCases', hint: '条件を2段階に分けて、セクションを分けてください。', atMostOne: 'emphasis', desc: '行き先の配列。左から順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        when: { type: 'string', required: true, orNumber: true, desc: 'その行き先になる場合' },
+        label: { type: 'string', required: true, desc: '行き先の名前' },
+        note: { type: 'string', desc: '補足' },
+        emphasis: { type: 'boolean', desc: 'true にすると強調色で描く', note: '図全体で1つまで' },
+        ref: { type: 'number', desc: '根拠の番号。同じセクションの yaml refs の何番目かを書く' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type BranchSpec = { type: 'branch' } & Infer<typeof schema>;
 
 const layout = (spec: BranchSpec, t: Tokens) => columns(t, spec.cases.length, spec.cases.length > 3 ? 24 : 48, 208);
 const pillWidth = (spec: BranchSpec, t: Tokens) => Math.max(200, px(spec.condition, t.size.label) + 48);
@@ -33,21 +40,9 @@ cases:
   - when: 5回以上
     label: 15分間ロック
     emphasis: true`,
-  fields: ['condition: 分かれ目になる条件（必須）', 'cases: 行き先の配列。左から順に並べる', 'cases[].when: その行き先になる場合（必須）', 'cases[].label: 行き先の名前（必須）', 'cases[].note: 補足（任意）', 'cases[].emphasis: true にすると強調色で描く（任意、図全体で1つまで）', 'cases[].ref: 根拠の番号（任意）'],
+  fields: describe(schema, contractLimits),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'condition', 'cases'], 'branch')];
-    if (typeof spec.condition !== 'string' || !spec.condition) errors.push('branch には condition（分かれ目になる条件）が必要です。');
-    if (!Array.isArray(spec.cases) || spec.cases.length < 2) return [...errors, 'branch には cases が2つ以上必要です。'];
-    if (spec.cases.length > limits.branch.maxCases) errors.push(`cases が${spec.cases.length}個あります。上限は${limits.branch.maxCases}個です。条件を2段階に分けて、セクションを分けてください。`);
-    spec.cases.forEach((c, i) => {
-      errors.push(...unknownKeys(c, ['when', 'label', 'note', 'emphasis', 'ref'], `cases[${i}]`));
-      if (typeof c?.when !== 'string' && typeof c?.when !== 'number') errors.push(`cases[${i}] に when がありません。`);
-      if (typeof c?.label !== 'string') errors.push(`cases[${i}] に label がありません。`);
-    });
-    if (spec.cases.filter((c) => c?.emphasis).length > 1) errors.push('emphasis を付けられる行き先は1つまでです。');
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'branch', limits),
 
   fit(spec, t) {
     const { w } = layout(spec, t);

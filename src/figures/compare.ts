@@ -1,18 +1,23 @@
-import { open, close, box, arrow, px, txt, rect, unknownKeys } from './svg.ts';
+import { open, close, box, arrow, px, txt, rect } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface CompareSide {
-  label: string;
-  // 箱の名前を、上の段から順に並べたもの。
-  rows: string[][];
-  // after だけに書ける。
-  emphasis?: string;
-}
-export interface CompareSpec {
-  type: 'compare';
-  before: CompareSide;
-  after: CompareSide;
-}
+// 変更前と変更後に共通する項目。
+const label = { type: 'string', required: true, desc: '枠の見出し' } as const;
+const rows = {
+  type: 'list', required: true, min: 1, max: 'compare.maxRows', desc: '箱の名前を、上の段から順に並べた配列。上の段から下の段へ矢印を引く',
+  // 段の中の箱の数は、書き方の説明に出ないので、注意として添える。
+  note: `1段の箱は${contractLimits.compare.maxCols}個まで`,
+  of: { type: 'list', min: 1, max: 'compare.maxCols', of: { type: 'string' } },
+} as const;
+const schema = {
+  before: { type: 'object', required: true, desc: '変更前の構成', fields: { label, rows } },
+  after: { type: 'object', required: true, desc: '変更後の構成', fields: { label, rows, emphasis: { type: 'string', desc: '変更後の構成で強調する箱の名前' } } },
+} as const satisfies Fields;
+export type CompareSpec = { type: 'compare' } & Infer<typeof schema>;
+// 変更前の枠も、変更後の枠と同じ形で描く（emphasis は変更後にだけある）。
+type CompareSide = CompareSpec['after'];
 
 const PANEL = 320;
 const INNER = PANEL - 48;
@@ -37,35 +42,21 @@ after:
     - [サーバA, サーバB]
     - [セッションDB]
   emphasis: セッションDB`,
-  fields: [
-    'before / after: 変更前と変更後の構成（必須）',
-    'label: 枠の見出し（必須）',
-    'rows: 箱の名前を、上の段から順に並べた配列（必須）。上の段から下の段へ矢印を引く',
-    'after.emphasis: 変更後の構成で強調する箱の名前（任意）',
-  ],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'before', 'after'], 'compare')];
+    const errors = checkSpec(spec, schema, 'compare', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が CompareSpec のとおりだと確かめた。ここからは、段の並びと強調する箱を確かめる。
+    const s = spec as CompareSpec;
     for (const key of ['before', 'after'] as const) {
-      const side = spec[key];
-      errors.push(...unknownKeys(side, key === 'after' ? ['label', 'rows', 'emphasis'] : ['label', 'rows'], key));
-      if (typeof side?.label !== 'string') errors.push(`${key} に label がありません。`);
-      if (!Array.isArray(side?.rows) || side.rows.length === 0 || !side.rows.every((r): r is string[] => Array.isArray(r) && r.length > 0 && r.every((x) => typeof x === 'string'))) {
-        errors.push(`${key}.rows は、箱の名前を段ごとに並べた配列にしてください。`);
-        continue;
-      }
-      if (side.rows.length > limits.compare.maxRows) errors.push(`${key}.rows が${side.rows.length}段あります。上限は${limits.compare.maxRows}段です。`);
-      side.rows.forEach((r, i, rows) => {
-        if (r.length > limits.compare.maxCols) errors.push(`${key}.rows[${i}] に箱が${r.length}個あります。上限は${limits.compare.maxCols}個です。`);
+      s[key].rows.forEach((r, i, rows) => {
         const below = rows[i + 1];
         // 矢印をまっすぐ引けるのは、上下の段の箱が同じ数か、どちらかが1個のときだけ。
         if (below && r.length !== below.length && r.length !== 1 && below.length !== 1) errors.push(`${key}.rows の${i + 1}段目（${r.length}個）と${i + 2}段目（${below.length}個）は、同じ数にするか、どちらかを1個にしてください。`);
       });
     }
-    if (errors.length) return errors;
-    // 上の検査で、after が label と rows を持つことを確かめた。emphasis は、この後で確かめる。
-    const after = spec.after as CompareSide;
-    if (after.emphasis !== undefined && !after.rows.flat().includes(after.emphasis)) errors.push(`after.emphasis「${after.emphasis}」は after.rows にありません。`);
+    if (s.after.emphasis !== undefined && !s.after.rows.flat().includes(s.after.emphasis)) errors.push(`after.emphasis「${s.after.emphasis}」は after.rows にありません。`);
     return errors;
   },
 

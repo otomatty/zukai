@@ -50,8 +50,8 @@ export interface ListField extends Base {
   max?: number | LimitKey;
   // 個数が上限を超えたときに添える、直し方。
   hint?: string;
-  // 要素のこの項目の値が、重ならないこと。
-  unique?: string;
+  // 要素のこの項目の値が、重ならないこと。true は、要素の値そのもの（文字の配列など）。
+  unique?: string | true;
   // 要素のこの項目を true にできるのは、1つまで。
   atMostOne?: string;
 }
@@ -137,8 +137,9 @@ export function checkField(v: unknown, def: Field, at: string, limits?: Limits):
       v.forEach((item, i) => errors.push(...checkField(item, { ...def.of, required: true }, `${at}[${i}]`, limits)));
       if (def.unique) {
         const seen = new Set<unknown>();
-        const dup = v.map((x) => (isObject(x) ? x[def.unique!] : x)).find((x) => x !== undefined && (seen.has(x) || !seen.add(x)));
-        if (dup !== undefined) errors.push(`${at} の${def.of.type === 'object' ? ` ${def.unique}` : ''}「${dup}」が2回あります。名前を変えて、見分けられるようにしてください。`);
+        const key = def.unique;
+        const dup = v.map((x) => (key !== true && isObject(x) ? x[key] : x)).find((x) => x !== undefined && (seen.has(x) || !seen.add(x)));
+        if (dup !== undefined) errors.push(`${at} の${def.unique !== true ? ` ${def.unique}` : ''}「${dup}」が2回あります。名前を変えて、見分けられるようにしてください。`);
       }
       if (def.atMostOne && v.filter((x) => isObject(x) && x[def.atMostOne!] === true).length > 1) errors.push(`${at} で ${def.atMostOne} を付けられるのは1つまでです。`);
       return errors;
@@ -163,16 +164,23 @@ export function checkField(v: unknown, def: Field, at: string, limits?: Limits):
   }
 }
 
+// 任意の項目に書いた null（YAML で値を空にしたとき）は、書かなかったのと同じに扱う。
+// 型（Infer）では任意の項目は undefined なので、描画のコードが null を「書いた」と取り違えないよう、ここで消す。
+const dropNulls = (obj: Record<string, unknown>, fields: Fields): void => {
+  for (const [k, def] of Object.entries(fields)) if (obj[k] === null && !def.required) delete obj[k];
+};
+
 // まとまりの項目をすべて確かめる。定義に無い項目は、書き間違いとして知らせる。
-export const checkFields = (obj: Record<string, unknown>, fields: Fields, at: string, limits?: Limits): string[] => [
-  ...unknownKeys(obj, Object.keys(fields), at),
-  ...Object.entries(fields).flatMap(([k, def]) => checkField(obj[k], def, at ? `${at}.${k}` : k, limits)),
-];
+export const checkFields = (obj: Record<string, unknown>, fields: Fields, at: string, limits?: Limits): string[] => {
+  dropNulls(obj, fields);
+  return [...unknownKeys(obj, Object.keys(fields), at), ...Object.entries(fields).flatMap(([k, def]) => checkField(obj[k], def, at ? `${at}.${k}` : k, limits))];
+};
 
 // 図の仕様を確かめる。仕様の type は、どの型にもある。
 export const checkSpec = (spec: object, fields: Fields, name: string, limits: Limits): string[] => {
   const all: Fields = { type: { type: 'string' }, ...fields };
   const obj = spec as Record<string, unknown>;
+  dropNulls(obj, all);
   return [...unknownKeys(obj, Object.keys(all), name), ...Object.entries(all).flatMap(([k, def]) => checkField(obj[k], def, k, limits))];
 };
 
@@ -207,7 +215,7 @@ function extra(def: Field, limits?: Limits): string[] {
     if (def.min !== undefined && max !== undefined) out.push(`${def.min}〜${max}個`);
     else if (max !== undefined) out.push(`${max}個まで`);
     else if (def.min !== undefined) out.push(`${def.min}個以上`);
-    if (def.unique) out.push(`${def.of.type === 'object' ? `${def.unique} は` : ''}重ならないように`);
+    if (def.unique) out.push(`${def.unique !== true ? `${def.unique} は` : ''}重ならないように`);
   }
   if (def.note) out.push(def.note);
   return out;

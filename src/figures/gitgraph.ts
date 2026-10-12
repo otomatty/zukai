@@ -1,20 +1,26 @@
-import { open, close, px, esc, mid, unknownKeys } from './svg.ts';
+import { open, close, px, esc, mid } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface GitCommit {
-  branch: string;
-  // 分岐元のブランチ。ブランチの最初のコミットにだけ書く。
-  from?: string;
-  // 取り込むブランチ。
-  merge?: string;
-  label?: string;
-  tag?: string;
-}
-export interface GitgraphSpec {
-  type: 'gitgraph';
-  branches: string[];
-  commits: GitCommit[];
-}
+const schema = {
+  branches: { type: 'list', required: true, min: 1, max: 'gitgraph.maxBranches', of: { type: 'string' }, desc: 'ブランチの名前の配列。上から順に並べる' },
+  commits: {
+    type: 'list', required: true, min: 2, max: 'gitgraph.maxCommits', desc: 'コミットの配列。古い順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        branch: { type: 'string', required: true, desc: 'コミットを置くブランチ' },
+        from: { type: 'string', desc: 'そのブランチの最初のコミットで、分岐元のブランチを書く', note: '最初のブランチ以外は必須' },
+        merge: { type: 'string', desc: '取り込むブランチの名前' },
+        label: { type: 'string', desc: 'コミットの内容', note: 'label か tag のどちらかは必須' },
+        tag: { type: 'string', desc: 'タグの名前' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type GitgraphSpec = { type: 'gitgraph' } & Infer<typeof schema>;
+type GitCommit = GitgraphSpec['commits'][number];
 
 // 見た目は Mermaid の gitGraph（テーマ redux-color）に合わせる。
 // 破線のレーン、左端のブランチ名の札、斜めに書くコミットのラベル、荷札の形のタグ、白抜きの取り込みコミットを同じ形で描く。
@@ -71,29 +77,16 @@ commits:
   - branch: main
     merge: develop
     tag: v1.2.0`,
-  fields: [
-    'branches: ブランチの名前の配列。上から順に並べる',
-    'commits: コミットの配列。古い順に並べる',
-    'commits[].branch: コミットを置くブランチ（必須）',
-    'commits[].from: そのブランチの最初のコミットで、分岐元のブランチを書く（最初のブランチ以外は必須）',
-    'commits[].merge: 取り込むブランチの名前（任意）',
-    'commits[].label: コミットの内容（任意）',
-    'commits[].tag: タグの名前（任意）',
-  ],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'branches', 'commits'], 'gitgraph')];
-    if (!Array.isArray(spec.branches) || spec.branches.length === 0 || spec.branches.some((b) => typeof b !== 'string')) return [...errors, 'gitgraph には branches（名前の配列）が必要です。'];
-    if (spec.branches.length > limits.gitgraph.maxBranches) errors.push(`branches が${spec.branches.length}本あります。上限は${limits.gitgraph.maxBranches}本です。`);
-    if (!Array.isArray(spec.commits) || spec.commits.length < 2) return [...errors, 'gitgraph には commits が2つ以上必要です。'];
-    if (spec.commits.length > limits.gitgraph.maxCommits) errors.push(`commits が${spec.commits.length}個あります。上限は${limits.gitgraph.maxCommits}個です。`);
+    const errors = checkSpec(spec, schema, 'gitgraph', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が GitgraphSpec のとおりだと確かめた。ここからは、コミットの並び順を確かめる。
+    const s = spec as GitgraphSpec;
     const seen = new Set<unknown>();
-    // コールバックの中では spec.branches の絞り込みが効かないので、変数に取っておく。
-    const branches = spec.branches;
-    spec.commits.forEach((c, i) => {
-      errors.push(...unknownKeys(c, ['branch', 'from', 'merge', 'label', 'tag'], `commits[${i}]`));
-      // branches は文字だけなので、c が無ければ（c?.branch が undefined なら）ここで止まる。
-      if (!c || !branches.includes(c.branch)) { errors.push(`commits[${i}].branch「${c?.branch}」は branches にありません。`); return; }
+    s.commits.forEach((c, i) => {
+      if (!s.branches.includes(c.branch)) { errors.push(`commits[${i}].branch「${c.branch}」は branches にありません。`); return; }
       const first = !seen.has(c.branch);
       if (first && seen.size > 0 && c.from === undefined) errors.push(`commits[${i}] は「${c.branch}」の最初のコミットです。from に分岐元のブランチを書いてください。`);
       if (!first && c.from !== undefined) errors.push(`commits[${i}] の from は、ブランチの最初のコミットにだけ書けます。`);

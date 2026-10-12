@@ -1,16 +1,18 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, axisText, isNumber, fmt, unitError, neutral } from './chart.ts';
+import { px } from './svg.ts';
+import { renderChart, axisText, fmt, neutral } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface HeatmapSpec {
-  type: 'heatmap';
-  unit: string;
-  // validate が文字にそろえる。
-  x: string[];
-  y: string[];
-  // y の項目ごとの行。各行は x と同じ個数。
-  values: number[][];
-}
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  x: { type: 'list', required: true, min: 2, max: 'heatmap.maxX', desc: '横軸の項目の配列', of: { type: 'string', orNumber: true } },
+  y: { type: 'list', required: true, min: 2, max: 'heatmap.maxY', desc: '縦軸の項目の配列。上から順に並べる', of: { type: 'string', orNumber: true } },
+  // y の項目ごとの行。各行は x と同じ個数（validate が確かめる）。
+  values: { type: 'list', required: true, desc: 'y の項目ごとの行。各行は x と同じ個数の0以上の数値', of: { type: 'list', of: { type: 'number', min: 0 } } },
+} as const satisfies Fields;
+// x と y は、スキーマでは数も受け付けるが、validate が文字にそろえる。検証に通った仕様では文字の配列。
+export type HeatmapSpec = { type: 'heatmap' } & Omit<Infer<typeof schema>, 'x' | 'y'> & { x: string[]; y: string[] };
 // マス1つのデータ。[x の項目, y の項目, 値]
 type Cell = [string, string, number];
 
@@ -26,20 +28,17 @@ y: [平日, 休日]
 values:
   - [48, 30, 34]
   - [12, 9, 8]`,
-  fields: ['unit: 値の単位（必須）', 'x: 横軸の項目の配列', 'y: 縦軸の項目の配列。上から順に並べる', 'values: y の項目ごとの行。各行は x と同じ個数の0以上の数値'],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'x', 'y', 'values'], 'heatmap'), ...unitError(spec, 'heatmap')];
-    if (!Array.isArray(spec.x) || spec.x.length < 2 || !Array.isArray(spec.y) || spec.y.length < 2) return [...errors, 'heatmap には x と y が2つ以上ずつ必要です。'];
+    const errors = checkSpec(spec, schema, 'heatmap', limits);
+    if (errors.length) return errors;
+    // 形は上で確かめたので、ここからは検証した後の形として読む（x と y を文字にそろえるのは、すぐ下で行う）。
+    const s = spec as HeatmapSpec;
     // 項目は文字にそろえる。YAML では数として読まれることがある。
-    const x = spec.x.map(String);
-    const y = spec.y.map(String);
-    (spec as { x: string[] }).x = x;
-    (spec as { y: string[] }).y = y;
-    if (x.length > limits.heatmap.maxX) errors.push(`x が${x.length}個あります。上限は${limits.heatmap.maxX}個です。`);
-    if (y.length > limits.heatmap.maxY) errors.push(`y が${y.length}個あります。上限は${limits.heatmap.maxY}個です。`);
-    const ok = Array.isArray(spec.values) && spec.values.length === y.length && spec.values.every((row) => Array.isArray(row) && row.length === x.length && row.every((v) => isNumber(v) && v >= 0));
-    if (!ok) errors.push(`values は${y.length}行で、各行を${x.length}個の0以上の数値にしてください。`);
+    s.x = s.x.map(String);
+    s.y = s.y.map(String);
+    if (s.values.length !== s.y.length || s.values.some((row) => row.length !== s.x.length)) errors.push(`values は${s.y.length}行で、各行を${s.x.length}個の0以上の数値にしてください。`);
     return errors;
   },
 

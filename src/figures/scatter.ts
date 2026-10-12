@@ -1,20 +1,29 @@
-import { unknownKeys } from './svg.ts';
-import { renderChart, axisText, isNumber, fmt } from './chart.ts';
+import { renderChart, axisText, fmt } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 import type { MarkLineComponentOption } from 'echarts';
 
-export interface ScatterAxis {
-  label: string;
-  unit: string;
-}
-export interface ScatterSpec {
-  type: 'scatter';
-  x: ScatterAxis;
-  y: ScatterAxis;
-  // [横の値, 縦の値]
-  points: [number, number][];
-  trend?: boolean;
-}
+const schema = {
+  x: {
+    type: 'object', required: true, desc: '横軸',
+    fields: {
+      label: { type: 'string', required: true, desc: '横軸の名前' },
+      unit: { type: 'string', required: true, nonEmpty: true, desc: '横軸の単位' },
+    },
+  },
+  y: {
+    type: 'object', required: true, desc: '縦軸',
+    fields: {
+      label: { type: 'string', required: true, desc: '縦軸の名前' },
+      unit: { type: 'string', required: true, nonEmpty: true, desc: '縦軸の単位' },
+    },
+  },
+  points: { type: 'list', required: true, min: 3, max: 'scatter.maxPoints', desc: '[横の値, 縦の値] の配列', of: { type: 'tuple', desc: '横の値, 縦の値', items: [{ type: 'number' }, { type: 'number' }] } },
+  trend: { type: 'boolean', desc: 'true にすると、点の傾向を表す直線を計算して描く' },
+} as const satisfies Fields;
+export type ScatterSpec = { type: 'scatter' } & Infer<typeof schema>;
+type ScatterAxis = ScatterSpec['x'];
 
 const axisName = (a: ScatterAxis): string => `${a.label}（${a.unit}）`;
 
@@ -32,19 +41,9 @@ y:
   unit: 秒
 points: [[10, 6], [25, 13], [40, 21], [60, 31], [83, 41]]
 trend: true`,
-  fields: ['x.label / x.unit: 横軸の名前と単位（必須）', 'y.label / y.unit: 縦軸の名前と単位（必須）', 'points: [横の値, 縦の値] の配列（必須）', 'trend: true にすると、点の傾向を表す直線を計算して描く（任意）'],
+  fields: describe(schema, contractLimits),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'x', 'y', 'points', 'trend'], 'scatter')];
-    for (const k of ['x', 'y'] as const) {
-      errors.push(...unknownKeys(spec[k], ['label', 'unit'], k));
-      if (typeof spec[k]?.label !== 'string' || typeof spec[k]?.unit !== 'string' || !spec[k].unit) errors.push(`scatter には ${k}.label と ${k}.unit が必要です。`);
-    }
-    if (!Array.isArray(spec.points) || spec.points.length < 3) return [...errors, 'scatter には points が3つ以上必要です。'];
-    if (spec.points.length > limits.scatter.maxPoints) errors.push(`points が${spec.points.length}個あります。上限は${limits.scatter.maxPoints}個です。`);
-    if (!spec.points.every((p) => Array.isArray(p) && p.length === 2 && p.every(isNumber))) errors.push('points は [横の値, 縦の値] の数値の組にしてください。');
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'scatter', limits),
 
   labels: (spec) => [spec.x.label, spec.y.label],
   notes: () => [],

@@ -1,15 +1,22 @@
-import { open, close, box, px, txt, ln, rect, mid, columns, unknownKeys } from './svg.ts';
+import { open, close, box, px, txt, ln, rect, mid, columns } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface TreeChild {
-  label: string;
-  items?: string[];
-}
-export interface TreeSpec {
-  type: 'tree';
-  root: string;
-  children: TreeChild[];
-}
+const schema = {
+  root: { type: 'string', required: true, nonEmpty: true, desc: '分解する対象の名前' },
+  children: {
+    type: 'list', required: true, min: 2, max: 'tree.maxChildren', desc: '部品の配列。左から順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '部品の名前' },
+        items: { type: 'list', max: 'tree.maxItems', of: { type: 'string' }, desc: 'その部品をさらに分けた要素の名前の配列' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type TreeSpec = { type: 'tree' } & Infer<typeof schema>;
 
 const layout = (spec: TreeSpec, t: Tokens) => columns(t, spec.children.length, spec.children.length > 3 ? 24 : 48, 208);
 
@@ -27,21 +34,9 @@ children:
     items: [ハッシュの計算, 利用者DBの参照]
   - label: 発行
     items: [Cookieの設定]`,
-  fields: ['root: 分解する対象の名前（必須）', 'children: 部品の配列。左から順に並べる', 'children[].label: 部品の名前（必須）', 'children[].items: その部品をさらに分けた要素の名前の配列（任意）'],
+  fields: describe(schema, contractLimits),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'root', 'children'], 'tree')];
-    if (typeof spec.root !== 'string' || !spec.root) errors.push('tree には root（分解する対象の名前）が必要です。');
-    if (!Array.isArray(spec.children) || spec.children.length < 2) return [...errors, 'tree には children が2つ以上必要です。'];
-    if (spec.children.length > limits.tree.maxChildren) errors.push(`children が${spec.children.length}個あります。上限は${limits.tree.maxChildren}個です。`);
-    spec.children.forEach((c, i) => {
-      errors.push(...unknownKeys(c, ['label', 'items'], `children[${i}]`));
-      if (typeof c?.label !== 'string') errors.push(`children[${i}] に label がありません。`);
-      if (c?.items !== undefined && (!Array.isArray(c.items) || c.items.some((x: unknown) => typeof x !== 'string'))) errors.push(`children[${i}].items は名前の配列にしてください。`);
-      else if (c?.items && c.items.length > limits.tree.maxItems) errors.push(`children[${i}].items が${c.items.length}個あります。上限は${limits.tree.maxItems}個です。`);
-    });
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'tree', limits),
 
   fit(spec, t) {
     const { w } = layout(spec, t);

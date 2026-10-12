@@ -1,21 +1,33 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, layoutOf, isNumber, fmt, unitError, seriesColor, neutral, mix } from './chart.ts';
-import type { FigureType, Tokens, Unchecked } from '../types.ts';
+import { px } from './svg.ts';
+import { renderChart, layoutOf, fmt, seriesColor, neutral, mix } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
+import type { FigureType, Tokens } from '../types.ts';
 import type { ChartOption } from './chart.ts';
 
-export interface TreemapItem {
-  label: string;
-  value: number;
-}
-export interface TreemapGroup {
-  label: string;
-  items: TreemapItem[];
-}
-export interface TreemapSpec {
-  type: 'treemap';
-  unit: string;
-  groups: TreemapGroup[];
-}
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  groups: {
+    type: 'list', required: true, min: 2, max: 'treemap.maxGroups', desc: '上の階層の配列。階層がない内訳は stack を使う',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '上の階層の名前' },
+        items: {
+          type: 'list', required: true, min: 1, desc: '下の階層の配列。上の階層の合計は自動で計算する',
+          of: {
+            type: 'object',
+            fields: {
+              label: { type: 'string', required: true, desc: '下の階層の名前' },
+              value: { type: 'number', required: true, above: 0, desc: '数値' },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type TreemapSpec = { type: 'treemap' } & Infer<typeof schema>;
 
 // treemap: 階層のある内訳を、面積で示す。
 export default {
@@ -37,23 +49,14 @@ groups:
         value: 3
       - label: 配信
         value: 2`,
-  fields: ['unit: 値の単位（必須）', 'groups: 上の階層の配列（必須）', 'groups[].label: 上の階層の名前（必須）', 'groups[].items[].label / value: 下の階層の名前と、0より大きい数値（必須）。上の階層の合計は自動で計算する'],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'groups'], 'treemap'), ...unitError(spec, 'treemap')];
-    if (!Array.isArray(spec.groups) || spec.groups.length < 2) return [...errors, 'treemap には groups が2つ以上必要です。階層がない内訳は stack を使います。'];
-    if (spec.groups.length > limits.treemap.maxGroups) errors.push(`groups が${spec.groups.length}個あります。上限は${limits.treemap.maxGroups}個です。`);
-    let count = 0;
-    spec.groups.forEach((g, i): number | void => {
-      errors.push(...unknownKeys(g, ['label', 'items'], `groups[${i}]`));
-      if (typeof g?.label !== 'string') errors.push(`groups[${i}] に label がありません。`);
-      if (!Array.isArray(g?.items) || g.items.length === 0) return errors.push(`groups[${i}] に items がありません。`);
-      count += g.items.length;
-      g.items.forEach((it: Unchecked<TreemapItem>, j: number) => {
-        errors.push(...unknownKeys(it, ['label', 'value'], `groups[${i}].items[${j}]`));
-        if (typeof it?.label !== 'string' || !isNumber(it?.value) || it.value <= 0) errors.push(`groups[${i}].items[${j}] には label と、0より大きい value が必要です。`);
-      });
-    });
+    const errors = checkSpec(spec, schema, 'treemap', limits);
+    if (errors.length) return errors;
+    // 形は上で確かめたので、ここからは検証した後の形として読む。
+    const s = spec as TreemapSpec;
+    const count = s.groups.reduce((n, g) => n + g.items.length, 0);
     if (count > limits.treemap.maxItems) errors.push(`items が合計${count}個あります。上限は${limits.treemap.maxItems}個です。`);
     return errors;
   },

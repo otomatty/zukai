@@ -1,21 +1,34 @@
-import { open, close, px, esc, mid, unknownKeys } from './svg.ts';
+import { open, close, px, esc, mid } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-// 日付は YYYY-MM-DD で書く。
-export interface GanttTask {
-  label: string;
-  start?: string;
-  end?: string;
-  // 期間のない節目の日付。start と end の代わりに書く。
-  at?: string;
-  group?: string;
-  emphasis?: boolean;
-}
-export interface GanttSpec {
-  type: 'gantt';
-  tasks: GanttTask[];
-  marker?: { at: string; label: string };
-}
+// 日付は YYYY-MM-DD で書く。実在する日付かどうかは、validate で確かめる。
+const schema = {
+  tasks: {
+    type: 'list', required: true, min: 2, max: 'gantt.maxTasks', hint: 'セクションを分けてください。', atMostOne: 'emphasis', desc: '作業の配列。上から順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, nonEmpty: true, desc: '作業の名前' },
+        start: { type: 'string', desc: '開始日。YYYY-MM-DD で書く', note: 'at を書かないときは必須' },
+        end: { type: 'string', desc: '終了日。YYYY-MM-DD で書き、その日を含む', note: 'at を書かないときは必須' },
+        at: { type: 'string', desc: '期間のない節目の日付。YYYY-MM-DD で書く。start と end の代わりに書くと、ひし形で描く' },
+        group: { type: 'string', nonEmpty: true, desc: 'まとまりの名前。同じ group の作業は続けて並べる' },
+        emphasis: { type: 'boolean', desc: 'true にすると強調色で描き、ほかの棒を灰色にする', note: '図全体で1つまで' },
+      },
+    },
+  },
+  marker: {
+    type: 'object', desc: '縦線で示す日付と、その名前。今日や締め切りに使う',
+    fields: {
+      at: { type: 'string', required: true, desc: '縦線で示す日付。YYYY-MM-DD で書く' },
+      label: { type: 'string', required: true, nonEmpty: true, desc: '縦線の名前' },
+    },
+  },
+} as const satisfies Fields;
+export type GanttSpec = { type: 'gantt' } & Infer<typeof schema>;
+type GanttTask = GanttSpec['tasks'][number];
 // 横軸の目盛り。center は、日付を書く位置を目盛りの線からずらす量。
 interface Tick {
   at: number;
@@ -63,12 +76,12 @@ function axis(spec: GanttSpec) {
   }
   return { lo, hi, ticks, days };
 }
-// 行の並び。group が変わるところに、見出しの行を入れる。
+// 行の並び。group が変わるところに、見出しの行を入れる。group の null は、書いていないのと同じに扱う。
 function rows(spec: GanttSpec): Row[] {
   const out: Row[] = [];
   let group: string | undefined;
   for (const task of spec.tasks) {
-    if (task.group !== undefined && task.group !== group) out.push({ group: task.group });
+    if (task.group != null && task.group !== group) out.push({ group: task.group });
     group = task.group;
     out.push({ task });
   }
@@ -102,45 +115,31 @@ tasks:
 marker:
   at: 2026-10-16
   label: 今日`,
-  fields: [
-    'tasks: 作業の配列（必須）。上から順に並べる',
-    'tasks[].label: 作業の名前（必須）',
-    'tasks[].start / end: 開始日と終了日（YYYY-MM-DD）。終了日はその日を含む',
-    'tasks[].at: 期間のない節目の日付（YYYY-MM-DD）。start と end の代わりに書くと、ひし形で描く',
-    'tasks[].group: まとまりの名前（任意）。同じ group の作業は続けて並べる',
-    'tasks[].emphasis: true にすると強調色で描き、ほかの棒を灰色にする（任意、図全体で1つまで）',
-    'marker.at / marker.label: 縦線で示す日付と、その名前（任意）。今日や締め切りに使う',
-    '横軸は、期間に合わせて日、週、月のどれかで自動的に刻む',
-  ],
+  fields: [...describe(schema, contractLimits), '横軸は、期間に合わせて日、週、月のどれかで自動的に刻む'],
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'tasks', 'marker'], 'gantt')];
-    if (!Array.isArray(spec.tasks) || spec.tasks.length < 2) return [...errors, 'gantt には tasks が2つ以上必要です。'];
-    if (spec.tasks.length > limits.gantt.maxTasks) errors.push(`tasks が${spec.tasks.length}個あります。上限は${limits.gantt.maxTasks}個です。セクションを分けてください。`);
-    spec.tasks.forEach((x, i) => {
-      errors.push(...unknownKeys(x, ['label', 'start', 'end', 'at', 'group', 'emphasis'], `tasks[${i}]`));
-      if (typeof x?.label !== 'string' || !x.label) { errors.push(`tasks[${i}] に label がありません。`); return; }
+    const errors = checkSpec(spec, schema, 'gantt', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が GanttSpec のとおりだと確かめた。ここからは、日付と、作業の並びを確かめる。
+    const ok = spec as GanttSpec;
+    ok.tasks.forEach((x, i) => {
       if (x.at !== undefined) {
         if (x.start !== undefined || x.end !== undefined) errors.push(`tasks[${i}]「${x.label}」は、at か、start と end のどちらかだけを書いてください。`);
         else if (date(x.at) === null) errors.push(`tasks[${i}]「${x.label}」の at は、YYYY-MM-DD の実在する日付にしてください。`);
       } else if (date(x.start) === null || date(x.end) === null) errors.push(`tasks[${i}]「${x.label}」には、start と end を YYYY-MM-DD の実在する日付で書いてください。`);
       else if (date(x.end)! < date(x.start)!) errors.push(`tasks[${i}]「${x.label}」の end が start より前です。`);
-      if (x.group !== undefined && (typeof x.group !== 'string' || !x.group)) errors.push(`tasks[${i}].group は名前で書いてください。`);
     });
     if (errors.length) return errors;
-    // 上の検査で、tasks の形を確かめた。marker は、まだ確かめていない。
-    const ok = spec as GanttSpec;
     const groups = rows(ok).filter((r) => r.group).map((r) => r.group);
     if (new Set(groups).size !== groups.length) errors.push('同じ group の作業が離れています。続けて並べてください。');
     if (groups.length > limits.gantt.maxGroups) errors.push(`group が${groups.length}個あります。上限は${limits.gantt.maxGroups}個です。`);
     if (ok.tasks.every((x) => x.at !== undefined)) errors.push('期間のある作業がありません。日付だけの並びは timeline を使います。');
-    if (ok.tasks.filter((x) => x.emphasis).length > 1) errors.push('emphasis を付けられる作業は1つまでです。');
     const a = axis(ok);
     if (a.days > limits.gantt.maxDays) errors.push(`全体の期間が${Math.round(a.days)}日あります。上限は${limits.gantt.maxDays}日です。期間を分けてください。`);
-    if (spec.marker !== undefined) {
-      errors.push(...unknownKeys(spec.marker, ['at', 'label'], 'marker'));
-      if (date(spec.marker?.at) === null || typeof spec.marker?.label !== 'string' || !spec.marker.label) errors.push('marker には、at（YYYY-MM-DD）と label が必要です。');
-      else if (date(spec.marker.at)! < a.lo || date(spec.marker.at)! > a.hi) errors.push('marker.at が、作業の期間の外にあります。');
+    // marker が null のときは、書いていないのと同じに扱う（描くときも同じ）。
+    if (ok.marker) {
+      if (date(ok.marker.at) === null) errors.push('marker には、at（YYYY-MM-DD）と label が必要です。');
+      else if (date(ok.marker.at)! < a.lo || date(ok.marker.at)! > a.hi) errors.push('marker.at が、作業の期間の外にあります。');
     }
     return errors;
   },
@@ -184,7 +183,7 @@ marker:
       const k = r.task;
       const cy = TOP + i * ROW + ROW / 2;
       const color = anyEm && !k.emphasis ? t.chart.muted : t.color.accent;
-      out.push(`<text x="${r.task.group !== undefined ? 22 : 10}" y="${mid(cy, 13)}" style="${font};font-size:13px;fill:${t.color.ink};font-weight:${k.emphasis ? 700 : 400}">${esc(k.label)}</text>`);
+      out.push(`<text x="${r.task.group != null ? 22 : 10}" y="${mid(cy, 13)}" style="${font};font-size:13px;fill:${t.color.ink};font-weight:${k.emphasis ? 700 : 400}">${esc(k.label)}</text>`);
       const [x1, x2] = [x(startOf(k)), x(endOf(k))];
       const text = k.at !== undefined || k.start === k.end ? md(startOf(k)) : `${md(date(k.start)!)}〜${md(date(k.end)!)}`;
       const w = px(text, 12);

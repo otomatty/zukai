@@ -1,19 +1,26 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, isNumber, fmt, unitError, highlight, neutral, modeGuide } from './chart.ts';
+import { px } from './svg.ts';
+import { renderChart, fmt, highlight, neutral, modeGuide } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface ProgressItem {
-  label: string;
-  value: number;
-  emphasis?: boolean;
-}
-export interface ProgressSpec {
-  type: 'progress';
-  unit: string;
-  max: number;
-  target?: number;
-  items: ProgressItem[];
-}
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  max: { type: 'number', required: true, above: 0, desc: '棒の右端にあたる上限の値' },
+  target: { type: 'number', min: 0, desc: '目標値。縦線で示す。max 以下にする' },
+  items: {
+    type: 'list', required: true, min: 1, max: 'progress.maxItems', atMostOne: 'emphasis', desc: '項目の配列。上から順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '項目の名前' },
+        value: { type: 'number', required: true, min: 0, desc: '数値。max 以下にする' },
+        emphasis: { type: 'boolean', desc: 'true にすると名前と値を太字にする', note: '図全体で1つまで' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type ProgressSpec = { type: 'progress' } & Infer<typeof schema>;
 
 // progress: 目標に対する達成度を、項目ごとの横棒で示す。
 export default {
@@ -30,24 +37,19 @@ items:
   - label: 照合
     value: 72
     emphasis: true`,
-  fields: ['unit: 値の単位（必須）', 'max: 棒の右端にあたる上限の値（必須）', 'target: 目標値。縦線で示す（任意）', 'items[].label / items[].value: 項目の名前と、0以上 max 以下の数値（必須）', 'items[].emphasis: true にすると名前と値を太字にする（任意、図全体で1つまで）'],
+  fields: describe(schema, contractLimits),
 
   guide: (t) => modeGuide(t),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'max', 'target', 'items'], 'progress'), ...unitError(spec, 'progress')];
-    if (!isNumber(spec.max) || spec.max <= 0) return [...errors, 'progress には max（上限の値）が必要です。'];
-    // 下の forEach の中では spec.max の絞り込みが効かないので、確かめた値を取っておく。
-    const max = spec.max;
-    if (spec.target !== undefined && (!isNumber(spec.target) || spec.target < 0 || spec.target > spec.max)) errors.push('target は0以上 max 以下の数値にしてください。');
-    if (!Array.isArray(spec.items) || spec.items.length === 0) return [...errors, 'progress には items が1つ以上必要です。'];
-    if (spec.items.length > limits.progress.maxItems) errors.push(`items が${spec.items.length}個あります。上限は${limits.progress.maxItems}個です。`);
-    spec.items.forEach((it, i) => {
-      errors.push(...unknownKeys(it, ['label', 'value', 'emphasis'], `items[${i}]`));
-      if (typeof it?.label !== 'string') errors.push(`items[${i}] に label がありません。`);
-      if (!isNumber(it?.value) || it.value < 0 || it.value > max) errors.push(`items[${i}].value は0以上${max}以下の数値にしてください。`);
+    const errors = checkSpec(spec, schema, 'progress', limits);
+    if (errors.length) return errors;
+    // 形は上で確かめたので、ここからは検証した後の形として読む。
+    const s = spec as ProgressSpec;
+    if (s.target !== undefined && s.target > s.max) errors.push('target は0以上 max 以下の数値にしてください。');
+    s.items.forEach((it, i) => {
+      if (it.value > s.max) errors.push(`items[${i}].value は0以上${s.max}以下の数値にしてください。`);
     });
-    if (spec.items.filter((it) => it?.emphasis).length > 1) errors.push('emphasis を付けられる項目は1つまでです。');
     return errors;
   },
 

@@ -1,17 +1,24 @@
-import { open, close, box, px, txt, ln, unknownKeys } from './svg.ts';
+import { open, close, box, px, txt, ln } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface TimelineEvent {
-  date: string | number;
-  label: string;
-  note?: string;
-  emphasis?: boolean;
-  ref?: unknown;
-}
-export interface TimelineSpec {
-  type: 'timeline';
-  events: TimelineEvent[];
-}
+const schema = {
+  events: {
+    type: 'list', required: true, min: 2, max: 'timeline.maxEvents', hint: '期間を分けて、セクションを分けてください。', atMostOne: 'emphasis', desc: '出来事の配列。時間の順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        date: { type: 'string', required: true, orNumber: true, desc: '日付や時期' },
+        label: { type: 'string', required: true, desc: '出来事の名前' },
+        note: { type: 'string', desc: '補足' },
+        emphasis: { type: 'boolean', desc: 'true にすると強調色で描く', note: '図全体で1つまで' },
+        ref: { type: 'number', desc: '根拠の番号。同じセクションの yaml refs の何番目かを書く' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type TimelineSpec = { type: 'timeline' } & Infer<typeof schema>;
 
 const slotOf = (spec: TimelineSpec, t: Tokens) => t.figure.width / spec.events.length;
 const cardWidth = (spec: TimelineSpec, t: Tokens) => Math.min(200, slotOf(spec, t) - 16);
@@ -31,20 +38,9 @@ events:
     emphasis: true
   - date: 11月2日
     label: メモリ保存の停止`,
-  fields: ['events: 出来事の配列。時間の順に並べる', 'events[].date: 日付や時期（必須）', 'events[].label: 出来事の名前（必須）', 'events[].note: 補足（任意）', 'events[].emphasis: true にすると強調色で描く（任意、図全体で1つまで）', 'events[].ref: 根拠の番号（任意）'],
+  fields: describe(schema, contractLimits),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'events'], 'timeline')];
-    if (!Array.isArray(spec.events) || spec.events.length < 2) return [...errors, 'timeline には events が2つ以上必要です。'];
-    if (spec.events.length > limits.timeline.maxEvents) errors.push(`events が${spec.events.length}個あります。上限は${limits.timeline.maxEvents}個です。期間を分けて、セクションを分けてください。`);
-    spec.events.forEach((e, i) => {
-      errors.push(...unknownKeys(e, ['date', 'label', 'note', 'emphasis', 'ref'], `events[${i}]`));
-      if (typeof e?.date !== 'string' && typeof e?.date !== 'number') errors.push(`events[${i}] に date がありません。`);
-      if (typeof e?.label !== 'string') errors.push(`events[${i}] に label がありません。`);
-    });
-    if (spec.events.filter((e) => e?.emphasis).length > 1) errors.push('emphasis を付けられる出来事は1つまでです。');
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'timeline', limits),
 
   fit(spec, t) {
     const w = cardWidth(spec, t);

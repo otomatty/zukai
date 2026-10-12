@@ -1,17 +1,24 @@
-import { open, close, box, arrow, esc, px, unknownKeys } from './svg.ts';
+import { open, close, box, arrow, esc, px } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface SequenceMessage {
-  from: string;
-  to: string;
-  label: string;
-  reply?: boolean;
-}
-export interface SequenceSpec {
-  type: 'sequence';
-  actors: string[];
-  messages: SequenceMessage[];
-}
+const schema = {
+  actors: { type: 'list', required: true, min: 2, max: 'sequence.maxActors', of: { type: 'string' }, desc: '登場者の名前の配列。左から順に並べる' },
+  messages: {
+    type: 'list', required: true, min: 1, max: 'sequence.maxMessages', hint: 'セクションを分けてください。', desc: 'やり取りの配列。上から順に描く',
+    of: {
+      type: 'object',
+      fields: {
+        from: { type: 'string', required: true, desc: '送る側。actors にある名前' },
+        to: { type: 'string', required: true, desc: '受け取る側。actors にある名前', note: 'from と同じ名前は不可' },
+        label: { type: 'string', required: true, desc: '渡すもの' },
+        reply: { type: 'boolean', desc: 'true にすると応答として破線で描く' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type SequenceSpec = { type: 'sequence' } & Infer<typeof schema>;
 
 const headWidth = (t: Tokens, n: number) => Math.min(t.figure.width / n - 24, 190);
 
@@ -33,39 +40,18 @@ messages:
     to: ブラウザ
     label: Cookie
     reply: true`,
-  fields: [
-    'actors: 登場者の名前の配列。左から順に並べる',
-    'messages: やり取りの配列。上から順に描く',
-    'messages[].from / to: actors にある名前（必須、同じ名前同士は不可）',
-    'messages[].label: 渡すもの（必須）',
-    'messages[].reply: true にすると応答として破線で描く（任意）',
-  ],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'actors', 'messages'], 'sequence')];
-    if (!Array.isArray(spec.actors) || spec.actors.length < 2 || spec.actors.some((a) => typeof a !== 'string')) {
-      errors.push('sequence には actors（名前の配列）が2つ以上必要です。');
-      return errors;
-    }
-    if (!Array.isArray(spec.messages) || spec.messages.length === 0) {
-      errors.push('sequence には messages が1つ以上必要です。');
-      return errors;
-    }
-    if (spec.actors.length > limits.sequence.maxActors) {
-      errors.push(`actors が${spec.actors.length}個あります。上限は${limits.sequence.maxActors}個です。`);
-    }
-    if (spec.messages.length > limits.sequence.maxMessages) {
-      errors.push(`messages が${spec.messages.length}個あります。上限は${limits.sequence.maxMessages}個です。セクションを分けてください。`);
-    }
-    // コールバックの中では spec.actors の絞り込みが効かないので、変数に取っておく。
-    const actors = spec.actors;
-    spec.messages.forEach((m, i) => {
-      errors.push(...unknownKeys(m, ['from', 'to', 'label', 'reply'], `messages[${i}]`));
+    const errors = checkSpec(spec, schema, 'sequence', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が SequenceSpec のとおりだと確かめた。ここからは、項目どうしの関係を確かめる。
+    const s = spec as SequenceSpec;
+    s.messages.forEach((m, i) => {
       for (const key of ['from', 'to'] as const) {
-        if (!actors.includes(m?.[key])) errors.push(`messages[${i}].${key}「${m?.[key]}」は actors にありません。`);
+        if (!s.actors.includes(m[key])) errors.push(`messages[${i}].${key}「${m[key]}」は actors にありません。`);
       }
-      if (m?.from === m?.to) errors.push(`messages[${i}] の from と to が同じです。`);
-      if (typeof m?.label !== 'string') errors.push(`messages[${i}] に label がありません。`);
+      if (m.from === m.to) errors.push(`messages[${i}] の from と to が同じです。`);
     });
     return errors;
   },
