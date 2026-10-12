@@ -155,10 +155,12 @@ export function checkField(v: unknown, def: Field, at: string, limits?: Limits):
       return checkFields(v, def.fields, at, limits);
     case 'tuple': {
       const min = def.min ?? def.items.length;
+      // 省ける位置（min より後ろ）の末尾の null は、書かなかったのと同じに扱う。型（[元, 先, 名前?]）の省いた形にそろえる。
+      if (Array.isArray(v)) while (v.length > min && v[v.length - 1] == null) v.pop();
       if (!Array.isArray(v) || v.length < min || v.length > def.items.length) {
         return [`${at} は${min === def.items.length ? `${min}個` : `${min}〜${def.items.length}個`}の値の組で書きます${def.desc ? `（${def.desc}）` : ''}。`];
       }
-      return v.flatMap((item, i) => checkField(item, { ...def.items[i], required: true }, `${at}[${i}]`, limits));
+      return v.flatMap((item, i) => checkField(item, { ...def.items[i], required: i < min }, `${at}[${i}]`, limits));
     }
     case 'oneOf': {
       // まとまりで書いたときは、まとまりの形の誤りを、それ以外は最初の形の誤りを知らせる。

@@ -106,6 +106,7 @@ test('任意の項目に null を書くと、書かなかったのと同じに�
   const cases: [string, string][] = [
     ['type: flow\nsteps:\n  - label: 受付\n    ref: null\n  - label: 発送', 'type: flow\nsteps:\n  - label: 受付\n  - label: 発送'],
     ['type: progress\nunit: "%"\nmax: 100\ntarget: null\nitems:\n  - label: 受付\n    value: 91', 'type: progress\nunit: "%"\nmax: 100\nitems:\n  - label: 受付\n    value: 91'],
+    ['type: zones\nzones:\n  - nodes: [ブラウザ]\n  - nodes: [サーバー]\nlinks:\n  - [ブラウザ, サーバー, null]', 'type: zones\nzones:\n  - nodes: [ブラウザ]\n  - nodes: [サーバー]\nlinks:\n  - [ブラウザ, サーバー]'],
   ];
   for (const [withNull, without] of cases) {
     const findings = (await lint(doc(withNull), file, { textlint: false })).findings.filter((f) => f.rule.startsWith('F'));
