@@ -14,8 +14,8 @@ import type { LintResult } from './index.ts';
 
 // 使われないまま、この時間がたったら終わる。
 const IDLE_MS = 10 * 60 * 1000;
-// 応答を待つ上限。超えたら、自分で検査する。
-const WAIT_MS = 60 * 1000;
+// つながるまで待つ上限。超えたら、自分で検査する。つながった後は、結果が返るまで待つ（出典の取得に時間がかかっても、同じ検査を2回しないため）。
+const CONNECT_MS = 5 * 1000;
 
 interface Request {
   // 本人だけが読めるファイルにある合言葉。ほかの利用者からの依頼を断るため。
@@ -31,7 +31,7 @@ interface Request {
 type Response = { result: LintResult } | { error: string } | { denied: true };
 
 // Node が起動するときにだけ読む環境変数。動いているプロセスの process.env を変えても効かない（出典を取りに行く HTTPS の証明書やプロキシなど）。
-const startupEnv = (n: string) => n.startsWith('NODE_') || /^(SSL_CERT_(FILE|DIR)|(HTTPS?|NO|ALL)_PROXY)$/i.test(n);
+const startupEnv = (n: string) => /^(NODE|OPENSSL)_/.test(n) || /^(SSL_CERT_(FILE|DIR)|(HTTPS?|NO|ALL)_PROXY)$/i.test(n);
 
 // 呼んだ側の Node のフラグ（--use-system-ca など）。常駐する側も同じフラグで起動し、接続先の名前にも含める。
 // -e と -p は、続くコードを常駐する側で動かさないよう除く。
@@ -45,11 +45,11 @@ function nodeFlags(): string[] {
   return out;
 }
 
-// 接続先の名前。zukai の場所、ホームのフォルダ、今いるフォルダ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
+// 接続先の名前。zukai の場所、ホームのフォルダ、今いるフォルダ、umask（出典のキャッシュを書くときの権限）、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
 // 今いるフォルダを含めるのは、起動するときにだけ読む値の相対パス（NODE_EXTRA_CA_CERTS=./ca.pem など）を、呼んだ側と同じフォルダから読むため。
 // ホームのフォルダが違えば設定（~/.zukai）が違うので、別のプロセスにする。Node や起動時の環境変数が違うときも、同じ結果にならないので別にする。
 function versionKey(): string {
-  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.cwd()}\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
+  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.cwd()}\0${process.umask()}\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
   for (const [n, v] of Object.entries(process.env).filter(([n]) => startupEnv(n)).sort(([a], [b]) => (a < b ? -1 : 1))) h.update(`\0${n}=${v}`);
   const add = (rel: string) => {
     try {
@@ -150,8 +150,11 @@ function send(sock: string, req: Request): Promise<Response> {
     const conn = net.connect(sock);
     let buf = '';
     conn.setEncoding('utf8');
-    conn.setTimeout(WAIT_MS, () => conn.destroy(Object.assign(new Error('常駐する検査のプロセスが応答しません。'), { code: 'ETIMEDOUT' })));
-    conn.on('connect', () => conn.write(`${JSON.stringify(req)}\n`));
+    conn.setTimeout(CONNECT_MS, () => conn.destroy(Object.assign(new Error('常駐する検査のプロセスにつながりません。'), { code: 'ETIMEDOUT' })));
+    conn.on('connect', () => {
+      conn.setTimeout(0);
+      conn.write(`${JSON.stringify(req)}\n`);
+    });
     conn.on('data', (d: string) => (buf += d));
     conn.on('error', ng);
     conn.on('close', () => {

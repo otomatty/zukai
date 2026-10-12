@@ -46,6 +46,17 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     if (ca === undefined) delete process.env.NODE_EXTRA_CA_CERTS;
     else process.env.NODE_EXTRA_CA_CERTS = ca;
     assert.equal(socketPath(), plain);
+    const conf = process.env.OPENSSL_CONF;
+    process.env.OPENSSL_CONF = path.join(home, 'openssl.cnf');
+    assert.notEqual(socketPath(), plain);
+    if (conf === undefined) delete process.env.OPENSSL_CONF;
+    else process.env.OPENSSL_CONF = conf;
+    // umask が違えば、別の接続先にする（出典のキャッシュを、呼んだ側と同じ権限で書くため）。
+    const mask = process.umask(0o077);
+    if (mask === 0o077) process.umask(0o022);
+    const masked = socketPath();
+    process.umask(mask);
+    assert.notEqual(masked, plain);
     // 常駐するプロセスが答えることは、Node のフラグを付けない子のプロセスで確かめる（node --test の中では、テストのためのフラグが付き、接続先が変わるため）。
     // Node のフラグが違えば、別の接続先にする。
     const probe = path.join(home, 'probe.mjs');
