@@ -14,7 +14,7 @@ const limits: Limits = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../cont
 const cli = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
 const tmp = (name: string) => fs.mkdtempSync(path.join(os.tmpdir(), `zukai-${name}-`));
 const run = (args: string[], { cwd, home }: { cwd: string; home: string }) => {
-  const r = spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, GEMINI_API_KEY: '' } });
+  const r = spawnSync(process.execPath, [cli, ...args], { cwd, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, GEMINI_API_KEY: '', ZUKAI_LINT_SERVER: 'off' } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 const themeDir = (tokens: unknown, rules?: string) => {

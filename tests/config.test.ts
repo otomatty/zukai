@@ -33,7 +33,7 @@ function withHome<T>(fn: (home: string) => T): T {
   return r;
 }
 const run = (args: string[], { cwd, home, input }: { cwd?: string; home?: string; input?: string } = {}) => {
-  const r = spawnSync(process.execPath, [cli, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, GEMINI_API_KEY: '' } });
+  const r = spawnSync(process.execPath, [cli, ...args], { cwd, input, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home, GEMINI_API_KEY: '', ZUKAI_LINT_SERVER: 'off' } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 
