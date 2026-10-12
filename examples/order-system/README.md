@@ -19,10 +19,10 @@ node data/make.mjs                           # CSV を作る
 node data/summarize.mjs                      # 図に入れる数値を集計する
 node data/check.mjs                          # 原稿の図の数値が、集計と一致するか確かめる
 (cd fixtures && python3 -m http.server 8080) &   # 管理画面の見本を配信する
-node ../../src/cli.js capture architecture.md  # 画面を撮影し、枠の位置を記録する（Playwright が必要）
-node ../../src/cli.js lint architecture.md monthly-report.md
-node ../../src/cli.js build architecture.md
-node ../../src/cli.js build monthly-report.md --format=confluence
+node ../../src/cli.ts capture architecture.md  # 画面を撮影し、枠の位置を記録する（Playwright が必要）
+node ../../src/cli.ts lint architecture.md monthly-report.md
+node ../../src/cli.ts build architecture.md
+node ../../src/cli.ts build monthly-report.md --format=confluence
 ```
 
 `zukai.config.json` には、2つのリポジトリの場所だけを書いています。CodeCommit か GitHub かは、それぞれのリモートの URL から zukai が読み取ります。
