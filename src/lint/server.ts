@@ -18,6 +18,8 @@ const IDLE_MS = 10 * 60 * 1000;
 const WAIT_MS = 60 * 1000;
 
 interface Request {
+  // 本人だけが読めるファイルにある合言葉。ほかの利用者からの依頼を断るため。
+  secret: string;
   source: string;
   file: string;
   textlint: boolean;
@@ -25,7 +27,7 @@ interface Request {
   // 設定に効く環境変数。常駐する側の環境変数ではなく、呼んだ側の値で検査するため。
   env: Record<string, string | undefined>;
 }
-type Response = { result: LintResult } | { error: string };
+type Response = { result: LintResult } | { error: string } | { denied: true };
 
 // 接続先の名前。zukai の場所、ホームのフォルダ、コードと依存の更新時刻から作る。
 // ホームのフォルダが違えば設定（~/.zukai）が違うので、別のプロセスにする。
@@ -47,13 +49,61 @@ function versionKey(): string {
   };
   walk('src');
   walk('contract');
-  for (const f of ['package.json', 'package-lock.json', '.textlintrc.json']) add(f);
+  // node_modules/.package-lock.json は、npm install のたびに書き直される。package-lock.json が同じまま入れ直したときも、別のプロセスにするため。
+  for (const f of ['package.json', 'package-lock.json', 'node_modules/.package-lock.json', '.textlintrc.json']) add(f);
   return h.digest('hex').slice(0, 16);
 }
 
-export function socketPath(): string {
+const windows = process.platform === 'win32';
+const runDir = () => path.join(homeDir(), 'run');
+const secretFile = () => path.join(runDir(), 'secret');
+
+// 置き場所が本人のもので、ほかの利用者が書き込めないか。ほかの利用者が偽のソケットや合言葉を置けると、原稿や環境変数を渡してしまうため。
+// Windows は、ホームのフォルダの権限で守られる（Node からは確かめられない）。
+function privateDir(dir: string, create: boolean): boolean {
+  if (windows) {
+    if (create) fs.mkdirSync(dir, { recursive: true });
+    return fs.existsSync(dir);
+  }
+  try {
+    if (create) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const own = (p: string, loose: number) => {
+      const st = fs.lstatSync(p);
+      return st.isDirectory() && st.uid === process.getuid!() && (st.mode & loose) === 0;
+    };
+    // ~/.zukai は、ほかの利用者が書き込めないこと。run は、本人だけが入れること。先に作られていた run は、本人のものなら狭める。
+    if (!own(homeDir(), 0o022)) return false;
+    if (create && own(dir, 0) && !own(dir, 0o077)) fs.chmodSync(dir, 0o700);
+    return own(dir, 0o077);
+  } catch {
+    return false;
+  }
+}
+
+// 合言葉を読む。create なら、無ければ作る（常駐する側）。置き場所が安全でなければ null。
+function readSecret(create: boolean): string | null {
+  if (!privateDir(runDir(), create)) return null;
+  const file = secretFile();
+  try {
+    if (create && !fs.existsSync(file)) fs.writeFileSync(file, crypto.randomBytes(32).toString('hex'), { mode: 0o600, flag: 'wx' });
+  } catch (e) {
+    // ほかのプロセスが同時に作った。
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') return null;
+  }
+  try {
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || (!windows && (st.uid !== process.getuid!() || (st.mode & 0o077) !== 0))) return null;
+    const secret = fs.readFileSync(file, 'utf8').trim();
+    return /^[0-9a-f]{64}$/.test(secret) ? secret : null;
+  } catch {
+    return null;
+  }
+}
+
+// 接続先。Windows の名前付きパイプは、だれでも同じ名前で先に作れるので、名前に合言葉を混ぜて、ほかの利用者に分からないようにする。
+export function socketPath(secret: string): string {
   const key = versionKey();
-  return process.platform === 'win32' ? `\\\\.\\pipe\\zukai-lint-${crypto.createHash('sha1').update(os.userInfo().username).digest('hex').slice(0, 8)}-${key}` : path.join(homeDir(), 'run', `lint-${key}.sock`);
+  return windows ? `\\\\.\\pipe\\zukai-lint-${crypto.createHash('sha256').update(secret).update(key).digest('hex').slice(0, 32)}` : path.join(runDir(), `lint-${key}.sock`);
 }
 
 // 設定に効く環境変数の名前。contract/settings.json の env。
@@ -65,8 +115,14 @@ const envNames = (): string[] => Object.values(spec).flatMap((s) => (s.env ? [s.
 // 検査が例外を出したとき（設定の誤りなど）は、自分で検査したときと同じ文の例外にする。
 export async function lintOnServer(source: string, file: string, { textlint = true } = {}): Promise<LintResult | null> {
   if (process.env.ZUKAI_LINT_SERVER === 'off') return null;
-  const sock = socketPath();
-  const req: Request = { source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(envNames().map((n) => [n, process.env[n]])) };
+  const secret = readSecret(false);
+  if (!secret) {
+    // 合言葉が無いのは、まだ一度も起動していないとき。置き場所が安全でないときは、常駐する側も起動しないので、自分で検査する。
+    if (!fs.existsSync(secretFile())) start();
+    return null;
+  }
+  const sock = socketPath(secret);
+  const req: Request = { secret, source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(envNames().map((n) => [n, process.env[n]])) };
   let res: Response;
   try {
     res = await send(sock, req);
@@ -76,6 +132,7 @@ export async function lintOnServer(source: string, file: string, { textlint = tr
     if (code === 'ENOENT' || code === 'ECONNREFUSED') start();
     return null;
   }
+  if ('denied' in res) return null;
   if ('error' in res) throw new Error(res.error);
   return res.result;
 }
@@ -107,9 +164,10 @@ function start(): void {
 // --- 常駐する側 -------------------------------------------------------------
 
 async function serve(): Promise<void> {
-  const sock = socketPath();
-  // ソケットは、本人だけが入れるフォルダに置く。ほかの利用者が、検査を頼めないようにするため。
-  if (process.platform !== 'win32') fs.mkdirSync(path.dirname(sock), { recursive: true, mode: 0o700 });
+  // ソケットと合言葉は、本人だけが入れるフォルダに置く。置き場所が安全でなければ、常駐しない（呼んだ側が自分で検査する）。
+  const secret = readSecret(true);
+  if (!secret) process.exit(1);
+  const sock = socketPath(secret);
   const { lint } = await import('./index.ts');
   // 辞書を読み込んでおく。最初の依頼から速く返すため。
   await lint('# 準備\n\n準備です。\n', path.join(root, 'README.md')).catch(() => {});
@@ -154,7 +212,10 @@ async function serve(): Promise<void> {
         idle();
         let res: Response;
         try {
-          res = await handle(JSON.parse(line) as Request);
+          const req = JSON.parse(line) as Request;
+          // 合言葉が合わない依頼は、何も読まずに断る。
+          const ok = typeof req.secret === 'string' && req.secret.length === secret.length && crypto.timingSafeEqual(Buffer.from(req.secret), Buffer.from(secret));
+          res = ok ? await handle(req) : { denied: true };
         } catch (e) {
           res = { error: (e as Error).message };
         }
@@ -174,6 +235,8 @@ async function serve(): Promise<void> {
     });
     server.listen(sock, ok);
   });
+  // 止められたときも、ソケットのファイルを消してから終わる。使われずに終わるときと同じく、close がファイルを消す。
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => server.close(() => process.exit(0)));
   idle();
 }
 
