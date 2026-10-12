@@ -45,11 +45,14 @@ function nodeFlags(): string[] {
   return out;
 }
 
-// 接続先の名前。zukai の場所、ホームのフォルダ、今いるフォルダ、umask（出典のキャッシュを書くときの権限）、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
+// 所属するグループ。newgrp などで違うグループから呼ばれたとき、読めるフォルダやファイルが違うので、別のプロセスにする。
+const credentials = () => (windows ? '' : `${process.getegid!()}:${process.getgroups!().sort((x, y) => x - y).join(',')}`);
+
+// 接続先の名前。zukai の場所、ホームのフォルダ、今いるフォルダ、umask（出典のキャッシュを書くときの権限）、所属するグループ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
 // 今いるフォルダを含めるのは、起動するときにだけ読む値の相対パス（NODE_EXTRA_CA_CERTS=./ca.pem など）を、呼んだ側と同じフォルダから読むため。
 // ホームのフォルダが違えば設定（~/.zukai）が違うので、別のプロセスにする。Node や起動時の環境変数が違うときも、同じ結果にならないので別にする。
 function versionKey(): string {
-  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.cwd()}\0${process.umask()}\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
+  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.cwd()}\0${process.umask()}\0${credentials()}\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
   for (const [n, v] of Object.entries(process.env).filter(([n]) => startupEnv(n)).sort(([a], [b]) => (a < b ? -1 : 1))) h.update(`\0${n}=${v}`);
   const add = (rel: string) => {
     try {
