@@ -1,0 +1,25 @@
+{
+  // 型の検査だけを行い、JavaScript は出力しない。Node 24 が .ts をそのまま実行する（型を取り除くだけで、変換はしない）。
+  // そのため、型を取り除くだけでは消えない構文（enum、namespace、引数のプロパティなど）は使わない（erasableSyntaxOnly）。
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true
+  },
+  // ブラウザで動くスクリプトは JavaScript のまま置き、JSDoc の型で検査する。Chromium に、変換せずにそのまま渡すため。
+  "include": ["src/**/*.ts", "src/video/runtime.browser.js", "tests/**/*.ts"]
+}

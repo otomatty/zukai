@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { mix, wav16, rng, RATE } from '../../src/video/sfx.js';
+import { mix, wav16, rng, RATE } from '../../src/video/sfx.ts';
 
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split('=').slice(1).join('=');
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +15,7 @@ const out = path.join(here, 'out');
 // 動画で使いそうな動きと、それぞれの案の音。
 // zzfx は ZzFX の引数（音量, ばらつき, 周波数, attack, sustain, release, 波形, 波形の曲がり, slide, deltaSlide, 音程の跳び, 跳ぶ時刻, 繰り返し, ノイズ, 変調, ビット落とし, ディレイ, sustain の音量, decay, トレモロ, フィルタ）。
 // ばらつきは0にして、毎回同じ音にする。filter は負の値がローパス、正の値がハイパスで、区切りの周波数は値の2倍になる。
-// kenney は素材のファイル。このスパイクの結果、ZzFX を採用し、zzfx の値を src/video/sfx.js の PRESETS に移した。
+// kenney は素材のファイル。このスパイクの結果、ZzFX を採用し、zzfx の値を src/video/sfx.ts の PRESETS に移した。
 const EVENTS = [
   { id: 'appear', name: '部品が現れる', zzfx: [1, 0, 520, 0.005, 0.02, 0.08, 0, 1.6, 18], kenney: 'interface/Audio/drop_002.ogg', current: { kind: 'pop', freq: 520 } },
   { id: 'bubble', name: '吹き出しが出る', zzfx: [0.8, 0, 700, 0.01, 0.03, 0.1, 0, 1, 0, 0, 300, 0.04], kenney: 'interface/Audio/pluck_001.ogg', current: null },
