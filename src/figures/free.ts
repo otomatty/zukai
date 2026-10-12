@@ -255,7 +255,11 @@ const free: FigureType<FreeSpec> & { title(spec: FreeSpec): string; fit(spec: Fr
   // 見出しの文字（zk-text）はラベル、それ以外は補足として、長さの上限を確かめる。
   labels: (spec) => pick(spec, true),
   notes: (spec) => pick(spec, false),
-  title: (spec) => title(parseXml(spec.svg.trim()).svg!),
+  // 読めない SVG は題名を返さない。Lint は、検査に通らなかった自由図の題名も集計に読むため。
+  title: (spec) => {
+    const parsed = parseXml(spec.svg.trim());
+    return parsed.svg ? title(parsed.svg) : '';
+  },
 
   render(spec, t) {
     const svg = parseXml(spec.svg.trim()).svg!;

@@ -92,3 +92,11 @@ test('capture は、screenshot に image が無いと、撮る前に行の番号
   fs.writeFileSync(file, doc('type: screenshot\nurl: 5\nimage: shots/a.png'));
   await assert.rejects(capture(file), /L\d+ の screenshot の url は、文字で書いてください/);
 });
+
+test('読めない SVG の自由図は、例外ではなく F001 で知らせる', async () => {
+  const file = path.join(project(), 'a.md');
+  const source = '# 題名\n\n導入です。\n\n## 節\n\n主張です。\n\n```svg figure\n<svg><title>例</title>\n```\n\n説明です。\n';
+  const r = await lint(source, file, { textlint: false });
+  assert.ok(r.findings.some((f) => f.rule === 'F001' && f.message.startsWith('SVG を読めません。')));
+  assert.deepEqual(r.free, []);
+});
