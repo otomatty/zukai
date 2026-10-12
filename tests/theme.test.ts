@@ -580,8 +580,8 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   assert.deepEqual(await grey('#a8b0b9'), []);
   // neutral のヒートマップの数値は、最も濃いマス（chart.muted）の上で、color.onAccent か color.ink のどちらかで読めるかを確かめる。
   // 本文の色と同じ #1c2530 でも、白抜きの文字なら読めるので通す。中間の明るさの灰色は、どちらでも読めない。
-  // 動画の図は、暗い紙に自分の灰色を持つので、資料の図だけを見る。
-  const heat = async (muted: string) => (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted } })).tokens)).filter((x) => x.what === 'ヒートマップの数値' && !/video\./.test(x.message));
+  // 動画の図は、暗い紙に自分の灰色（video.figure.chart.muted）を持つ。既定の灰色は、neutral でも白抜きの文字で読める。
+  const heat = async (muted: string) => (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted } })).tokens)).filter((x) => x.what === 'ヒートマップの数値');
   assert.deepEqual(await heat('#1c2530'), []);
   assert.ok((await heat('#7a7a7a')).some((x) => x.severity === 'error' && /ヒートマップの最も濃いマスの地色 chart\.muted（#7a7a7a）/.test(x.message)));
   // series でも、系列の色が3つなら、4つ目を chart.muted、5つ目を chart.rest で描くので確かめる。5つあれば使わない。
