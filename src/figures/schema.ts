@@ -76,7 +76,13 @@ export type Fields = Readonly<Record<string, Field>>;
 // ---- 型 ----------------------------------------------------------------------
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
-type TupleValue<I extends readonly Field[]> = { -readonly [K in keyof I]: Value<I[K]> };
+// 値の組の型。min より後ろの位置は、省ける（[つなぐ元, つなぐ先, 通信の名前?] など）。
+type OptionalTuple<I> = I extends readonly [infer H, ...infer R] ? [Value<H>?, ...OptionalTuple<R>] : [];
+type TupleValue<I, Min extends number, Acc extends unknown[] = []> = Acc['length'] extends Min
+  ? [...Acc, ...OptionalTuple<I>]
+  : I extends readonly [infer H, ...infer R]
+    ? TupleValue<R, Min, [...Acc, Value<H>]>
+    : Acc;
 export type Value<F> = F extends StringField
   ? F extends { values: readonly (infer V)[] }
     ? V
@@ -92,7 +98,7 @@ export type Value<F> = F extends StringField
         : F extends ObjectField
           ? Infer<F['fields']>
           : F extends TupleField
-            ? TupleValue<F['items']>
+            ? TupleValue<F['items'], F extends { min: infer M extends number } ? M : F['items']['length']>
             : F extends OneOfField
               ? Value<F['options'][number]>
               : never;
