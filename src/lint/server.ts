@@ -45,10 +45,11 @@ function nodeFlags(): string[] {
   return out;
 }
 
-// 接続先の名前。zukai の場所、ホームのフォルダ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
+// 接続先の名前。zukai の場所、ホームのフォルダ、今いるフォルダ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
+// 今いるフォルダを含めるのは、起動するときにだけ読む値の相対パス（NODE_EXTRA_CA_CERTS=./ca.pem など）を、呼んだ側と同じフォルダから読むため。
 // ホームのフォルダが違えば設定（~/.zukai）が違うので、別のプロセスにする。Node や起動時の環境変数が違うときも、同じ結果にならないので別にする。
 function versionKey(): string {
-  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
+  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.cwd()}\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
   for (const [n, v] of Object.entries(process.env).filter(([n]) => startupEnv(n)).sort(([a], [b]) => (a < b ? -1 : 1))) h.update(`\0${n}=${v}`);
   const add = (rel: string) => {
     try {
@@ -165,7 +166,7 @@ function send(sock: string, req: Request): Promise<Response> {
 
 function start(): void {
   const self = fileURLToPath(import.meta.url);
-  spawn(process.execPath, [...nodeFlags(), self], { cwd: root, detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+  spawn(process.execPath, [...nodeFlags(), self], { cwd: process.cwd(), detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
 }
 
 // --- 常駐する側 -------------------------------------------------------------
@@ -175,6 +176,8 @@ async function serve(): Promise<void> {
   const secret = windows ? null : readSecret(true);
   if (!secret) process.exit(1);
   const sock = socketPath();
+  // 起動するときに読む値は、もう読み終えた。呼んだ側のフォルダが消されても動き続けるよう、zukai のフォルダに移る。
+  process.chdir(root);
 
   // 依頼は1つずつ処理する。依頼ごとに環境変数と今いるフォルダを、呼んだ側の値に切り替えるため。
   // 最初の依頼は、検査の準備（下の ready）ができるまで待つ。

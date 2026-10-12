@@ -54,6 +54,8 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     const direct = runProbe(probe, path.join(root, 'corpus/bad/prose.md'));
     assert.ok(direct.result?.findings.some((f: { rule: string }) => f.rule === 'P001'));
     assert.notEqual(runProbe('--stack-trace-limit=50', probe).sock, direct.sock);
+    // 今いるフォルダが違えば、別の接続先にする。起動するときにだけ読む値の相対パスを、呼んだ側と同じフォルダから読むため。
+    assert.notEqual(JSON.parse(spawnSync(process.execPath, [probe], { cwd: home, env, encoding: 'utf8' }).stdout).sock, direct.sock);
     const saved = process.env.HOME;
     process.env.HOME = home;
     try {
@@ -80,7 +82,8 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     gitIn('init', '-q');
     gitIn('add', 'a.ts');
     gitIn('commit', '-q', '-m', 'a');
-    const refs = (...flags: string[]) => spawnSync(process.execPath, [cli, 'lint', 'doc.md', '--json', '--no-log', '--no-textlint', ...flags], { cwd: project, env: { ...env, GIT_DIR: path.join(project, 'missing') }, encoding: 'utf8' });
+    // 常駐するプロセスは今いるフォルダごとに分かれるので、待ち受けているプロセスと同じ zukai のフォルダから動かす。
+    const refs = (...flags: string[]) => spawnSync(process.execPath, [cli, 'lint', path.join(project, 'doc.md'), '--json', '--no-log', '--no-textlint', ...flags], { cwd: root, env: { ...env, GIT_DIR: path.join(project, 'missing') }, encoding: 'utf8' });
     const refsLocal = refs('--no-server');
     assert.match(refsLocal.stdout, /R002/);
     assert.equal(refs().stdout, refsLocal.stdout);
