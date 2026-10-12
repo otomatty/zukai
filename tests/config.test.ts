@@ -268,3 +268,40 @@ test('toString のような名前を、サービスや AI ツールと取り違�
   assert.equal(tools.code, 1);
   assert.match(tools.err, /--tools の「toString」はありません/);
 });
+
+test('setup の表示文は日本語と英語が揃い、--lang=en で英語の確認を出して言語を保存する', async () => {
+  const { phraseGaps, t } = await import('../src/locale.ts');
+  assert.deepEqual(phraseGaps(), []);
+  assert.equal(t('en', 'plan.empty'), '(none)');
+  assert.equal(t('ja', 'plan.empty'), '（なし）');
+  const home = tmp('lang-home');
+  const project = tmp('lang');
+  fs.mkdirSync(path.join(project, '.git'));
+  const first = run(['setup', '--lang=en', '--yes'], { cwd: project, home });
+  assert.equal(first.code, 0, first.err + first.out);
+  assert.match(first.out, /Project /);
+  assert.match(first.out, /Gemini API key/);
+  assert.match(first.out, /silent, with subtitles only/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.zukai', 'config.json'), 'utf8')).lang, 'en');
+  const again = run(['setup', '--yes'], { cwd: project, home });
+  assert.equal(again.code, 0, again.err + again.out);
+  assert.match(again.out, /No changes\./);
+  const bad = run(['setup', '--lang=fr', '--yes'], { cwd: project, home });
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /--lang に書けるのは ja か en です/);
+  const jaHome = tmp('lang-ja-home');
+  const jaProject = tmp('lang-ja');
+  fs.mkdirSync(path.join(jaProject, '.git'));
+  const ja = run(['setup', 'output', '--lang=ja', '--yes'], { cwd: jaProject, home: jaHome });
+  assert.equal(ja.code, 0, ja.err + ja.out);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(jaHome, '.zukai', 'config.json'), 'utf8')).lang, 'ja');
+  const { equivalent } = await import('../src/setup.ts');
+  assert.match(equivalent(jaProject, { skills: null, values: {}, credentials: {}, chosenLang: 'en' }, [], 'team', new Set(['skills', 'output', 'confluence'])), /--lang=en /);
+  // doctor --json の項目は、表示の言語によらず id で見分けられる。
+  type Doctor = { checks: { id: string; label: string }[] };
+  const en = JSON.parse(run(['doctor', '--json'], { cwd: project, home }).out) as Doctor;
+  const jaDoctor = JSON.parse(run(['doctor', '--json'], { cwd: jaProject, home: jaHome }).out) as Doctor;
+  assert.deepEqual(en.checks.map((c) => c.id), jaDoctor.checks.map((c) => c.id));
+  assert.equal(en.checks.find((c) => c.id === 'skills')?.label, 'Skills');
+  assert.equal(jaDoctor.checks.find((c) => c.id === 'skills')?.label, 'スキル');
+});

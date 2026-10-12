@@ -151,6 +151,15 @@
     "repos.*.branch": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "pin が false のときにリンクが指すブランチ" },
     "repos.*.link": { "group": "原稿", "type": "string", "scopes": ["team", "local"], "description": "行へのリンクのひな形。{ref}、{path}、{from}、{to} を置き換える" },
     "repos.*.pin": { "group": "原稿", "type": "boolean", "scopes": ["team", "local"], "description": "false にすると、コミットを固定せず作業中のファイルを読む" },
+    "lang": {
+      "group": "この PC",
+      "type": "enum",
+      "values": ["ja", "en"],
+      "labels": { "ja": "日本語", "en": "English" },
+      "default": "ja",
+      "scopes": ["user"],
+      "description": "zukai setup と zukai doctor の表示言語。setup の最初の質問で選ぶ"
+    },
     "png.font": {
       "group": "この PC",
       "type": "string",
