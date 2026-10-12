@@ -16,7 +16,8 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-server-home-'));
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, GEMINI_API_KEY: '' };
   delete env.ZUKAI_LINT_SERVER;
-  const server = spawn(process.execPath, [path.join(root, 'src/lint/server.ts')], { cwd: root, env, stdio: 'ignore' });
+  // 常駐するプロセスは、起動した側の環境変数を受け継ぐ。あとの依頼で設定されていない変数は、受け継いだ値ではなく、設定されていないものとして検査する。
+  const server = spawn(process.execPath, [path.join(root, 'src/lint/server.ts')], { cwd: root, env: { ...env, CONFLUENCE_BASE: 'notaurl' }, stdio: 'ignore' });
   try {
     // 待ち受けを始めると、~/.zukai/run にソケットのファイルができる。合言葉のファイルは、本人だけが読める。
     const run = path.join(home, '.zukai', 'run');
@@ -25,6 +26,9 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     assert.equal(socks().length, 1);
     assert.equal(fs.statSync(path.join(run, 'secret')).mode & 0o777, 0o600);
     assert.equal(fs.statSync(run).mode & 0o777, 0o700);
+    // 同じ接続先で2つ目が起動されても、待ち受けられずに終わる。
+    const second = spawn(process.execPath, [path.join(root, 'src/lint/server.ts')], { cwd: root, env, stdio: 'ignore' });
+    assert.equal(await new Promise((ok) => second.once('exit', ok)), 0);
     // 合言葉の違う依頼は、検査せずに断る。
     const reply = await new Promise<string>((ok) => {
       let buf = '';

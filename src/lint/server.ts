@@ -24,8 +24,8 @@ interface Request {
   file: string;
   textlint: boolean;
   cwd: string;
-  // 設定に効く環境変数。常駐する側の環境変数ではなく、呼んだ側の値で検査するため。
-  env: Record<string, string | undefined>;
+  // 設定に効く環境変数。常駐する側の環境変数ではなく、呼んだ側の値で検査するため。設定されていない変数は null（JSON では undefined が消えるため）。
+  env: Record<string, string | null>;
 }
 type Response = { result: LintResult } | { error: string } | { denied: true };
 
@@ -115,7 +115,7 @@ export async function lintOnServer(source: string, file: string, { textlint = tr
     return null;
   }
   const sock = socketPath();
-  const req: Request = { secret, source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(envNames().map((n) => [n, process.env[n]])) };
+  const req: Request = { secret, source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(envNames().map((n) => [n, process.env[n] ?? null])) };
   let res: Response;
   try {
     res = await send(sock, req);
@@ -161,23 +161,23 @@ async function serve(): Promise<void> {
   const secret = windows ? null : readSecret(true);
   if (!secret) process.exit(1);
   const sock = socketPath();
-  const { lint } = await import('./index.ts');
-  // 辞書を読み込んでおく。最初の依頼から速く返すため。
-  await lint('# 準備\n\n準備です。\n', path.join(root, 'README.md')).catch(() => {});
 
   // 依頼は1つずつ処理する。依頼ごとに環境変数と今いるフォルダを、呼んだ側の値に切り替えるため。
-  let queue = Promise.resolve();
+  // 最初の依頼は、検査の準備（下の ready）ができるまで待つ。
+  let lint: typeof import('./index.ts').lint;
+  let ready!: () => void;
+  let queue = new Promise<void>((ok) => (ready = ok));
   let timer: NodeJS.Timeout | undefined;
   const idle = () => {
     clearTimeout(timer);
     timer = setTimeout(() => server.close(() => process.exit(0)), IDLE_MS);
   };
   const handle = async (req: Request): Promise<Response> => {
-    const saved = Object.fromEntries(Object.keys(req.env).map((n) => [n, process.env[n]]));
+    const saved = Object.fromEntries(Object.keys(req.env).map((n) => [n, process.env[n] ?? null]));
     const cwd = process.cwd();
-    const set = (env: Record<string, string | undefined>) => {
+    const set = (env: Record<string, string | null | undefined>) => {
       for (const [n, v] of Object.entries(env)) {
-        if (v === undefined) delete process.env[n];
+        if (v == null) delete process.env[n];
         else process.env[n] = v;
       }
     };
@@ -231,6 +231,10 @@ async function serve(): Promise<void> {
   // 止められたときも、ソケットのファイルを消してから終わる。使われずに終わるときと同じく、close がファイルを消す。
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => server.close(() => process.exit(0)));
   idle();
+  // 待ち受けてから、textlint と辞書を読み込む。同時にいくつ起動されても、重い準備をするのは待ち受けられた1つだけにするため（ほかは待ち受けられずに、すぐ終わる）。
+  ({ lint } = await import('./index.ts'));
+  await lint('# 準備\n\n準備です。\n', path.join(root, 'README.md')).catch(() => {});
+  ready();
 }
 
 // 直接起動されたときだけ常駐する。import.meta.main は Node 24.2 からなので、起動したファイルと見比べる（package.json の engines は >=24）。
