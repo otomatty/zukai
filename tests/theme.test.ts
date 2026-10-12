@@ -189,7 +189,7 @@ test('返答のスキルだけがある場所には、テーマのスキルを�
   assert.ok(fs.existsSync(path.join(dir, '.claude/skills/zukai-theme/SKILL.md')));
   fs.rmSync(path.join(dir, '.claude/skills/zukai-theme'), { recursive: true });
   const r = run(['doctor', '--json'], { cwd: dir, home });
-  const skill = JSON.parse(r.out).checks.find((c: { label: string }) => c.label === 'スキル');
+  const skill = JSON.parse(r.out).checks.find((c: { id: string }) => c.id === 'skills');
   assert.equal(skill.status, 'warn');
   assert.match(skill.detail, /zukai-theme[/\\]SKILL.md（無い）/);
 });

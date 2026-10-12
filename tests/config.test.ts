@@ -297,4 +297,11 @@ test('setup の表示文は日本語と英語が揃い、--lang=en で英語の�
   assert.equal(JSON.parse(fs.readFileSync(path.join(jaHome, '.zukai', 'config.json'), 'utf8')).lang, 'ja');
   const { equivalent } = await import('../src/setup.ts');
   assert.match(equivalent(jaProject, { skills: null, values: {}, credentials: {}, chosenLang: 'en' }, [], 'team', new Set(['skills', 'output', 'confluence'])), /--lang=en /);
+  // doctor --json の項目は、表示の言語によらず id で見分けられる。
+  type Doctor = { checks: { id: string; label: string }[] };
+  const en = JSON.parse(run(['doctor', '--json'], { cwd: project, home }).out) as Doctor;
+  const jaDoctor = JSON.parse(run(['doctor', '--json'], { cwd: jaProject, home: jaHome }).out) as Doctor;
+  assert.deepEqual(en.checks.map((c) => c.id), jaDoctor.checks.map((c) => c.id));
+  assert.equal(en.checks.find((c) => c.id === 'skills')?.label, 'Skills');
+  assert.equal(jaDoctor.checks.find((c) => c.id === 'skills')?.label, 'スキル');
 });
