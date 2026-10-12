@@ -1,17 +1,24 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, isNumber, fmt, highlight, neutral, modeGuide, duplicateLabel } from './chart.ts';
+import { px } from './svg.ts';
+import { renderChart, fmt, highlight, neutral, modeGuide } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface BarItem {
-  label: string;
-  value: number;
-  emphasis?: boolean;
-}
-export interface BarSpec {
-  type: 'bar';
-  unit: string;
-  items: BarItem[];
-}
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  items: {
+    type: 'list', required: true, min: 2, max: 'bar.maxItems', hint: '表にするか、セクションを分けてください。', unique: 'label', atMostOne: 'emphasis', desc: '項目の配列。上から順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '項目の名前' },
+        value: { type: 'number', required: true, min: 0, desc: '数値。棒は0から始める' },
+        emphasis: { type: 'boolean', desc: 'true にすると強調色で描き、ほかの棒を灰色にする', note: '図全体で1つまで' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type BarSpec = { type: 'bar' } & Infer<typeof schema>;
 
 const ROW = 40;
 
@@ -28,33 +35,11 @@ items:
   - label: 変更後
     value: 110
     emphasis: true`,
-  fields: [
-    'unit: 値の単位（必須）',
-    'items: 項目の配列。上から順に並べる',
-    'items[].label: 項目の名前（必須）',
-    'items[].value: 0以上の数値（必須）',
-    'items[].emphasis: true にすると強調色で描き、ほかの棒を灰色にする（任意、図全体で1つまで）',
-  ],
+  fields: describe(schema, contractLimits),
 
   guide: (t) => modeGuide(t),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'items'], 'bar')];
-    if (typeof spec.unit !== 'string' || !spec.unit) errors.push('bar には unit（値の単位）が必要です。');
-    if (!Array.isArray(spec.items) || spec.items.length < 2) {
-      errors.push('bar には items が2つ以上必要です。');
-      return errors;
-    }
-    if (spec.items.length > limits.bar.maxItems) errors.push(`items が${spec.items.length}個あります。上限は${limits.bar.maxItems}個です。表にするか、セクションを分けてください。`);
-    spec.items.forEach((it, i) => {
-      errors.push(...unknownKeys(it, ['label', 'value', 'emphasis'], `items[${i}]`));
-      if (typeof it?.label !== 'string') errors.push(`items[${i}] に label がありません。`);
-      if (!isNumber(it?.value) || it.value < 0) errors.push(`items[${i}].value は0以上の数値にしてください。棒は0から始めます。`);
-    });
-    errors.push(...duplicateLabel(spec.items, 'items'));
-    if (spec.items.filter((it) => it?.emphasis).length > 1) errors.push('emphasis を付けられる棒は1つまでです。');
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'bar', limits),
 
   labels: (spec) => spec.items.map((it) => it.label),
   notes: () => [],

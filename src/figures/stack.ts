@@ -1,17 +1,26 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, isNumber, fmt, unitError, seriesColor, highlight, neutral, grey, modeGuide, duplicateLabel } from './chart.ts';
+import { px } from './svg.ts';
+import { renderChart, fmt, seriesColor, highlight, neutral, grey, modeGuide } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface StackItem {
-  label: string;
-  value: number;
-  emphasis?: boolean;
-}
-export interface StackSpec {
-  type: 'stack';
-  unit: string;
-  items: StackItem[];
-}
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  // 名前が重なると、読み手は見分けられない。凡例は名前で内訳を引くので、2つ目の内訳も1つ目の値で書かれてしまう。
+  items: {
+    type: 'list', required: true, min: 2, max: 'stack.maxItems', hint: '小さい内訳を「その他」にまとめてください。', unique: 'label', atMostOne: 'emphasis', desc: '内訳の配列。大きい順に並べ、「その他」は最後に置く',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '内訳の名前' },
+        value: { type: 'number', required: true, above: 0, desc: '数値。割合は自動で計算する' },
+        emphasis: { type: 'boolean', desc: 'true にすると、その内訳を強調の色で描く', note: '図全体で1つまで' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type StackSpec = { type: 'stack' } & Infer<typeof schema>;
+type StackItem = StackSpec['items'][number];
 
 const legendText = (it: StackItem, total: number, unit: string): string => `${it.label} ${Math.round((it.value / total) * 100)}%（${fmt(it.value)}${unit}）`;
 
@@ -30,23 +39,11 @@ items:
     value: 5
   - label: その他
     value: 3`,
-  fields: ['unit: 値の単位（必須）', 'items: 内訳の配列。大きい順に並べ、「その他」は最後に置く', 'items[].label: 内訳の名前（必須）', 'items[].value: 0より大きい数値（必須）。割合は自動で計算する', 'items[].emphasis: true にすると、その内訳を強調の色で描く（任意、図全体で1つまで）'],
+  fields: describe(schema, contractLimits),
 
   guide: (t) => modeGuide(t),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'items'], 'stack'), ...unitError(spec, 'stack')];
-    if (!Array.isArray(spec.items) || spec.items.length < 2) return [...errors, 'stack には items が2つ以上必要です。'];
-    if (spec.items.length > limits.stack.maxItems) errors.push(`items が${spec.items.length}個あります。上限は${limits.stack.maxItems}個です。小さい内訳を「その他」にまとめてください。`);
-    spec.items.forEach((it, i) => {
-      errors.push(...unknownKeys(it, ['label', 'value', 'emphasis'], `items[${i}]`));
-      if (typeof it?.label !== 'string') errors.push(`items[${i}] に label がありません。`);
-      if (!isNumber(it?.value) || it.value <= 0) errors.push(`items[${i}].value は0より大きい数値にしてください。`);
-    });
-    errors.push(...duplicateLabel(spec.items, 'items'));
-    if (spec.items.filter((it) => it?.emphasis).length > 1) errors.push('emphasis を付けられる内訳は1つまでです。');
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'stack', limits),
 
   labels: (spec) => spec.items.map((it) => it.label),
   notes: () => [],

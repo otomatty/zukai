@@ -1,14 +1,21 @@
-import { open, close, box, esc, px, mid, unknownKeys } from './svg.ts';
+import { open, close, box, esc, px, mid } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface Layer {
-  label: string;
-  items: string[];
-}
-export interface LayersSpec {
-  type: 'layers';
-  layers: Layer[];
-}
+const schema = {
+  layers: {
+    type: 'list', required: true, min: 2, max: 'layers.maxLayers', desc: '層の配列。上から順に積む',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '層の名前' },
+        items: { type: 'list', required: true, min: 1, max: 'layers.maxItems', of: { type: 'string' }, desc: '層に含まれる要素の名前の配列' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type LayersSpec = { type: 'layers' } & Infer<typeof schema>;
 
 const LABEL_W = 150;
 const ITEM_GAP = 12;
@@ -27,32 +34,9 @@ layers:
     items: [認証API, 利用者API]
   - label: 保存先
     items: [利用者DB, セッションDB]`,
-  fields: [
-    'layers: 層の配列。上から順に積む',
-    'layers[].label: 層の名前（必須）',
-    'layers[].items: 層に含まれる要素の名前の配列（必須）',
-  ],
+  fields: describe(schema, contractLimits),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'layers'], 'layers')];
-    if (!Array.isArray(spec.layers) || spec.layers.length < 2) {
-      errors.push('layers には層が2つ以上必要です。');
-      return errors;
-    }
-    if (spec.layers.length > limits.layers.maxLayers) {
-      errors.push(`層が${spec.layers.length}個あります。上限は${limits.layers.maxLayers}個です。`);
-    }
-    spec.layers.forEach((l, i) => {
-      errors.push(...unknownKeys(l, ['label', 'items'], `layers[${i}]`));
-      if (!l || typeof l.label !== 'string') errors.push(`layers[${i}] に label がありません。`);
-      if (!Array.isArray(l?.items) || l.items.length === 0 || l.items.some((x: unknown) => typeof x !== 'string')) {
-        errors.push(`layers[${i}].items は名前の配列にしてください。`);
-      } else if (l.items.length > limits.layers.maxItems) {
-        errors.push(`layers[${i}].items が${l.items.length}個あります。上限は${limits.layers.maxItems}個です。`);
-      }
-    });
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'layers', limits),
 
   // 箱の幅は要素の数で決まる。文字が箱に収まらない組み合わせを検出する。
   fit(spec, t) {

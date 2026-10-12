@@ -1,32 +1,51 @@
-import { open, close, arrow, px, txt, rect, emRect, mid, unknownKeys } from './svg.ts';
+import { open, close, arrow, px, txt, rect, emRect, mid } from './svg.ts';
 import { iconExists, iconSvg } from './icons.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface ZoneNode {
-  label: string;
-  note?: string;
-  icon?: string;
-}
-export interface Zone {
-  label?: string;
-  // 名前だけか、{label, note, icon} で書く。
-  nodes: (string | ZoneNode)[];
-}
-// 複数の領域をまとめる枠。from と to は領域の番号（1始まり）。
-export interface ZoneGroup {
-  label: string;
-  from: number;
-  to: number;
-}
-// [つなぐ元, つなぐ先, 通信の名前]
-export type ZoneLink = [string, string, string?];
-export interface ZonesSpec {
-  type: 'zones';
-  zones: Zone[];
-  links: ZoneLink[];
-  groups?: ZoneGroup[];
-  emphasis?: string;
-}
+// 要素を {label, note, icon} で書くときの項目。
+const nodeFields = {
+  label: { type: 'string', required: true, desc: '要素の名前' },
+  note: { type: 'string', desc: '要素の補足' },
+  icon: { type: 'string', desc: 'アイコンの名前。AWS は aws/AmazonCloudFront のように書き、名前は zukai icons で調べる。user、browser、server、database も使える' },
+} as const satisfies Fields;
+const schema = {
+  zones: {
+    type: 'list', required: true, min: 2, max: 'zones.maxZones', desc: '領域の配列。左から順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', desc: '領域の名前。書くと枠で囲む' },
+        nodes: {
+          type: 'list', required: true, min: 1, max: 'zones.maxNodes', desc: '領域の中の要素。名前だけか、{label, note, icon} で書く。上から順に並べる',
+          of: { type: 'oneOf', options: [{ type: 'string' }, { type: 'object', fields: nodeFields }] },
+        },
+      },
+    },
+  },
+  links: {
+    type: 'list', required: true, min: 1, max: 'zones.maxLinks', desc: '[つなぐ元, つなぐ先, 通信の名前] の配列。隣り合う領域どうしか、同じ領域の上下どうしをつなぐ。通信の名前は任意',
+    of: { type: 'tuple', items: [{ type: 'string' }, { type: 'string' }, { type: 'string' }], min: 2, desc: 'つなぐ元, つなぐ先, 通信の名前' },
+  },
+  groups: {
+    type: 'list', max: 'zones.maxGroups', desc: '複数の領域をまとめる枠の配列。from と to は、1から数えた領域の番号',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '枠の名前' },
+        from: { type: 'number', required: true, integer: true, min: 1, desc: '最初の領域の番号' },
+        to: { type: 'number', required: true, integer: true, min: 1, desc: '最後の領域の番号。zones の数まで' },
+      },
+    },
+  },
+  emphasis: { type: 'string', desc: '強調する要素の名前', note: 'アイコンを使わない図だけ' },
+} as const satisfies Fields;
+export type ZonesSpec = { type: 'zones' } & Infer<typeof schema>;
+type ZoneNode = Infer<typeof nodeFields>;
+type ZoneGroup = NonNullable<ZonesSpec['groups']>[number];
+// 書き方の説明では、zones の後ろに要素の項目を挟む。
+const { zones, ...rest } = schema;
 // 置き場所の決まった要素。c は領域の番号、r は領域の中の段の番号（どちらも0始まり）。
 interface PlacedNode extends ZoneNode {
   c: number;
@@ -45,10 +64,8 @@ interface Frame {
 
 const PAD = 12;
 const BAND = 30;
-// Number.isInteger は型を絞り込まないので、絞り込む形で包む。
-const isInt = (v: unknown): v is number => Number.isInteger(v);
-// 検証の前の値にも使う。名前だけの要素を {label} にし、それ以外はそのまま返す。
-const nodeOf = <N>(n: string | N): ZoneNode | N => (typeof n === 'string' ? { label: n } : n);
+// 名前だけの要素を {label} にし、それ以外はそのまま返す。
+const nodeOf = (n: string | ZoneNode): ZoneNode => (typeof n === 'string' ? { label: n } : n);
 const allNodes = (spec: ZonesSpec): PlacedNode[] => spec.zones.flatMap((z, c) => z.nodes.map((n, r) => ({ ...nodeOf(n), c, r })));
 
 // 枠（領域の枠と、複数の領域をまとめる枠）を、入れ子の深さつきで返す。
@@ -112,54 +129,30 @@ links:
   - [ゲートウェイ, 認証サービス, 社内通信]
   - [認証サービス, セッションDB]
 emphasis: ゲートウェイ`,
-  fields: [
-    'zones: 領域の配列。左から順に並べる',
-    'zones[].label: 領域の名前（任意）。書くと枠で囲む',
-    'zones[].nodes: 領域の中の要素。名前だけか、{label, note, icon} で書く。上から順に並べる',
-    'nodes[].icon: アイコンの名前（任意）。AWS は aws/AmazonCloudFront のように書き、名前は zukai icons で調べる。user、browser、server、database も使える',
-    'links: [つなぐ元, つなぐ先, 通信の名前] の配列。隣り合う領域どうしか、同じ領域の上下どうしをつなぐ。通信の名前は任意',
-    'groups: 複数の領域をまとめる枠の配列（任意）。{label, from, to} で、from と to は領域の番号（1始まり）',
-    'emphasis: 強調する要素の名前（任意、アイコンを使わない図だけ）',
-  ],
+  fields: [...describe({ zones }, contractLimits), ...describe(nodeFields, contractLimits, 'zones[].nodes[].'), ...describe(rest, contractLimits)],
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'zones', 'links', 'groups', 'emphasis'], 'zones')];
-    if (!Array.isArray(spec.zones) || spec.zones.length < 2) return [...errors, 'zones には zones が2つ以上必要です。'];
-    if (spec.zones.length > limits.zones.maxZones) errors.push(`zones が${spec.zones.length}個あります。上限は${limits.zones.maxZones}個です。`);
-    for (const [c, z] of spec.zones.entries()) {
-      errors.push(...unknownKeys(z, ['label', 'nodes'], `zones[${c}]`));
-      if (!Array.isArray(z?.nodes) || z.nodes.length === 0) return [...errors, `zones[${c}] に nodes がありません。`];
-      if (z.nodes.length > limits.zones.maxNodes) errors.push(`zones[${c}].nodes が${z.nodes.length}個あります。上限は${limits.zones.maxNodes}個です。`);
-      for (const [r, raw] of z.nodes.entries()) {
-        const nd = nodeOf(raw);
-        if (typeof nd?.label !== 'string') return [...errors, `zones[${c}].nodes[${r}] に label がありません。`];
-        errors.push(...unknownKeys(nd, ['label', 'note', 'icon'], `zones[${c}].nodes[${r}]`));
-        if (nd.icon !== undefined && !iconExists(String(nd.icon))) errors.push(`アイコン「${nd.icon}」はありません。名前は zukai icons で調べてください。`);
-      }
+    const errors = checkSpec(spec, schema, 'zones', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が ZonesSpec のとおりだと確かめた。ここからは、要素の名前、枠の範囲、接続を確かめる。
+    const s = spec as ZonesSpec;
+    const nodes = allNodes(s);
+    for (const nd of nodes) {
+      if (nd.icon !== undefined && !iconExists(String(nd.icon))) errors.push(`アイコン「${nd.icon}」はありません。名前は zukai icons で調べてください。`);
     }
-    // zones と nodes の形は、上で確かめた。
-    const nodes = allNodes(spec as ZonesSpec);
-    // emphasis は文字と確かめずに探すので、どんな値でも探せる形にしておく。
-    const names: readonly unknown[] = nodes.map((nd) => nd.label);
+    const names = nodes.map((nd) => nd.label);
     if (new Set(names).size !== names.length) errors.push('同じ名前の要素があります。links で区別できるよう、名前を変えてください。');
-    const n = spec.zones.length;
-    if (spec.groups != null && !Array.isArray(spec.groups)) return [...errors, 'groups は、{label, from, to} の配列にしてください。'];
-    for (const [i, g] of (spec.groups ?? []).entries()) {
-      errors.push(...unknownKeys(g, ['label', 'from', 'to'], `groups[${i}]`));
-      if (typeof g?.label !== 'string' || !isInt(g?.from) || !isInt(g?.to) || g.from < 1 || g.to > n || g.from > g.to) return [...errors, `groups[${i}] は {label, from, to} で、from と to を1〜${n}の領域の番号にしてください。`];
+    const n = s.zones.length;
+    for (const [i, g] of (s.groups ?? []).entries()) {
+      if (g.to > n || g.from > g.to) return [...errors, `groups[${i}] は {label, from, to} で、from と to を1〜${n}の領域の番号にしてください。`];
     }
-    if ((spec.groups?.length ?? 0) > limits.zones.maxGroups) errors.push(`groups が${spec.groups!.length}個あります。上限は${limits.zones.maxGroups}個です。`);
-    // groups の形は、上で確かめた。
-    const gs = (spec.groups ?? []) as ZoneGroup[];
+    const gs: ZoneGroup[] = s.groups ?? [];
     if (gs.some((a) => gs.some((b) => a.from < b.from && b.from <= a.to && a.to < b.to))) errors.push('groups の範囲が部分的に重なっています。入れ子にするか、離してください。');
     if (errors.length) return errors;
 
     const find = (name: string) => nodes.find((nd) => nd.label === name);
     const elbows = new Set<number>();
-    if (!Array.isArray(spec.links) || spec.links.length === 0) return [...errors, 'zones には links が1本以上必要です。'];
-    if (spec.links.length > limits.zones.maxLinks) errors.push(`links が${spec.links.length}本あります。上限は${limits.zones.maxLinks}本です。`);
-    for (const [i, l] of spec.links.entries()) {
-      if (!Array.isArray(l) || l.length < 2 || l.length > 3 || !l.every((x): x is string => typeof x === 'string')) return [...errors, `links[${i}] は [つなぐ元, つなぐ先, 通信の名前] の組にしてください。`];
+    for (const [i, l] of s.links.entries()) {
       const [a, b] = [find(l[0]), find(l[1])];
       if (!a || !b) { errors.push(`links[${i}] の「${a ? l[1] : l[0]}」は zones にありません。`); continue; }
       const [dc, dr] = [Math.abs(a.c - b.c), Math.abs(a.r - b.r)];
@@ -171,7 +164,7 @@ emphasis: ゲートウェイ`,
       if (elbows.has(gap)) errors.push(`links[${i}] と同じ境界に、段の違う要素をつなぐ線がもう1本あります。線が重なるので、1本にしてください。`);
       elbows.add(gap);
     }
-    if (spec.emphasis !== undefined && !names.includes(spec.emphasis)) errors.push(`emphasis「${spec.emphasis}」は zones にありません。`);
+    if (s.emphasis !== undefined && !names.includes(s.emphasis)) errors.push(`emphasis「${s.emphasis}」は zones にありません。`);
     return errors;
   },
 

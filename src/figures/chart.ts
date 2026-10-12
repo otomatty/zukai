@@ -58,24 +58,8 @@ export function layoutOf(option: ChartOption, t: Tokens, height: number): ItemLa
 
 export const axisText = (t: Tokens) => ({ color: t.color.sub, fontSize: 12 });
 
-export const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
 // 数値に桁区切りを付ける。
 export const fmt = (v: number): string => v.toLocaleString('ja-JP');
-
-// チャートに共通する検証の部品。
-// 名前が重なると、読み手は見分けられない。凡例は名前で系列を引くので、2つ目の系列も1つ目の値で書かれてしまう。
-export function duplicateLabel(items: readonly unknown[], where: string): string[] {
-  const seen = new Set<string>();
-  for (const it of items) {
-    const label = it && typeof it === 'object' ? (it as { label?: unknown }).label : undefined;
-    if (typeof label !== 'string') continue;
-    if (seen.has(label)) return [`${where} の label「${label}」が2回あります。名前を変えて、見分けられるようにしてください。`];
-    seen.add(label);
-  }
-  return [];
-}
-export const unitError = (spec: { readonly unit?: unknown }, name: string): string[] => (typeof spec.unit !== 'string' || !spec.unit ? [`${name} には unit（値の単位）が必要です。`] : []);
 
 // グラフの色の付け方。series は系列ごとに色を変え、neutral は灰色を基本にして強調するものだけに色を付ける。
 export const neutral = (t: Tokens): boolean => t.chart.mode === 'neutral';

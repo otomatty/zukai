@@ -7,62 +7,32 @@
 import YAML from 'yaml';
 import { types as builtin } from './index.ts';
 import free from './free.ts';
-import { widthOf, unknownKeys } from './svg.ts';
+import { checkFields, describe } from './schema.ts';
+import type { Field, Fields as SchemaFields } from './schema.ts';
 import { fill } from '../template.ts';
 import { tokensFor } from '../theme.ts';
 import type { FieldDef, Fields, Theme, TypeDef } from '../theme.ts';
 import type { AnyFigureType, FigureContext, FigureType, FigureTypes, Limits, RawSpec, Tokens } from '../types.ts';
 
-// 項目の定義に合うかを確かめる。def は type.json の fields の1項目。
-function checkField(v: unknown, def: FieldDef, at: string): string[] {
-  if (v === undefined || v === null) return def.required ? [`${at} がありません。`] : [];
+// type.json の fields を、図の型と同じスキーマ（schema.ts）にする。
+// テーマの文字の項目は、数も文字として受け付ける（type.json の書き方は、数の値も文字の項目に書けるため）。
+function toSchema(def: FieldDef): Field {
   switch (def.type) {
-    case 'string': {
-      if (typeof v !== 'string' && typeof v !== 'number') return [`${at} は文字で書きます。`];
-      const w = Math.ceil(widthOf(String(v)));
-      return def.max !== undefined && w > def.max ? [`${at}「${v}」が全角${w}字相当あります。上限は${def.max}字です。`] : [];
-    }
-    case 'number':
-      if (typeof v !== 'number' || !Number.isFinite(v)) return [`${at} は数値で書きます。`];
-      if (def.min !== undefined && v < def.min) return [`${at} は${def.min}以上にします。`];
-      return def.max !== undefined && v > def.max ? [`${at} は${def.max}以下にします。`] : [];
-    case 'boolean':
-      return typeof v === 'boolean' ? [] : [`${at} は true か false で書きます。`];
-    case 'list': {
-      if (!Array.isArray(v)) return [`${at} は配列で書きます。`];
-      const errors: string[] = [];
-      if (def.min !== undefined && v.length < def.min) errors.push(`${at} は${def.min}個以上にします。`);
-      if (def.max !== undefined && v.length > def.max) errors.push(`${at} が${v.length}個あります。上限は${def.max}個です。`);
-      v.forEach((item, i) => errors.push(...checkField(item, { ...def.of, required: true }, `${at}[${i}]`)));
-      return errors;
-    }
-    case 'object': {
-      if (!v || typeof v !== 'object' || Array.isArray(v)) return [`${at} は { } の形で書きます。`];
-      return checkFields(v as Record<string, unknown>, def.fields, at);
-    }
+    case 'string':
+      return { ...def, orNumber: true };
+    case 'list':
+      return { ...def, of: toSchema(def.of) };
+    case 'object':
+      return { ...def, fields: toFields(def.fields) };
     default:
-      return [];
+      return def;
   }
 }
-const checkFields = (obj: Record<string, unknown>, fields: Fields, at: string): string[] => [
-  ...unknownKeys(obj, Object.keys(fields), at),
-  ...Object.entries(fields).flatMap(([k, def]) => checkField(obj[k], def, at ? `${at}.${k}` : k)),
-];
-
-// AI に渡す、項目の説明。
-function describe(fields: Fields, prefix = ''): string[] {
-  return Object.entries(fields).flatMap(([k, def]): string[] => {
-    const name = prefix + k;
-    const limit = def.type === 'string' && def.max !== undefined ? `、全角${def.max}字まで` : def.type === 'list' && def.max !== undefined ? `、${def.max}個まで` : def.type === 'number' && def.max !== undefined ? `、${def.min ?? ''}〜${def.max}` : '';
-    const line = `${name}: ${def.desc ?? ''}（${def.required ? '必須' : '任意'}${limit}）`;
-    if (def.type === 'list' && def.of.type === 'object') return [line, ...describe(def.of.fields, `${name}[].`)];
-    if (def.type === 'object') return [line, ...describe(def.fields, `${name}.`)];
-    return [line];
-  });
-}
+const toFields = (fields: Fields): SchemaFields => Object.fromEntries(Object.entries(fields).map(([k, def]) => [k, toSchema(def)]));
 
 // テーマが読んだ型の定義（theme.ts の readTheme の types）から、図の型を作る。
 export function makeType(d: TypeDef): FigureType<RawSpec> & { fit(spec: RawSpec, t: Tokens): string[] } {
+  const schema = toFields(d.json.fields);
   const toSvg = (spec: RawSpec, t: Tokens) => fill(d.template, { ...spec, theme: t, width: t.figure.width });
   const tokensOf = (ctx?: FigureContext) => ctx?.tokens ?? tokensFor(ctx?.baseDir ?? process.cwd());
   return {
@@ -71,12 +41,12 @@ export function makeType(d: TypeDef): FigureType<RawSpec> & { fit(spec: RawSpec,
     summary: d.json.summary,
     when: d.json.when,
     example: YAML.stringify({ type: d.name, ...d.json.example }).trim(),
-    fields: describe(d.json.fields),
+    fields: describe(schema),
     caps: Object.entries(d.json.fields).filter(([, f]) => 'max' in f && f.max !== undefined).map(([k, f]) => `${k}=${'max' in f ? f.max : ''}`).join('、') || 'なし',
     motion: d.motion,
 
     validate(spec, limits, ctx) {
-      const errors = checkFields(spec, { type: { type: 'string' }, ...d.json.fields }, '');
+      const errors = checkFields(spec, { type: { type: 'string' }, ...schema }, '');
       if (errors.length) return errors;
       let svg;
       try {

@@ -33,7 +33,7 @@ test('zones の groups が配列でないときは、例外ではなく F001 で
   assert.deepEqual((await lint(doc(zones), file, { textlint: false })).findings.filter((f) => f.rule.startsWith('F')), []);
   for (const groups of ['5', 'x', '{}']) {
     const r = await lint(doc(`${zones}\ngroups: ${groups}`), file, { textlint: false });
-    assert.ok(r.findings.some((f) => f.rule === 'F001' && f.message.includes('groups は、{label, from, to} の配列にしてください')), groups);
+    assert.ok(r.findings.some((f) => f.rule === 'F001' && f.message.includes('groups は配列で書きます')), groups);
   }
 });
 
@@ -99,4 +99,24 @@ test('読めない SVG の自由図は、例外ではなく F001 で知らせる
   const r = await lint(source, file, { textlint: false });
   assert.ok(r.findings.some((f) => f.rule === 'F001' && f.message.startsWith('SVG を読めません。')));
   assert.deepEqual(r.free, []);
+});
+
+test('任意の項目に null を書くと、書かなかったのと同じに検査し、同じ図を描く', async () => {
+  const file = path.join(project(), 'a.md');
+  const cases: [string, string][] = [
+    ['type: flow\nsteps:\n  - label: 受付\n    ref: null\n  - label: 発送', 'type: flow\nsteps:\n  - label: 受付\n  - label: 発送'],
+    ['type: progress\nunit: "%"\nmax: 100\ntarget: null\nitems:\n  - label: 受付\n    value: 91', 'type: progress\nunit: "%"\nmax: 100\nitems:\n  - label: 受付\n    value: 91'],
+    ['type: zones\nzones:\n  - nodes: [ブラウザ]\n  - nodes: [サーバー]\nlinks:\n  - [ブラウザ, サーバー, null]', 'type: zones\nzones:\n  - nodes: [ブラウザ]\n  - nodes: [サーバー]\nlinks:\n  - [ブラウザ, サーバー]'],
+  ];
+  for (const [withNull, without] of cases) {
+    const findings = (await lint(doc(withNull), file, { textlint: false })).findings.filter((f) => f.rule.startsWith('F'));
+    assert.deepEqual(findings, [], withNull);
+    // 資料には原稿も埋め込まれるので、図の部分だけを比べる。ECharts が描くたびに変わる番号（zr0-cls-1 など）は、出てきた順に振り直す。
+    const figures = async (source: string) => {
+      const ids = new Map<string, number>();
+      const html = (await render(doc(source), file)).replace(/zr\d+-cls-\d+/g, (id) => `cls-${ids.get(id) ?? ids.set(id, ids.size).get(id)}`);
+      return html.match(/<figure[\s\S]*?<\/figure>/g);
+    };
+    assert.deepEqual(await figures(withNull), await figures(without), withNull);
+  }
 });

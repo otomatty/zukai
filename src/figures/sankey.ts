@@ -1,14 +1,19 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, isNumber, fmt, unitError, seriesColor } from './chart.ts';
+import { px } from './svg.ts';
+import { renderChart, fmt, seriesColor } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  links: {
+    type: 'list', required: true, min: 2, max: 'sankey.maxLinks', desc: '[流れの元, 流れの先, 量] の配列。元に戻る流れは書けない',
+    of: { type: 'tuple', desc: '流れの元, 流れの先, 0より大きい量', items: [{ type: 'string' }, { type: 'string' }, { type: 'number', above: 0 }] },
+  },
+} as const satisfies Fields;
+export type SankeySpec = { type: 'sankey' } & Infer<typeof schema>;
 // [流れの元, 流れの先, 量]
-export type SankeyLink = [string, string, number];
-export interface SankeySpec {
-  type: 'sankey';
-  unit: string;
-  links: SankeyLink[];
-}
+type SankeyLink = SankeySpec['links'][number];
 
 const nodesOf = (spec: { readonly links: readonly SankeyLink[] }): string[] => [...new Set(spec.links.flatMap((l) => [l[0], l[1]]))];
 
@@ -24,20 +29,17 @@ links:
   - [ログイン要求, 照合に失敗, 120]
   - [照合に成功, セッション発行, 850]
   - [照合に成功, 途中で離脱, 30]`,
-  fields: ['unit: 値の単位（必須）', 'links: [流れの元, 流れの先, 量] の配列（必須）。元に戻る流れは書けない'],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'links'], 'sankey'), ...unitError(spec, 'sankey')];
-    if (!Array.isArray(spec.links) || spec.links.length < 2) return [...errors, 'sankey には links が2つ以上必要です。'];
-    if (!spec.links.every((l): l is SankeyLink => Array.isArray(l) && l.length === 3 && typeof l[0] === 'string' && typeof l[1] === 'string' && isNumber(l[2]) && l[2] > 0)) {
-      return [...errors, 'links は [流れの元, 流れの先, 0より大きい量] の組にしてください。'];
-    }
-    const valid = { links: spec.links };
-    if (spec.links.length > limits.sankey.maxLinks) errors.push(`links が${spec.links.length}本あります。上限は${limits.sankey.maxLinks}本です。`);
-    const nodes = nodesOf(valid);
+    const errors = checkSpec(spec, schema, 'sankey', limits);
+    if (errors.length) return errors;
+    // 形は上で確かめたので、ここからは検証した後の形として読む。
+    const s = spec as SankeySpec;
+    const nodes = nodesOf(s);
     if (nodes.length > limits.sankey.maxNodes) errors.push(`箱が${nodes.length}個あります。上限は${limits.sankey.maxNodes}個です。`);
     // 元に戻る流れがあると描けない。行き先をたどって確かめる。
-    const next = (n: string): string[] => valid.links.filter((l) => l[0] === n).map((l) => l[1]);
+    const next = (n: string): string[] => s.links.filter((l) => l[0] === n).map((l) => l[1]);
     const loops = (n: string, seen: string[]): boolean => seen.includes(n) || next(n).some((m) => loops(m, [...seen, n]));
     if (nodes.some((n) => loops(n, []))) errors.push('元の箱に戻る流れがあります。sankey は一方向の流れだけを描けます。');
     return errors;

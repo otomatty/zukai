@@ -1,23 +1,35 @@
-import { open, close, px, esc, unknownKeys } from './svg.ts';
+import { open, close, px, esc } from './svg.ts';
 import { seriesColor } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface VennSet {
-  label: string;
-  // その集合だけに属する項目。
-  items?: string[];
-}
-export interface VennOverlap {
-  // 重なる集合の名前。
-  sets: string[];
-  items: string[];
-  emphasis?: boolean;
-}
-export interface VennSpec {
-  type: 'venn';
-  sets: VennSet[];
-  overlaps: VennOverlap[];
-}
+const schema = {
+  sets: {
+    type: 'list', required: true, min: 2, max: 'venn.maxSets', unique: 'label', desc: '集合の配列',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, nonEmpty: true, desc: '集合の名前' },
+        items: { type: 'list', desc: 'その集合だけに属する項目の配列', of: { type: 'string', nonEmpty: true } },
+      },
+    },
+  },
+  overlaps: {
+    type: 'list', required: true, min: 1, atMostOne: 'emphasis', desc: '重なりの配列。重なりがない集合は、表で示す',
+    of: {
+      type: 'object',
+      fields: {
+        // 重なる集合の名前。sets にあるか、同じ名前が重ならないかは、validate が確かめる。
+        sets: { type: 'list', required: true, min: 2, desc: '重なる集合の名前の配列。sets[].label のどれかを書く。集合が3つのときは、2つの重なりと、3つすべての重なりを書ける', of: { type: 'string', nonEmpty: true } },
+        items: { type: 'list', required: true, min: 1, desc: '重なりに属する項目の配列', of: { type: 'string', nonEmpty: true } },
+        emphasis: { type: 'boolean', desc: 'true にすると、その重なりの項目を強調色で描く', note: '図全体で1つまで' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type VennSpec = { type: 'venn' } & Infer<typeof schema>;
+type VennSet = VennSpec['sets'][number];
 // 文字を置く場所。max は書ける項目の数。
 interface Slot {
   x: number;
@@ -85,50 +97,37 @@ overlaps:
     items: [デプロイ, 性能の改善]
     emphasis: true`,
   fields: [
-    'sets: 集合の配列（必須、2つか3つ）',
-    'sets[].label: 集合の名前（必須）',
-    'sets[].items: その集合だけに属する項目の配列（任意）',
-    'overlaps: 重なりの配列（必須、1つ以上）',
-    'overlaps[].sets: 重なる集合の名前の配列（必須）。集合が3つのときは、2つの重なりと、3つすべての重なりを書ける',
-    'overlaps[].items: 重なりに属する項目の配列（必須）',
-    'overlaps[].emphasis: true にすると、その重なりの項目を強調色で描く（任意、図全体で1つまで）',
+    ...describe(schema, contractLimits),
     '1つの場所に書ける項目は、集合が2つのときは4個まで、3つのときは集合だけの場所が3個、重なりが2個まで',
   ],
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'sets', 'overlaps'], 'venn')];
-    if (!Array.isArray(spec.sets) || spec.sets.length < 2 || spec.sets.length > limits.venn.maxSets) return [...errors, `venn には sets が2つか${limits.venn.maxSets}つ必要です。`];
-    const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string' && x);
-    spec.sets.forEach((s, i) => {
-      errors.push(...unknownKeys(s, ['label', 'items'], `sets[${i}]`));
-      if (typeof s?.label !== 'string' || !s.label) errors.push(`sets[${i}] に label がありません。`);
-      if (s?.items !== undefined && !strings(s.items)) errors.push(`sets[${i}].items は、項目の名前の配列にしてください。`);
-    });
+    const errors = checkSpec(spec, schema, 'venn', limits);
     if (errors.length) return errors;
-    // sets の形は上で確かめたので、ここからは検証した後の形として読む。
-    const sets = spec.sets as VennSet[];
-    const valid = { sets };
-    if (new Set(names(valid)).size !== spec.sets.length) return ['sets に同じ名前があります。'];
-    if (!Array.isArray(spec.overlaps) || spec.overlaps.length === 0) return ['venn には overlaps が1つ以上必要です。重なりがない集合は、表で示します。'];
-    const g = layout(spec.sets.length);
-    const seen = new Set();
-    spec.overlaps.forEach((o, i): number | void => {
-      errors.push(...unknownKeys(o, ['sets', 'items', 'emphasis'], `overlaps[${i}]`));
-      if (!strings(o?.sets) || o.sets.length < 2 || new Set(o.sets).size !== o.sets.length) return errors.push(`overlaps[${i}].sets は、重なる集合の名前を2つ以上並べてください。`);
-      const unknown = o.sets.find((s: string) => !names(valid).includes(s));
-      if (unknown) return errors.push(`overlaps[${i}].sets の「${unknown}」は sets にありません。`);
-      if (!strings(o.items) || o.items.length === 0) return errors.push(`overlaps[${i}] に items がありません。`);
+    // 形は上で確かめたので、ここからは検証した後の形として読む。
+    const s = spec as VennSpec;
+    const g = layout(s.sets.length);
+    const seen = new Set<string>();
+    for (const [i, o] of s.overlaps.entries()) {
+      if (new Set(o.sets).size !== o.sets.length) {
+        errors.push(`overlaps[${i}].sets は、重なる集合の名前を2つ以上並べてください。`);
+        continue;
+      }
+      const unknown = o.sets.find((x) => !names(s).includes(x));
+      if (unknown) {
+        errors.push(`overlaps[${i}].sets の「${unknown}」は sets にありません。`);
+        continue;
+      }
       const key = [...o.sets].sort().join('＋');
       if (seen.has(key)) errors.push(`「${o.sets.join('」と「')}」の重なりが2回書かれています。1つにまとめてください。`);
       seen.add(key);
-      const slot = slotOf(valid, { sets: o.sets }, g);
+      const slot = slotOf(s, o, g);
       if (o.items.length > slot.max) errors.push(`「${o.sets.join('」と「')}」の重なりに items が${o.items.length}個あります。この場所に書けるのは${slot.max}個までです。`);
+    }
+    s.sets.forEach((set, i) => {
+      const items = set.items ?? [];
+      if (items.length > g.only[i].max) errors.push(`「${set.label}」だけの項目が${items.length}個あります。この場所に書けるのは${g.only[i].max}個までです。`);
     });
-    sets.forEach((s, i) => {
-      const items = s.items ?? [];
-      if (items.length > g.only[i].max) errors.push(`「${s.label}」だけの項目が${items.length}個あります。この場所に書けるのは${g.only[i].max}個までです。`);
-    });
-    if (spec.overlaps.filter((o) => o?.emphasis).length > 1) errors.push('emphasis を付けられる重なりは1つまでです。');
     return errors;
   },
 

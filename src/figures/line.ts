@@ -1,21 +1,36 @@
-import { px, unknownKeys } from './svg.ts';
-import { renderChart, axisText, isNumber, fmt, highlight, neutral, grey, modeGuide, duplicateLabel } from './chart.ts';
+import { px } from './svg.ts';
+import { renderChart, axisText, fmt, highlight, neutral, grey, modeGuide } from './chart.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface LineSeries {
-  label: string;
-  values: number[];
-  emphasis?: boolean;
-}
-export interface LineSpec {
-  type: 'line';
-  unit: string;
-  // validate が文字にそろえる。
-  x: string[];
-  series: LineSeries[];
-  // at は x の目盛りと文字で比べるので、数でも書ける。
-  marker?: { at: string | number; label: string };
-}
+const schema = {
+  unit: { type: 'string', required: true, nonEmpty: true, desc: '値の単位' },
+  x: { type: 'list', required: true, min: 2, max: 'line.maxPoints', hint: '期間を絞るか、間隔を広げてください。', desc: '横軸の目盛りの配列。時間の順に並べる', of: { type: 'string', orNumber: true } },
+  // 名前が重なると、読み手は見分けられない。凡例は名前で系列を引くので、2つ目の系列も1つ目の値で書かれてしまう。
+  series: {
+    type: 'list', required: true, min: 1, max: 'line.maxSeries', hint: '伝えたい系列に絞ってください。', unique: 'label', atMostOne: 'emphasis',
+    desc: '系列の配列。値の大きさが数倍違う系列を並べると、小さいほうの変化が読めなくなる。その場合はセクションを分ける',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '系列の名前' },
+        values: { type: 'list', required: true, desc: 'x と同じ個数の数値', of: { type: 'number' } },
+        emphasis: { type: 'boolean', desc: 'true にすると、その系列を太い線で描く', note: '図全体で1つまで' },
+      },
+    },
+  },
+  marker: {
+    type: 'object', desc: '出来事のあった目盛りと、その名前',
+    fields: {
+      // at は x の目盛りと文字で比べるので、数でも書ける。
+      at: { type: 'string', required: true, orNumber: true, desc: '出来事のあった目盛り。x のどれかを書く' },
+      label: { type: 'string', required: true, desc: '出来事の名前' },
+    },
+  },
+} as const satisfies Fields;
+// x は、スキーマでは数も受け付けるが、validate が文字にそろえる。検証に通った仕様では文字の配列。
+export type LineSpec = { type: 'line' } & Omit<Infer<typeof schema>, 'x'> & { x: string[] };
 
 const PLOT_LEFT = 56;
 const PLOT_RIGHT = 72;
@@ -37,48 +52,21 @@ series:
 marker:
   at: 8月
   label: ロックを導入`,
-  fields: [
-    'unit: 値の単位（必須）',
-    'x: 横軸の目盛りの配列。時間の順に並べる',
-    'series: 系列の配列。値の大きさが数倍違う系列を並べると、小さいほうの変化が読めなくなる。その場合はセクションを分ける',
-    'series[].label: 系列の名前（必須）',
-    'series[].values: x と同じ個数の数値（必須）',
-    'series[].emphasis: true にすると、その系列を太い線で描く（任意、図全体で1つまで）',
-    'marker.at / marker.label: 出来事のあった目盛りと、その名前（任意）',
-  ],
+  fields: describe(schema, contractLimits),
 
   guide: (t) => modeGuide(t),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'unit', 'x', 'series', 'marker'], 'line')];
-    if (typeof spec.unit !== 'string' || !spec.unit) errors.push('line には unit（値の単位）が必要です。');
-    if (!Array.isArray(spec.x) || spec.x.length < 2) {
-      errors.push('line には x（横軸の目盛り）が2つ以上必要です。');
-      return errors;
-    }
+    const errors = checkSpec(spec, schema, 'line', limits);
+    if (errors.length) return errors;
+    // 形は上で確かめたので、ここからは検証した後の形として読む（x を文字にそろえるのは、すぐ下で行う）。
+    const s = spec as LineSpec;
     // 目盛りは文字にそろえる。YAML では数（2024 など）として読まれることがある。
-    const x = spec.x.map(String);
-    (spec as { x: string[] }).x = x;
-    if (!Array.isArray(spec.series) || spec.series.length === 0) {
-      errors.push('line には series が1つ以上必要です。');
-      return errors;
-    }
-    if (x.length > limits.line.maxPoints) errors.push(`x が${x.length}個あります。上限は${limits.line.maxPoints}個です。期間を絞るか、間隔を広げてください。`);
-    if (spec.series.length > limits.line.maxSeries) errors.push(`series が${spec.series.length}本あります。上限は${limits.line.maxSeries}本です。伝えたい系列に絞ってください。`);
-    spec.series.forEach((s, i) => {
-      errors.push(...unknownKeys(s, ['label', 'values', 'emphasis'], `series[${i}]`));
-      if (typeof s?.label !== 'string') errors.push(`series[${i}] に label がありません。`);
-      if (!Array.isArray(s?.values) || s.values.length !== x.length || !s.values.every(isNumber)) {
-        errors.push(`series[${i}].values は、x と同じ${x.length}個の数値にしてください。`);
-      }
+    s.x = s.x.map(String);
+    s.series.forEach((se, i) => {
+      if (se.values.length !== s.x.length) errors.push(`series[${i}].values は、x と同じ${s.x.length}個の数値にしてください。`);
     });
-    errors.push(...duplicateLabel(spec.series, 'series'));
-    if (spec.series.filter((s) => s?.emphasis).length > 1) errors.push('emphasis を付けられる系列は1つまでです。');
-    if (spec.marker !== undefined) {
-      errors.push(...unknownKeys(spec.marker, ['at', 'label'], 'marker'));
-      if (!x.includes(String(spec.marker?.at))) errors.push(`marker.at「${spec.marker?.at}」は x にありません。`);
-      if (typeof spec.marker?.label !== 'string') errors.push('marker に label がありません。');
-    }
+    if (s.marker && !s.x.includes(String(s.marker.at))) errors.push(`marker.at「${s.marker.at}」は x にありません。`);
     return errors;
   },
 

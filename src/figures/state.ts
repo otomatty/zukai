@@ -1,14 +1,19 @@
-import { open, close, arrow, px, txt, rect, emRect, mid, unknownKeys } from './svg.ts';
+import { open, close, arrow, px, txt, rect, emRect, mid } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
+const schema = {
+  states: { type: 'list', required: true, min: 2, max: 'state.maxStates', unique: true, of: { type: 'string' }, desc: '状態の名前の配列。よく通る順に左から並べる' },
+  transitions: {
+    type: 'list', required: true, min: 1, max: 'state.maxTransitions', desc: '[移る前, 移った後, きっかけ] の配列',
+    of: { type: 'tuple', items: [{ type: 'string' }, { type: 'string' }, { type: 'string' }], desc: '移る前, 移った後, きっかけ' },
+  },
+  emphasis: { type: 'string', desc: '強調する状態の名前' },
+} as const satisfies Fields;
+export type StateSpec = { type: 'state' } & Infer<typeof schema>;
 // [移る前, 移った後, きっかけ]
-export type Transition = [string, string, string];
-export interface StateSpec {
-  type: 'state';
-  states: string[];
-  transitions: Transition[];
-  emphasis?: string;
-}
+type Transition = StateSpec['transitions'][number];
 type Kind = 'adjacent' | 'above' | 'below';
 
 const H = 60;
@@ -33,28 +38,18 @@ transitions:
   - [ロック中, 有効, 15分経過]
   - [ロック中, 停止, 管理者が停止]
 emphasis: 有効`,
-  fields: [
-    'states: 状態の名前の配列。よく通る順に左から並べる',
-    'transitions: [移る前, 移った後, きっかけ] の配列（必須）',
-    'emphasis: 強調する状態の名前（任意）',
-    '隣り合わない状態への移り変わりは、右向きと左向きに2本ずつまで書ける',
-  ],
+  fields: [...describe(schema, contractLimits), '隣り合わない状態への移り変わりは、右向きと左向きに2本ずつまで書ける'],
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'states', 'transitions', 'emphasis'], 'state')];
-    if (!Array.isArray(spec.states) || spec.states.length < 2 || spec.states.some((s) => typeof s !== 'string')) return [...errors, 'state には states（名前の配列）が2つ以上必要です。'];
-    if (new Set(spec.states).size !== spec.states.length) errors.push('states に同じ名前があります。');
-    if (spec.states.length > limits.state.maxStates) errors.push(`states が${spec.states.length}個あります。上限は${limits.state.maxStates}個です。`);
-    if (!Array.isArray(spec.transitions) || spec.transitions.length === 0) return [...errors, 'state には transitions が1つ以上必要です。'];
-    if (spec.transitions.length > limits.state.maxTransitions) errors.push(`transitions が${spec.transitions.length}本あります。上限は${limits.state.maxTransitions}本です。`);
-    for (const [i, tr] of spec.transitions.entries()) {
-      if (!Array.isArray(tr) || tr.length !== 3 || tr.some((x) => typeof x !== 'string')) return [...errors, `transitions[${i}] は [移る前, 移った後, きっかけ] の組にしてください。`];
-      for (const name of tr.slice(0, 2)) if (!spec.states.includes(name)) errors.push(`transitions[${i}] の「${name}」は states にありません。`);
+    const errors = checkSpec(spec, schema, 'state', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が StateSpec のとおりだと確かめた。ここからは、状態の名前と矢印の本数を確かめる。
+    const ok = spec as StateSpec;
+    for (const [i, tr] of ok.transitions.entries()) {
+      for (const name of tr.slice(0, 2)) if (!ok.states.includes(name)) errors.push(`transitions[${i}] の「${name}」は states にありません。`);
       if (tr[0] === tr[1]) errors.push(`transitions[${i}] は同じ状態に戻っています。別の状態への移り変わりだけを書けます。`);
     }
     if (errors.length) return errors;
-    // 上の検査で、states と transitions の形を確かめた。emphasis は、この後で確かめる。
-    const ok = spec as StateSpec;
     const pairs = ok.transitions.map((tr) => `${tr[0]}→${tr[1]}`);
     if (new Set(pairs).size !== pairs.length) errors.push('同じ移り変わりが2回書かれています。きっかけを1つにまとめてください。');
     for (const k of ['above', 'below'] as const) {

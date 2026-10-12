@@ -1,16 +1,24 @@
-import { open, close, arrow, px, txt, ln, rect, emRect, mid, unknownKeys } from './svg.ts';
+import { open, close, arrow, px, txt, ln, rect, emRect, mid } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType, Tokens } from '../types.ts';
 
-export interface SwimlaneStep {
-  lane: string;
-  label: string;
-  emphasis?: boolean;
-}
-export interface SwimlaneSpec {
-  type: 'swimlane';
-  lanes: string[];
-  steps: SwimlaneStep[];
-}
+const schema = {
+  lanes: { type: 'list', required: true, min: 2, max: 'swimlane.maxLanes', of: { type: 'string' }, desc: '担当の名前の配列。上から順に並べる。担当が1つなら flow を使う' },
+  steps: {
+    type: 'list', required: true, min: 2, max: 'swimlane.maxSteps', hint: 'セクションを分けてください。', atMostOne: 'emphasis', desc: '手順の配列。実行する順に並べる',
+    of: {
+      type: 'object',
+      fields: {
+        lane: { type: 'string', required: true, desc: 'その手順の担当。lanes にある名前' },
+        label: { type: 'string', required: true, desc: '手順の名前' },
+        emphasis: { type: 'boolean', desc: 'true にすると強調色で描く', note: '図全体で1つまで' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type SwimlaneSpec = { type: 'swimlane' } & Infer<typeof schema>;
+type SwimlaneStep = SwimlaneSpec['steps'][number];
 // 手順を置くマス。row はレーンの番号、col は列の番号。
 interface Cell {
   row: number;
@@ -67,22 +75,16 @@ steps:
     emphasis: true
   - lane: 認証サービス
     label: セッションを削除`,
-  fields: ['lanes: 担当の名前の配列。上から順に並べる', 'steps: 手順の配列。実行する順に並べる', 'steps[].lane: その手順の担当（必須、lanes にある名前）', 'steps[].label: 手順の名前（必須）', 'steps[].emphasis: true にすると強調色で描く（任意、図全体で1つまで）'],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'lanes', 'steps'], 'swimlane')];
-    if (!Array.isArray(spec.lanes) || spec.lanes.length < 2 || spec.lanes.some((l) => typeof l !== 'string')) return [...errors, 'swimlane には lanes（名前の配列）が2つ以上必要です。担当が1つなら flow を使います。'];
-    if (spec.lanes.length > limits.swimlane.maxLanes) errors.push(`lanes が${spec.lanes.length}個あります。上限は${limits.swimlane.maxLanes}個です。`);
-    if (!Array.isArray(spec.steps) || spec.steps.length < 2) return [...errors, 'swimlane には steps が2つ以上必要です。'];
-    if (spec.steps.length > limits.swimlane.maxSteps) errors.push(`steps が${spec.steps.length}個あります。上限は${limits.swimlane.maxSteps}個です。セクションを分けてください。`);
-    // コールバックの中では spec.lanes の絞り込みが効かないので、変数に取っておく。
-    const lanes = spec.lanes;
-    spec.steps.forEach((s, i) => {
-      errors.push(...unknownKeys(s, ['lane', 'label', 'emphasis'], `steps[${i}]`));
-      if (!lanes.includes(s?.lane)) errors.push(`steps[${i}].lane「${s?.lane}」は lanes にありません。`);
-      if (typeof s?.label !== 'string') errors.push(`steps[${i}] に label がありません。`);
+    const errors = checkSpec(spec, schema, 'swimlane', limits);
+    if (errors.length) return errors;
+    // 上の検査で、形が SwimlaneSpec のとおりだと確かめた。ここからは、手順の担当が lanes にあるかを確かめる。
+    const s = spec as SwimlaneSpec;
+    s.steps.forEach((step, i) => {
+      if (!s.lanes.includes(step.lane)) errors.push(`steps[${i}].lane「${step.lane}」は lanes にありません。`);
     });
-    if (spec.steps.filter((s) => s?.emphasis).length > 1) errors.push('emphasis を付けられる手順は1つまでです。');
     return errors;
   },
 

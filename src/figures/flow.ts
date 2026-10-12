@@ -1,16 +1,23 @@
-import { open, close, box, arrow, px, unknownKeys } from './svg.ts';
+import { open, close, box, arrow, px } from './svg.ts';
+import { checkSpec, contractLimits, describe } from './schema.ts';
+import type { Fields, Infer } from './schema.ts';
 import type { FigureType } from '../types.ts';
 
-export interface FlowStep {
-  label: string;
-  note?: string;
-  emphasis?: boolean;
-  ref?: unknown;
-}
-export interface FlowSpec {
-  type: 'flow';
-  steps: FlowStep[];
-}
+const schema = {
+  steps: {
+    type: 'list', required: true, min: 2, max: 'flow.maxSteps', hint: 'セクションを分けてください。', atMostOne: 'emphasis', desc: '手順の配列。上から順に矢印でつなぐ',
+    of: {
+      type: 'object',
+      fields: {
+        label: { type: 'string', required: true, desc: '箱の名前' },
+        note: { type: 'string', desc: '箱の中の補足' },
+        emphasis: { type: 'boolean', desc: 'true にすると強調色で描く', note: '図全体で1つまで' },
+        ref: { type: 'number', desc: '根拠の番号。同じセクションの yaml refs の何番目かを書く' },
+      },
+    },
+  },
+} as const satisfies Fields;
+export type FlowSpec = { type: 'flow' } & Infer<typeof schema>;
 
 // flow: 順番に進む処理や手順。分岐は扱わない。
 export default {
@@ -26,30 +33,9 @@ steps:
     emphasis: true
   - label: セッションDB
     note: 30分間保存する`,
-  fields: [
-    'steps: 手順の配列。上から順に矢印でつなぐ',
-    'steps[].label: 箱の名前（必須）',
-    'steps[].note: 箱の中の補足（任意）',
-    'steps[].emphasis: true にすると強調色で描く（任意、図全体で1つまで）',
-    'steps[].ref: 根拠の番号（任意）。同じセクションの yaml refs の何番目かを書く',
-  ],
+  fields: describe(schema, contractLimits),
 
-  validate(spec, limits) {
-    const errors = [...unknownKeys(spec, ['type', 'steps'], 'flow')];
-    if (!Array.isArray(spec.steps) || spec.steps.length < 2) {
-      errors.push('flow には steps が2つ以上必要です。');
-      return errors;
-    }
-    if (spec.steps.length > limits.flow.maxSteps) {
-      errors.push(`steps が${spec.steps.length}個あります。上限は${limits.flow.maxSteps}個です。セクションを分けてください。`);
-    }
-    spec.steps.forEach((s, i) => {
-      if (!s || typeof s.label !== 'string') errors.push(`steps[${i}] に label がありません。`);
-      errors.push(...unknownKeys(s, ['label', 'note', 'emphasis', 'ref'], `steps[${i}]`));
-    });
-    if (spec.steps.filter((s) => s?.emphasis).length > 1) errors.push('emphasis を付けられる箱は1つまでです。');
-    return errors;
-  },
+  validate: (spec, limits) => checkSpec(spec, schema, 'flow', limits),
 
   labels: (spec) => spec.steps.map((s) => s.label),
   notes: (spec) => spec.steps.map((s) => s.note).filter((n): n is string => Boolean(n)),
