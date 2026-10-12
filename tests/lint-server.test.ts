@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cli = path.join(root, 'src/cli.ts');
@@ -46,11 +46,17 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     if (ca === undefined) delete process.env.NODE_EXTRA_CA_CERTS;
     else process.env.NODE_EXTRA_CA_CERTS = ca;
     assert.equal(socketPath(), plain);
+    // 常駐するプロセスが答えることは、Node のフラグを付けない子のプロセスで確かめる（node --test の中では、テストのためのフラグが付き、接続先が変わるため）。
+    // Node のフラグが違えば、別の接続先にする。
+    const probe = path.join(home, 'probe.mjs');
+    fs.writeFileSync(probe, `const m = await import(${JSON.stringify(pathToFileURL(path.join(root, 'src/lint/server.ts')).href)});\nconst file = process.argv[2];\nconsole.log(JSON.stringify({ sock: m.socketPath(), result: file ? await m.lintOnServer((await import('node:fs')).readFileSync(file, 'utf8'), file, { textlint: false }) : null }));\n`);
+    const runProbe = (...args: string[]) => JSON.parse(spawnSync(process.execPath, [...args], { cwd: root, env, encoding: 'utf8' }).stdout);
+    const direct = runProbe(probe, path.join(root, 'corpus/bad/prose.md'));
+    assert.ok(direct.result?.findings.some((f: { rule: string }) => f.rule === 'P001'));
+    assert.notEqual(runProbe('--stack-trace-limit=50', probe).sock, direct.sock);
     const saved = process.env.HOME;
     process.env.HOME = home;
     try {
-      const direct = await lintOnServer(fs.readFileSync(path.join(root, 'corpus/bad/prose.md'), 'utf8'), path.join(root, 'corpus/bad/prose.md'), { textlint: false });
-      assert.ok(direct?.findings.some((f) => f.rule === 'P001'));
       // ほかの利用者も入れる置き場所なら、偽のソケットかもしれないので使わない。呼んだ側が自分で検査する。
       fs.chmodSync(run, 0o755);
       assert.equal(await lintOnServer('# a\n', path.join(root, 'a.md'), { textlint: false }), null);

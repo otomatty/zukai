@@ -33,10 +33,22 @@ type Response = { result: LintResult } | { error: string } | { denied: true };
 // Node が起動するときにだけ読む環境変数。動いているプロセスの process.env を変えても効かない（出典を取りに行く HTTPS の証明書やプロキシなど）。
 const startupEnv = (n: string) => n.startsWith('NODE_') || /^(SSL_CERT_(FILE|DIR)|(HTTPS?|NO|ALL)_PROXY)$/i.test(n);
 
-// 接続先の名前。zukai の場所、ホームのフォルダ、Node の本体と版、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
+// 呼んだ側の Node のフラグ（--use-system-ca など）。常駐する側も同じフラグで起動し、接続先の名前にも含める。
+// -e と -p は、続くコードを常駐する側で動かさないよう除く。
+function nodeFlags(): string[] {
+  const out: string[] = [];
+  const args = process.execArgv;
+  for (let i = 0; i < args.length; i++) {
+    if (/^(-e|-p|--eval|--print)$/.test(args[i])) i++;
+    else if (!/^--(eval|print)=/.test(args[i])) out.push(args[i]);
+  }
+  return out;
+}
+
+// 接続先の名前。zukai の場所、ホームのフォルダ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
 // ホームのフォルダが違えば設定（~/.zukai）が違うので、別のプロセスにする。Node や起動時の環境変数が違うときも、同じ結果にならないので別にする。
 function versionKey(): string {
-  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.execPath}\0${process.version}`);
+  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
   for (const [n, v] of Object.entries(process.env).filter(([n]) => startupEnv(n)).sort(([a], [b]) => (a < b ? -1 : 1))) h.update(`\0${n}=${v}`);
   const add = (rel: string) => {
     try {
@@ -153,7 +165,7 @@ function send(sock: string, req: Request): Promise<Response> {
 
 function start(): void {
   const self = fileURLToPath(import.meta.url);
-  spawn(process.execPath, [self], { cwd: root, detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+  spawn(process.execPath, [...nodeFlags(), self], { cwd: root, detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
 }
 
 // --- 常駐する側 -------------------------------------------------------------
