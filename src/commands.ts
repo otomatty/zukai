@@ -77,6 +77,7 @@ export const commands: Command[] = [
       { name: 'confluence-space', value: 'ID', desc: '初回の publish でページを作るスペースの ID' },
       { name: 'confluence-parent', value: 'ID', desc: '初回の publish でページを置く親ページの ID' },
       { name: 'scope', value: 'team|local', desc: 'チームの設定を変えるとき、チームに共有するか（team）、自分だけにするか（local）。省略すると team' },
+      { name: 'lang', value: 'ja|en', desc: 'setup と doctor の表示言語。対話では最初に選ぶ。この PC の設定に書く' },
     ],
     examples: ['zukai setup', 'zukai setup video', 'zukai setup --output=video --voice=Puck --yes'],
     settings: ['output', 'video.voice', 'video.style', 'video.bgm', 'confluence.base', 'confluence.spaceId', 'confluence.parentId'],
