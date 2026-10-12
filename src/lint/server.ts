@@ -240,4 +240,6 @@ async function serve(): Promise<void> {
   idle();
 }
 
-if (import.meta.main) await serve();
+// 直接起動されたときだけ常駐する。import.meta.main は Node 24.2 からなので、起動したファイルと見比べる（package.json の engines は >=24）。
+const entry = process.argv[1];
+if (entry && fs.realpathSync(entry) === fs.realpathSync(fileURLToPath(import.meta.url))) await serve();
