@@ -37,7 +37,15 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     });
     assert.deepEqual(JSON.parse(reply), { denied: true });
     // 常駐するプロセスが答えること。使えないときは null が返り、呼んだ側が自分で検査する。
-    const { lintOnServer } = await import('../src/lint/server.ts');
+    const { lintOnServer, socketPath } = await import('../src/lint/server.ts');
+    // Node が起動するときにだけ読む環境変数が違えば、別の接続先（別のプロセス）にする。
+    const plain = socketPath();
+    const ca = process.env.NODE_EXTRA_CA_CERTS;
+    process.env.NODE_EXTRA_CA_CERTS = path.join(home, 'ca.pem');
+    assert.notEqual(socketPath(), plain);
+    if (ca === undefined) delete process.env.NODE_EXTRA_CA_CERTS;
+    else process.env.NODE_EXTRA_CA_CERTS = ca;
+    assert.equal(socketPath(), plain);
     const saved = process.env.HOME;
     process.env.HOME = home;
     try {
