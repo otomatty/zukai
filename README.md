@@ -22,7 +22,7 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 
 ## はじめ方
 
-zukai は npm に公開していません。リポジトリを clone し、`npm link` で `zukai` コマンドとして使えるようにします。
+zukai は npm に公開していません。リポジトリを clone し、`npm link` で `zukai` コマンドとして使えるようにします。Node.js 24 以上が必要です。
 
 ```bash
 git clone <このリポジトリ> && cd zukai
@@ -72,7 +72,7 @@ zukai corpus                       # Lint 自体が期待どおりに動くか�
 zukai stats                        # ルールごとの実績を表示する
 ```
 
-コマンドは、`src/commands.js` の定義から引数を検査し、help を作ります。書き間違えたコマンドやオプションには、候補を示します。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.js` で同じように動きます。
+コマンドは、`src/commands.ts` の定義から引数を検査し、help を作ります。書き間違えたコマンドやオプションには、候補を示します。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.ts` で同じように動きます。
 
 Claude Code から使う場合は、`skills/zukai/SKILL.md` をスキルとして読み込ませます。SKILL.md は手順だけを持ち、書き方は `zukai prompt` の出力に任せています。
 
@@ -426,7 +426,7 @@ AWS のアイコンは、AWS が構成図の作成用に配布しているもの
 
 ログインが必要な画面は撮影できません。その場合は、手元で撮った PNG を置き、`marks[].at` に枠の位置を書きます。個人情報が写る要素は `mask` に書くと、撮影の前に塗りつぶします。
 
-型を足すときは、`src/figures/` に1ファイルを追加し、`index.js` に1行を足します。1つの型は、`validate`（仕様の検証）、`fit`（文字が箱に収まるかの検証）、`render`（SVG の描画）を持ちます。
+型を足すときは、`src/figures/` に1ファイルを追加し、`index.ts` に1行を足します。1つの型は、`validate`（仕様の検証）、`fit`（文字が箱に収まるかの検証）、`render`（SVG の描画）を持ちます。
 
 ## 用語の表記
 
@@ -556,3 +556,23 @@ P005（抽象語）と P006（指示語）は、専門用語や自然な用法�
 ## 閾値について
 
 `contract/limits.json` の数値は、すべて初期値の仮説です。実際の題材で3〜5件の資料を作り、`stats` の数字を見て調整してください。
+
+## 開発
+
+zukai は TypeScript で書いています。Node.js 24 は `.ts` のファイルから型を取り除いてそのまま実行するので、ビルドの手順はありません。`tsc` は型を検査するだけで、JavaScript を書き出しません。
+
+```bash
+npm run typecheck   # 型を検査する（tsc）
+npm test            # テストを動かす
+npm run check       # 型の検査とテストを続けて行う
+```
+
+| 決まり | 理由 |
+|---|---|
+| enum、namespace、引数のプロパティを使わない（`erasableSyntaxOnly`） | Node は型を取り除くだけで、変換はしないため |
+| 型だけを読むときは `import type` と書く（`verbatimModuleSyntax`） | 型を取り除いたあとに、実在しない値の import が残らないようにするため |
+| 相対パスの import には `.ts` を付ける | Node が、書いたパスのファイルをそのまま読むため |
+| 図の型は `satisfies FigureType<仕様の型>` で書く | `validate` は検証前の値（`UncheckedSpec`）を、`render` などは検証済みの値を受け取るため |
+| ブラウザで動く `src/video/runtime.browser.js` は JavaScript のまま置き、JSDoc の型で検査する | Chromium に、変換せずにそのまま渡すため |
+
+zukai を `node_modules` の中に置くと、Node は `.ts` のファイルを実行しません。`npm install` で依存として入れずに、clone して `npm link` で使います。

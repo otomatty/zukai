@@ -1,0 +1,62 @@
+// 自作ルールの一覧。1ルールは ID、重さ、根拠を持つ。
+// error は修正が必須。warn は「具体的に書き直せるなら直す」候補で、Lint の合否には影響しない。
+// 根拠は docs や記事の該当箇所。ルールを削るかどうかは `zukai stats` の数字で判断する。
+import type { Severity } from '../types.ts';
+
+export interface Rule {
+  severity: Severity;
+  title: string;
+  basis: string;
+}
+
+export const rules: Record<string, Rule> = {
+  S001: { severity: 'error', title: '見出しの直後に主張文がない', basis: '図より先に結論を1文で示す' },
+  S002: { severity: 'error', title: '主張文が1文でない', basis: '1セクション1主張' },
+  S003: { severity: 'error', title: '主張文が長い', basis: '一文一トピック（ushitora 3章）' },
+  S004: { severity: 'error', title: '主張文の直後に図がない', basis: '図解で説明する方針' },
+  S005: { severity: 'error', title: '1セクションに図が複数ある', basis: '1セクション1図' },
+  S006: { severity: 'error', title: '説明文が長い', basis: 'テキストは図の説明に留める方針' },
+  F001: { severity: 'error', title: '図の仕様が正しくない', basis: '型カタログの定義' },
+  F002: { severity: 'error', title: '図のラベルが長い、または箱に収まらない', basis: '描画後に文字がはみ出さないこと' },
+  F003: { severity: 'warn', title: '画面を説明しているのに、実物の画面を使っていない', basis: '図は実物のスクリーンショットを優先する方針' },
+  R001: { severity: 'error', title: '根拠の書式が正しくない', basis: '根拠の表示の定義' },
+  R002: { severity: 'error', title: 'コード参照を確認できない', basis: 'コードの抜粋は実物から取り込む' },
+  R003: { severity: 'error', title: '引用の原文が出典に見つからない', basis: '架空の引用を防ぐ' },
+  R004: { severity: 'warn', title: '出典を取得できず、原文を照合できていない', basis: '照合できない引用を見分ける' },
+  R005: { severity: 'error', title: '日本語以外の引用に訳がない', basis: '原文と日本語訳を併記する方針' },
+  R006: { severity: 'error', title: '引用が長い', basis: '引用は主張に必要な範囲に留める' },
+  C001: { severity: 'error', title: 'コードブロックの言語名がない、または未対応', basis: 'シンタックスハイライトで読みやすくする方針' },
+  P001: { severity: 'error', title: '「AではなくB」の対比', basis: 'ushitora 4章・6章、yomiyasu 原則5' },
+  P002: { severity: 'error', title: '遠回しな可能表現', basis: 'ushitora 6章 冗長な可能表現' },
+  P003: { severity: 'error', title: '内容のない前置き・締め', basis: 'ushitora 1章 空疎な導入、yomiyasu 原則5' },
+  P004: { severity: 'error', title: '比喩的な動詞', basis: 'ushitora 2章 比喩的な動作表現、yomiyasu 原則4' },
+  P005: { severity: 'warn', title: '抽象語', basis: 'ushitora 2章 具体性の不足' },
+  P006: { severity: 'warn', title: '指示語だけで対象を示している', basis: 'ushitora 5章 不適切な省略、yomiyasu 原則1' },
+  P007: { severity: 'error', title: '用語集と違う表記', basis: 'zukai.config.json の terms。チームで決めた表記にそろえる' },
+};
+
+// 文章ルールのパターン。辞書を増やす前に、stats で発火と修正の実績を確認する。
+export interface ProsePattern {
+  rule: string;
+  // 省略したときは、ルールの重さ。
+  severity?: Severity;
+  re: RegExp;
+  hint: string;
+}
+export const prosePatterns: ProsePattern[] = [
+  { rule: 'P001', re: /(単なる|単に)[^。]*では(ない|ありません)/, hint: '先に正しい内容を肯定文で書いてください。' },
+  { rule: 'P001', re: /[^、。]{2,}(のではなく|ではなく、)[^、。]{2,}/, hint: 'AとBが両立するなら対立させず、Bを肯定文で書いてください。' },
+  // 「AではなくBが送ります」のように、読点を挟まず名詞を言い換える形は、事実の訂正であることが多いので warn にとどめる。
+  { rule: 'P001', severity: 'warn', re: /[^、。]{2,}ではなく[^、。]{2,}/, hint: '対比そのものが伝えたい内容でなければ、Bを肯定文で書いてください。' },
+  { rule: 'P002', re: /すること(で|により)[^。]*(ことができ|ことが可能)/, hint: '「AするとBします」のように、主体と動作を直接書いてください。' },
+  { rule: 'P002', re: /することが(でき|可能)/, hint: '「〜できます」か、主体と動作の直接表現にしてください。' },
+  { rule: 'P003', re: /いくつか(の)?(重要な)?(点|ポイント)があります/, hint: '前置きを消し、点の中身から書いてください。' },
+  { rule: 'P003', re: /以下(に|で)[^。]{0,12}(示します|説明します|紹介します|解説します)/, hint: '後に続く内容の分類や数を具体的に書くか、文ごと消してください。' },
+  { rule: 'P003', re: /(重要なのは|結論から言うと|正直に言うと)/, hint: '前置きを消してください。' },
+  { rule: 'P003', re: /(いかがでした|参考になれば幸いです|ぜひ[^。]{0,8}してみてください)/, hint: '締めの定型句を消してください。' },
+  { rule: 'P004', re: /(静かに(壊れ|落ち|失敗)|黙って(無視|捨て|スキップ)|側に倒[すしせ]|時間を溶か|地味に効|じわじわ効|負荷を逃が|(1つ|一つ)ずつ潰)/, hint: '何がどこへ移り、何が増減するかを直接書いてください。' },
+  { rule: 'P005', re: /(柔軟性|利便性|安定性|処理能力|拡張性)/, hint: '何ができるようになるか、何が増減するかを書いてください。' },
+  { rule: 'P005', re: /(適切に|必要に応じて|様々な|さまざまな)/, hint: '条件や対象を具体的に書いてください。' },
+  { rule: 'P005', re: /に対応(し|する|でき)/, hint: '「対応」が指す具体的な動作を書いてください。' },
+  { rule: 'P006', re: /^(これ|それ|これら|それら)(は|を|が|に|で|も)/, hint: '対象の名前をもう一度書いてください。' },
+];
