@@ -9,7 +9,7 @@ import { esc } from './figures/svg.ts';
 import { createHighlighter } from 'shiki';
 import { readJson, knownLang } from './lint/index.ts';
 import { themeFor } from './theme.ts';
-import { typesFor } from './figures/custom.ts';
+import { typeOf, typesFor } from './figures/custom.ts';
 import type { Theme } from './theme.ts';
 import type { LintContext } from './lint/index.ts';
 import type { RefItem } from './refs.ts';
@@ -95,8 +95,7 @@ export async function render(source: string, file?: string, { theme: given }: { 
       return highlighter.codeToHtml(tk.content.replace(/\n$/, ''), { lang, theme: tokens.codeTheme }) + '\n';
     }
     const block = doc.sections.flatMap((s) => s.blocks).find((b): b is FigureBlock => b.kind === 'figure' && b.line === tk.map![0] + 1);
-    // 型の名前でない値（無い、数など）は、どの型にも当たらない。
-    const type = ctx.types[block?.spec?.type as string];
+    const type = typeOf(ctx.types, block?.spec);
     // 型が見つかったなら、図のブロックと仕様はある。
     if (!type || type.validate(block!.spec!, limits, ctx).length) {
       return `<figure class="error">この図は描画できません。<code>zukai lint</code> の F001 を確認してください。</figure>\n`;
@@ -167,8 +166,7 @@ export async function renderConfluence(source: string, sourceName: string): Prom
       return macro('code', `${param}<ac:plain-text-body>${cdata(tk.content)}</ac:plain-text-body>`) + '\n';
     }
     const block = doc.sections.flatMap((s) => s.blocks).find((b): b is FigureBlock => b.kind === 'figure' && b.line === tk.map![0] + 1);
-    // 型の名前でない値（無い、数など）は、どの型にも当たらない。
-    const type = ctx.types[block?.spec?.type as string];
+    const type = typeOf(ctx.types, block?.spec);
     // 型が見つかったなら、図のブロックと仕様はある。
     if (!type || type.validate(block!.spec!, limits, ctx).length) throw new Error(`L${tk.map![0] + 1} の図を描画できません。先に zukai lint を通してください。`);
     const name = `fig-${String(figures.length + 1).padStart(2, '0')}.png`;

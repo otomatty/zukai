@@ -143,7 +143,12 @@
     },
     // 毎コマ frame(t, root, info) を呼ぶ。t はシーンが始まってからの秒数。状態を持たず、t から計算する。
     // info は { index, text, example, talking, level }。話している行と声の大きさで、絵を動かせる。
+    // シーンの外（タイマーの中など）で呼ぶと、どのシーンの絵か分からないので、登録せずに知らせる。
     scene(frame) {
+      if (running == null) {
+        errors.push({ scene: null, message: 'zk.scene は、シーンのスクリプトを読み込む間に呼んでください。タイマーの中では呼べません。' });
+        return;
+      }
       hooks.push({ id: running, frame });
     },
     // 名前の付いた効果音（appear、whoosh、chime など。一覧は prompts/video.md）を、シーンの at 秒に鳴らす。

@@ -4,9 +4,9 @@ import path from 'node:path';
 import { parse, sentences } from '../parse.ts';
 import { readJson } from '../lint/index.ts';
 import { themeFor } from '../theme.ts';
-import { typesFor } from '../figures/custom.ts';
+import { typeOf, typesFor } from '../figures/custom.ts';
 import MarkdownIt from 'markdown-it';
-import type { AnyFigureType, Block, FigureBlock, Limits, MotionBlock, NarrationBlock, RawSpec, RefsBlock, Severity, Tokens } from '../types.ts';
+import type { Block, FigureBlock, Limits, MotionBlock, NarrationBlock, RawSpec, RefsBlock, Severity, Tokens } from '../types.ts';
 
 // 図の代わりに Markdown の表を置いたセクションの表。HTML は書けないようにして描く。
 const tableMd = new MarkdownIt({ html: false });
@@ -109,7 +109,7 @@ export function readOptions(html: string, defaults: SceneOptions = DEFAULT_OPTIO
         const n = Number(v);
         if (Number.isFinite(n) && n >= 0 && n <= 10) options.hold = n;
         else findings.push({ severity: 'warn', rule: 'V010', message: `hold="${v}" は使えません。0〜10 の秒数を書いてください。` });
-      } else if (choices[k]?.includes(v)) (options as Record<string, unknown>)[k] = v;
+      } else if (Object.hasOwn(choices, k) && choices[k]?.includes(v)) (options as Record<string, unknown>)[k] = v;
       else findings.push({ severity: 'warn', rule: 'V010', message: `<zk-options> の ${k}="${v}" は使えません。使えるのは ${Object.entries(OPTIONS).map(([n, vs]) => `${n}=${vs.join('|')}`).join('、')}、hold=秒数 です。` });
     }
     return '';
@@ -189,8 +189,8 @@ export function scenesOf(source: string, file: string): Scene[] {
     if (s.container) continue;
     const fig = s.blocks.find((b) => b.kind === 'figure' && b.spec) as (FigureBlock & { spec: RawSpec }) | undefined;
     const claim = s.blocks[0]?.kind === 'paragraph' ? s.blocks[0].text : s.title;
-    // YAML の type の値のまま引く。型の名前でなければ見つからない。type が見つかれば、fig もある。
-    const type: AnyFigureType | undefined = ctx.types[fig?.spec?.type as string];
+    // type が見つかれば、fig もある。
+    const type = typeOf(ctx.types, fig?.spec);
     // テーマの独自の型は、型ごとの動き（motion.js）を付けられる。ページで型の名前を印にする。
     const figureType = type?.custom ? (fig!.spec.type as string) : null;
     const figureSvg = type && !type.validate(fig!.spec, limits, ctx).length ? type.render(fig!.spec, tokens, ctx) : null;
@@ -208,7 +208,7 @@ export function scenesOf(source: string, file: string): Scene[] {
     shots.forEach((nb, k) => {
       const role = nb?.role ?? null;
       const findings: VideoFinding[] = [];
-      if (role && !ROLE_NAMES[role]) findings.push({ severity: 'warn', rule: 'V017', message: `役割「${role}」はありません。使える役割は ${Object.keys(ROLE_NAMES).join('、')} です。` });
+      if (role && !Object.hasOwn(ROLE_NAMES, role)) findings.push({ severity: 'warn', rule: 'V017', message: `役割「${role}」はありません。使える役割は ${Object.keys(ROLE_NAMES).join('、')} です。` });
       const motion = motions.find((m) => !used.has(m) && (m.role ?? null) === role);
       if (motion) used.add(motion);
       // 同じセクションの2つ目からのショットは、既定で切り替えの動きを付けずにつなぐ。
@@ -222,7 +222,7 @@ export function scenesOf(source: string, file: string): Scene[] {
       if (written && lines.length > L.maxShotLines) {
         findings.push({ severity: 'warn', rule: 'V107', message: role ? `このショットは${lines.length}行あります。目安は${L.maxShotLines}行までです。ショットを分けてください。` : `このシーンは${lines.length}行あります。目安は${L.maxShotLines}行までです。疑問（question）、答え（answer）、例（example）、用語（term）のショットに分けてください。` });
       }
-      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${ROLE_NAMES[role] ?? role}）` : s.title, role, claim, figureSvg, figureType, whole: !type || WHOLE.has(fig!.spec.type), tableHtml, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
+      out.push({ kind: motion ? 'free' : 'auto', heading: role ? `${s.title}（${Object.hasOwn(ROLE_NAMES, role) ? ROLE_NAMES[role] : role}）` : s.title, role, claim, figureSvg, figureType, whole: !type || WHOLE.has(fig!.spec.type), tableHtml, motionHtml: opt.html, options: opt.options, findings: [...opt.findings, ...findings], lines, refsBlock });
     });
     for (const b of extra) {
       out.at(-1)!.findings.push({ severity: 'error', rule: 'V018', message: `L${b.line} の yaml narration は、このセクションの2つ目の役割の無いナレーションなので、動画に入りません。1つにまとめるか、役割（question、answer、example、term）を付けてショットに分けてください。` });

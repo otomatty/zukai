@@ -19,11 +19,11 @@ export const builtinIcons: string[] = Object.keys(builtin);
 
 const awsFile = (name: string): string | null => (name.startsWith('aws/') && /^[A-Za-z0-9-]+$/.test(name.slice(4)) ? path.join(awsDir, `${name.slice(4)}.svg`) : null);
 
-export const iconExists = (name: string): boolean => name in builtin || Boolean(awsFile(name) && fs.existsSync(awsFile(name)!));
+export const iconExists = (name: string): boolean => Object.hasOwn(builtin, name) || Boolean(awsFile(name) && fs.existsSync(awsFile(name)!));
 
 // アイコンを、指定した位置と大きさの SVG として返す。
 export function iconSvg(name: string, x: number, y: number, size: number, t: Tokens): string {
-  if (name in builtin) {
+  if (Object.hasOwn(builtin, name)) {
     return `<svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="0 0 48 48"><g fill="none" stroke="${t.color.ink}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${builtin[name]}</g></svg>`;
   }
   // 組み込みにない名前は、検証（iconExists）で AWS のアイコンと確かめてある。
@@ -36,7 +36,8 @@ export function iconSvg(name: string, x: number, y: number, size: number, t: Tok
 const aliases: Record<string, string> = { sqs: 'simplequeue', sns: 'simplenotification', ses: 'simpleemail', s3: 'simplestorageservice', ecs: 'elasticcontainerservice', ecr: 'elasticcontainerregistry', eks: 'elastickubernetes', alb: 'elasticloadbalancing', elb: 'elasticloadbalancing', nlb: 'elasticloadbalancing', rds: 'amazonrds', iam: 'identityandaccessmanagement', kms: 'keymanagement', waf: 'awswaf', vpc: 'virtualprivatecloud', cdn: 'cloudfront' };
 
 export function searchIcons(keyword = ''): string[] {
-  const k = aliases[keyword.toLowerCase()] ?? keyword.toLowerCase();
+  const lower = keyword.toLowerCase();
+  const k = Object.hasOwn(aliases, lower) ? aliases[lower] : lower;
   const aws = fs.existsSync(awsDir) ? fs.readdirSync(awsDir).filter((f) => f.endsWith('.svg')).map((f) => `aws/${f.slice(0, -4)}`) : [];
   return [...builtinIcons, ...aws].filter((n) => n.toLowerCase().includes(k));
 }

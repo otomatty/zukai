@@ -143,6 +143,7 @@ emphasis: ゲートウェイ`,
     const names: readonly unknown[] = nodes.map((nd) => nd.label);
     if (new Set(names).size !== names.length) errors.push('同じ名前の要素があります。links で区別できるよう、名前を変えてください。');
     const n = spec.zones.length;
+    if (spec.groups != null && !Array.isArray(spec.groups)) return [...errors, 'groups は、{label, from, to} の配列にしてください。'];
     for (const [i, g] of (spec.groups ?? []).entries()) {
       errors.push(...unknownKeys(g, ['label', 'from', 'to'], `groups[${i}]`));
       if (typeof g?.label !== 'string' || !isInt(g?.from) || !isInt(g?.to) || g.from < 1 || g.to > n || g.from > g.to) return [...errors, `groups[${i}] は {label, from, to} で、from と to を1〜${n}の領域の番号にしてください。`];

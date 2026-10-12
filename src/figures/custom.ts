@@ -11,7 +11,7 @@ import { widthOf, unknownKeys } from './svg.ts';
 import { fill } from '../template.ts';
 import { tokensFor } from '../theme.ts';
 import type { FieldDef, Fields, Theme, TypeDef } from '../theme.ts';
-import type { FigureContext, FigureType, FigureTypes, Limits, RawSpec, Tokens } from '../types.ts';
+import type { AnyFigureType, FigureContext, FigureType, FigureTypes, Limits, RawSpec, Tokens } from '../types.ts';
 
 // 項目の定義に合うかを確かめる。def は type.json の fields の1項目。
 function checkField(v: unknown, def: FieldDef, at: string): string[] {
@@ -100,6 +100,13 @@ export function makeType(d: TypeDef): FigureType<RawSpec> & { fit(spec: RawSpec,
     title: (spec, t) => free.title({ svg: toSvg(spec, t) }),
     render: (spec, t) => free.render({ svg: toSvg(spec, t) }, t),
   };
+}
+
+// 仕様の type に当たる型。type が型の名前でなければ null。
+// toString や constructor のような、オブジェクトが元から持つ名前を、型と取り違えないため。
+export function typeOf(types: FigureTypes, spec: RawSpec | null | undefined): AnyFigureType | null {
+  const name = spec?.type;
+  return typeof name === 'string' && Object.hasOwn(types, name) ? types[name] : null;
 }
 
 // 型の一覧に、テーマの独自の型を足す。自由な図（free）は最後に置く。組み込みの型と同じ名前は、黙って置き換えずに止める。

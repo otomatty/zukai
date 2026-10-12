@@ -11,7 +11,7 @@ import { rules, prosePatterns } from './rules.ts';
 import { resolveRefs } from '../refs.ts';
 import { termsOf, findAvoided } from '../terms.ts';
 import { themeFor } from '../theme.ts';
-import { typesFor } from '../figures/custom.ts';
+import { typeOf, typesFor } from '../figures/custom.ts';
 import type { Block, CodeBlock, Doc, FigureBlock, FigureContext, FigureTypes, Finding, Limits, Section, Severity, Term, Tokens } from '../types.ts';
 
 // Lint が図と根拠を検査するときの文脈。原稿のフォルダ、テーマの値、使える図の型。
@@ -42,14 +42,9 @@ export const readJson = (rel: string) => JSON.parse(fs.readFileSync(path.join(ro
 const count = (list: string[]) => list.reduce<Record<string, number>>((acc, k) => ((acc[k] = (acc[k] ?? 0) + 1), acc), {});
 const finding = (rule: string, line: number, message: string): Finding => ({ rule, severity: rules[rule].severity, line, message });
 
-// 図の型。仕様の type に当たる型が無ければ null。
-const typeOf = (b: FigureBlock, ctx: LintContext) => {
-  const name = b.spec?.type;
-  return typeof name === 'string' && Object.hasOwn(ctx.types, name) ? ctx.types[name] : null;
-};
 // 仕様の検証に通った図の型。書きかけの図は F001 で知らせるので、ほかの検査では読まない。
 const validType = (b: FigureBlock, limits: Limits, ctx: LintContext) => {
-  const type = b.parseError ? null : typeOf(b, ctx);
+  const type = b.parseError ? null : typeOf(ctx.types, b.spec);
   return type && b.spec && !type.validate(b.spec, limits, ctx).length ? type : null;
 };
 
@@ -95,7 +90,7 @@ function lintStructure(section: Section, limits: Limits): Finding[] {
 function lintFigure(block: FigureBlock, limits: Limits, tokens: Tokens, ctx: LintContext): Finding[] {
   const out: Finding[] = [];
   if (block.parseError) return [finding('F001', block.line, `YAML を読めません。${block.parseError}`)];
-  const type = typeOf(block, ctx);
+  const type = typeOf(ctx.types, block.spec);
   if (!type) {
     return [finding('F001', block.line, `type「${block.spec?.type}」は使えません。使える型は ${Object.keys(ctx.types).join('、')} です。`)];
   }
