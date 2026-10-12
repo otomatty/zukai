@@ -196,15 +196,19 @@ export const checkSpec = (spec: object, fields: Fields, name: string, limits: Li
 
 // AI に渡す、項目の説明。「名前: 説明（必須、上限）」の形で、入れ子の項目も1行ずつ書く。
 export function describe(fields: Fields, limits?: Limits, prefix = ''): string[] {
-  return Object.entries(fields).flatMap(([k, def]) => {
-    const name = prefix + k;
-    const lines = (d: Field, path: string): string[] => {
-      if (d.type === 'list' && d.of.type === 'object') return describe(d.of.fields, limits, `${path}[].`);
-      if (d.type === 'object') return describe(d.fields, limits, `${path}.`);
-      return [];
-    };
-    return [`${name}: ${def.desc ?? ''}（${[def.required ? '必須' : '任意', ...extra(def, limits)].join('、')}）`, ...lines(def, name)];
-  });
+  return Object.entries(fields).flatMap(([k, def]) => [`${prefix + k}: ${def.desc ?? ''}（${[def.required ? '必須' : '任意', ...extra(def, limits)].join('、')}）`, ...inner(def, prefix + k, limits)]);
+}
+
+// 値の中の項目の説明。まとまりの項目、配列の要素（名前[]）、いくつかの形のうちのまとまりの形をたどる。
+function inner(d: Field, path: string, limits?: Limits): string[] {
+  if (d.type === 'object') return describe(d.fields, limits, `${path}.`);
+  if (d.type === 'oneOf') return d.options.flatMap((o) => (o.type === 'object' ? inner(o, path, limits) : []));
+  if (d.type !== 'list') return [];
+  const item = `${path}[]`;
+  // 配列の中の配列（compare の段など）は、要素の配列の説明と個数も1行で書く。説明も個数も無ければ書かない。
+  const notes = d.of.type === 'list' ? extra(d.of, limits) : [];
+  const head = d.of.type === 'list' && (d.of.desc || notes.length) ? [`${item}: ${d.of.desc ?? ''}${notes.length ? `（${notes.join('、')}）` : ''}`] : [];
+  return [...head, ...inner(d.of, item, limits)];
 }
 
 function extra(def: Field, limits?: Limits): string[] {
