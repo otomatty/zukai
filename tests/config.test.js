@@ -265,3 +265,23 @@ test('toString のような名前を、サービスや AI ツールと取り違�
   assert.equal(tools.code, 1);
   assert.match(tools.err, /--tools の「toString」はありません/);
 });
+
+test('setup の表示文は日本語と英語が揃い、--lang=en で英語の確認を出して言語を保存する', async () => {
+  const { phraseGaps } = await import('../src/locale.js');
+  assert.deepEqual(phraseGaps(), []);
+  const home = tmp('lang-home');
+  const project = tmp('lang');
+  fs.mkdirSync(path.join(project, '.git'));
+  const first = run(['setup', '--lang=en', '--yes'], { cwd: project, home });
+  assert.equal(first.code, 0, first.err + first.out);
+  assert.match(first.out, /Project /);
+  assert.match(first.out, /Gemini API key/);
+  assert.match(first.out, /silent, with subtitles only/);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.zukai', 'config.json'), 'utf8')).lang, 'en');
+  const again = run(['setup', '--yes'], { cwd: project, home });
+  assert.equal(again.code, 0, again.err + again.out);
+  assert.match(again.out, /No changes\./);
+  const bad = run(['setup', '--lang=fr', '--yes'], { cwd: project, home });
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /--lang に書けるのは ja か en です/);
+});
