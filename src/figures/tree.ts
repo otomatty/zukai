@@ -38,7 +38,7 @@ children:
       errors.push(...unknownKeys(c, ['label', 'items'], `children[${i}]`));
       if (typeof c?.label !== 'string') errors.push(`children[${i}] に label がありません。`);
       if (c?.items !== undefined && (!Array.isArray(c.items) || c.items.some((x: unknown) => typeof x !== 'string'))) errors.push(`children[${i}].items は名前の配列にしてください。`);
-      else if ((c?.items?.length ?? 0) > limits.tree.maxItems) errors.push(`children[${i}].items が${c.items.length}個あります。上限は${limits.tree.maxItems}個です。`);
+      else if (c?.items && c.items.length > limits.tree.maxItems) errors.push(`children[${i}].items が${c.items.length}個あります。上限は${limits.tree.maxItems}個です。`);
     });
     return errors;
   },

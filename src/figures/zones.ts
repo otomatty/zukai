@@ -158,7 +158,7 @@ emphasis: ゲートウェイ`,
     if (!Array.isArray(spec.links) || spec.links.length === 0) return [...errors, 'zones には links が1本以上必要です。'];
     if (spec.links.length > limits.zones.maxLinks) errors.push(`links が${spec.links.length}本あります。上限は${limits.zones.maxLinks}本です。`);
     for (const [i, l] of spec.links.entries()) {
-      if (!Array.isArray(l) || l.length < 2 || l.length > 3 || l.some((x) => typeof x !== 'string')) return [...errors, `links[${i}] は [つなぐ元, つなぐ先, 通信の名前] の組にしてください。`];
+      if (!Array.isArray(l) || l.length < 2 || l.length > 3 || !l.every((x): x is string => typeof x === 'string')) return [...errors, `links[${i}] は [つなぐ元, つなぐ先, 通信の名前] の組にしてください。`];
       const [a, b] = [find(l[0]), find(l[1])];
       if (!a || !b) { errors.push(`links[${i}] の「${a ? l[1] : l[0]}」は zones にありません。`); continue; }
       const [dc, dr] = [Math.abs(a.c - b.c), Math.abs(a.r - b.r)];

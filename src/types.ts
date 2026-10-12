@@ -163,8 +163,9 @@ export type RawSpec = { type?: unknown; [key: string]: unknown };
 
 // 検証する前の値。どの項目も無いかもしれず、配列の要素は null かもしれない。
 // 値の型は宣言どおりとは限らないので、validate は typeof や Array.isArray で確かめてから使う。
+// 配列は readonly にしない。readonly の配列を Array.isArray で絞ると、要素が any になり、要素の検査が型で確かめられなくなるため。
 export type Unchecked<T> = T extends readonly (infer U)[]
-  ? readonly Unchecked<U>[] | null | undefined
+  ? Unchecked<U>[] | null | undefined
   : T extends object
     ? { readonly [K in keyof T]?: Unchecked<T[K]> } | null | undefined
     : T | null | undefined;

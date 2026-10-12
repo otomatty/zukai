@@ -50,7 +50,7 @@ after:
       const side = spec[key];
       errors.push(...unknownKeys(side, key === 'after' ? ['label', 'rows', 'emphasis'] : ['label', 'rows'], key));
       if (typeof side?.label !== 'string') errors.push(`${key} に label がありません。`);
-      if (!Array.isArray(side?.rows) || side.rows.length === 0 || !side.rows.every((r) => Array.isArray(r) && r.length > 0 && r.every((x) => typeof x === 'string'))) {
+      if (!Array.isArray(side?.rows) || side.rows.length === 0 || !side.rows.every((r): r is string[] => Array.isArray(r) && r.length > 0 && r.every((x) => typeof x === 'string'))) {
         errors.push(`${key}.rows は、箱の名前を段ごとに並べた配列にしてください。`);
         continue;
       }

@@ -29,11 +29,10 @@ links:
   validate(spec, limits) {
     const errors = [...unknownKeys(spec, ['type', 'unit', 'links'], 'sankey'), ...unitError(spec, 'sankey')];
     if (!Array.isArray(spec.links) || spec.links.length < 2) return [...errors, 'sankey には links が2つ以上必要です。'];
-    if (!spec.links.every((l) => Array.isArray(l) && l.length === 3 && typeof l[0] === 'string' && typeof l[1] === 'string' && isNumber(l[2]) && l[2] > 0)) {
+    if (!spec.links.every((l): l is SankeyLink => Array.isArray(l) && l.length === 3 && typeof l[0] === 'string' && typeof l[1] === 'string' && isNumber(l[2]) && l[2] > 0)) {
       return [...errors, 'links は [流れの元, 流れの先, 0より大きい量] の組にしてください。'];
     }
-    // links の形は上で確かめたので、ここからは検証した後の形として読む。
-    const valid = spec as { readonly links: readonly SankeyLink[] };
+    const valid = { links: spec.links };
     if (spec.links.length > limits.sankey.maxLinks) errors.push(`links が${spec.links.length}本あります。上限は${limits.sankey.maxLinks}本です。`);
     const nodes = nodesOf(valid);
     if (nodes.length > limits.sankey.maxNodes) errors.push(`箱が${nodes.length}個あります。上限は${limits.sankey.maxNodes}個です。`);

@@ -1,6 +1,6 @@
 import { open, close, px, esc, unknownKeys } from './svg.ts';
 import { seriesColor } from './chart.ts';
-import type { FigureType, UncheckedSpec } from '../types.ts';
+import type { FigureType } from '../types.ts';
 
 export interface VennSet {
   label: string;
@@ -106,7 +106,8 @@ overlaps:
     });
     if (errors.length) return errors;
     // sets の形は上で確かめたので、ここからは検証した後の形として読む。
-    const valid = spec as UncheckedSpec<VennSpec> & { readonly sets: readonly VennSet[] };
+    const sets = spec.sets as VennSet[];
+    const valid = { sets };
     if (new Set(names(valid)).size !== spec.sets.length) return ['sets に同じ名前があります。'];
     if (!Array.isArray(spec.overlaps) || spec.overlaps.length === 0) return ['venn には overlaps が1つ以上必要です。重なりがない集合は、表で示します。'];
     const g = layout(spec.sets.length);
@@ -120,11 +121,12 @@ overlaps:
       const key = [...o.sets].sort().join('＋');
       if (seen.has(key)) errors.push(`「${o.sets.join('」と「')}」の重なりが2回書かれています。1つにまとめてください。`);
       seen.add(key);
-      const slot = slotOf(valid, o, g);
+      const slot = slotOf(valid, { sets: o.sets }, g);
       if (o.items.length > slot.max) errors.push(`「${o.sets.join('」と「')}」の重なりに items が${o.items.length}個あります。この場所に書けるのは${slot.max}個までです。`);
     });
-    spec.sets.forEach((s, i) => {
-      if ((s.items ?? []).length > g.only[i].max) errors.push(`「${s.label}」だけの項目が${s.items.length}個あります。この場所に書けるのは${g.only[i].max}個までです。`);
+    sets.forEach((s, i) => {
+      const items = s.items ?? [];
+      if (items.length > g.only[i].max) errors.push(`「${s.label}」だけの項目が${items.length}個あります。この場所に書けるのは${g.only[i].max}個までです。`);
     });
     if (spec.overlaps.filter((o) => o?.emphasis).length > 1) errors.push('emphasis を付けられる重なりは1つまでです。');
     return errors;
