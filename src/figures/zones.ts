@@ -44,8 +44,6 @@ const schema = {
 export type ZonesSpec = { type: 'zones' } & Infer<typeof schema>;
 type ZoneNode = Infer<typeof nodeFields>;
 type ZoneGroup = NonNullable<ZonesSpec['groups']>[number];
-// 書き方の説明では、zones の後ろに要素の項目を挟む。
-const { zones, ...rest } = schema;
 // 置き場所の決まった要素。c は領域の番号、r は領域の中の段の番号（どちらも0始まり）。
 interface PlacedNode extends ZoneNode {
   c: number;
@@ -129,7 +127,7 @@ links:
   - [ゲートウェイ, 認証サービス, 社内通信]
   - [認証サービス, セッションDB]
 emphasis: ゲートウェイ`,
-  fields: [...describe({ zones }, contractLimits), ...describe(nodeFields, contractLimits, 'zones[].nodes[].'), ...describe(rest, contractLimits)],
+  fields: describe(schema, contractLimits),
 
   validate(spec, limits) {
     const errors = checkSpec(spec, schema, 'zones', limits);

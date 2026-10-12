@@ -5,6 +5,7 @@
 //   {{= 式}}               数値の計算。+ - * / %、かっこ、min max round floor ceil、width(文字, 大きさ)（文字の幅の見積り）が使える
 // このファイルは重い依存を読まない。theme.ts が、テーマを読むときにひな形を確かめるため。
 import { widthOf } from './figures/svg.ts';
+import { msg } from './messages.ts';
 
 // 数式の木。
 type Expr =
@@ -52,23 +53,23 @@ export function compile(src: string): Template {
     if (m.index > last) top().children.push(src.slice(last, m.index));
     last = re.lastIndex;
     const [, op, body = ''] = m;
-    if (!body) throw new Error(`空の {{ }} があります（${m.index}文字目）。`);
+    if (!body) throw new Error(msg('template.empty', { pos: m.index }));
     if (op === '#' || op === '^') {
       const node: Block = { op, name: body, children: [] };
       top().children.push(node);
       stack.push(node);
     } else if (op === '/') {
       const opened = stack.length > 1 ? (stack.pop() as Block) : null;
-      if (!opened || opened.name !== body) throw new Error(`{{/${body}}} に対応する {{#${body}}} がありません。`);
+      if (!opened || opened.name !== body) throw new Error(msg('template.unmatched', { name: body }));
     } else if (op === '=') {
       top().children.push({ op, expr: parseExpr(body) });
     } else top().children.push({ op: 'value', name: body });
   }
-  if (stack.length > 1) throw new Error(`{{#${(top() as Block).name}}} が閉じていません。`);
+  if (stack.length > 1) throw new Error(msg('template.unclosed', { name: (top() as Block).name }));
   if (last < src.length) root.children.push(src.slice(last));
   // 閉じていない {{ や、対応の無い }} は、文字としてそのまま図に出てしまうので止める。
   const stray = (node: Template | Block): boolean => node.children.some((c) => (typeof c === 'string' ? /\{\{|\}\}/.test(c) : 'children' in c && stray(c)));
-  if (stray(root)) throw new Error('閉じていない {{ か、対応の無い }} があります。');
+  if (stray(root)) throw new Error(msg('template.stray'));
   return root;
 }
 
@@ -99,7 +100,7 @@ function render(node: Template | Block, scopes: Scope[]): string {
       if (typeof c === 'string') return c;
       if (c.op === 'value') {
         const v = lookup(scopes, c.name);
-        if (v !== null && typeof v === 'object') throw new Error(`{{${c.name}}} は値ではなく、まとまりです。{{#${c.name}}} で中を書きます。`);
+        if (v !== null && typeof v === 'object') throw new Error(msg('template.group', { name: c.name }));
         return v === undefined || v === null ? '' : esc(v);
       }
       if (c.op === '=') {
@@ -180,12 +181,12 @@ const FNS: Record<string, (...xs: number[]) => number> = { min: Math.min, max: M
 
 function parseExpr(src: string): Expr {
   const tokens = src.match(/\s*(\d+(?:\.\d+)?|[A-Za-z_@.][\w@.]*|"[^"]*"|[-+*/%(),])/g);
-  if (!tokens || tokens.join('').replace(/\s/g, '') !== src.replace(/\s/g, '')) throw new Error(`{{= ${src}}} を読めません。数、名前、+ - * / %、かっこだけを使えます。`);
+  if (!tokens || tokens.join('').replace(/\s/g, '') !== src.replace(/\s/g, '')) throw new Error(msg('template.expr', { src }));
   const ts = tokens.map((t) => t.trim());
   let i = 0;
   const peek = () => ts[i];
   const take = (t: string) => {
-    if (ts[i] !== t) throw new Error(`{{= ${src}}} の「${ts[i] ?? '終わり'}」の前に「${t}」が要ります。`);
+    if (ts[i] !== t) throw new Error(msg('template.expect', { src, got: ts[i] ?? msg('template.end'), want: t }));
     i++;
   };
   const expr = (): Expr => {
@@ -200,7 +201,7 @@ function parseExpr(src: string): Expr {
   };
   const factor = (): Expr => {
     const t = ts[i++];
-    if (t === undefined) throw new Error(`{{= ${src}}} が途中で終わっています。`);
+    if (t === undefined) throw new Error(msg('template.truncated', { src }));
     if (t === '-') return { op: 'neg', a: factor() };
     if (t === '(') {
       const n = expr();
@@ -210,7 +211,7 @@ function parseExpr(src: string): Expr {
     if (/^\d/.test(t)) return { num: Number(t) };
     if (t.startsWith('"')) return { str: t.slice(1, -1) };
     if (peek() === '(') {
-      if (t !== 'width' && !Object.hasOwn(FNS, t)) throw new Error(`{{= ${src}}} の関数「${t}」は使えません。min、max、round、floor、ceil、width を使えます。`);
+      if (t !== 'width' && !Object.hasOwn(FNS, t)) throw new Error(msg('template.fn', { src, fn: t }));
       i++;
       const args: Expr[] = [];
       if (peek() !== ')') {
@@ -226,7 +227,7 @@ function parseExpr(src: string): Expr {
     return { name: t };
   };
   const tree = expr();
-  if (i < ts.length) throw new Error(`{{= ${src}}} の「${ts[i]}」を読めません。`);
+  if (i < ts.length) throw new Error(msg('template.token', { src, token: ts[i] }));
   return tree;
 }
 
@@ -242,7 +243,7 @@ function evaluate(n: Expr, scopes: Scope[]): number | string {
     if (Array.isArray(v)) return v.length;
     // 文字の項目は、width() の引数としてだけ使える。
     if (typeof v === 'string') return v;
-    throw new Error(`{{= }} の「${n.name}」は数値ではありません。`);
+    throw new Error(msg('template.notNumber', { name: n.name }));
   }
   if ('fn' in n) {
     const args = n.args.map((a) => evaluate(a, scopes));
@@ -254,6 +255,6 @@ function evaluate(n: Expr, scopes: Scope[]): number | string {
   }
   if (n.op === 'neg') return -evaluate(n.a, scopes);
   const [a, b] = [evaluate(n.a, scopes), evaluate(n.b, scopes)];
-  if (typeof a !== 'number' || typeof b !== 'number') throw new Error('{{= }} で、文字を計算に使っています。文字の幅は width(名前, 大きさ) で求めます。');
+  if (typeof a !== 'number' || typeof b !== 'number') throw new Error(msg('template.textMath'));
   return { '+': a + b, '-': a - b, '*': a * b, '/': b === 0 ? 0 : a / b, '%': b === 0 ? 0 : a % b }[n.op];
 }

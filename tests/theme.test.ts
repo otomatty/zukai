@@ -580,8 +580,8 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   assert.deepEqual(await grey('#a8b0b9'), []);
   // neutral のヒートマップの数値は、最も濃いマス（chart.muted）の上で、color.onAccent か color.ink のどちらかで読めるかを確かめる。
   // 本文の色と同じ #1c2530 でも、白抜きの文字なら読めるので通す。中間の明るさの灰色は、どちらでも読めない。
-  // 動画の図は、暗い紙に自分の灰色を持つので、資料の図だけを見る。
-  const heat = async (muted: string) => (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted } })).tokens)).filter((x) => x.what === 'ヒートマップの数値' && !/video\./.test(x.message));
+  // 動画の図は、暗い紙に自分の灰色（video.figure.chart.muted）を持つ。既定の灰色は、neutral でも白抜きの文字で読める。
+  const heat = async (muted: string) => (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted } })).tokens)).filter((x) => x.what === 'ヒートマップの数値');
   assert.deepEqual(await heat('#1c2530'), []);
   assert.ok((await heat('#7a7a7a')).some((x) => x.severity === 'error' && /ヒートマップの最も濃いマスの地色 chart\.muted（#7a7a7a）/.test(x.message)));
   // series でも、系列の色が3つなら、4つ目を chart.muted、5つ目を chart.rest で描くので確かめる。5つあれば使わない。
@@ -702,4 +702,44 @@ test('型の動きが例外を出したら、図を元に戻して自動の動�
   } finally {
     await browser.close();
   }
+});
+
+test('テーマの誤りと見た目の検査の文は、lang の言語で出し、分類（what）は日本語のまま持つ', async () => {
+  const { setMessageLang, findingLabel, findingLabelGaps } = await import('../src/messages.ts');
+  const ink = { color: { ink: '#eeeeee' } };
+  try {
+    setMessageLang('en');
+    assert.deepEqual(readTheme(null, { set: { nope: 1, 'chart.mode': 'x' } }).problems, ['There is no item nope. The available items are listed in the tokens.json that zukai theme init creates.', 'chart.mode must be one of series, neutral.']);
+    assert.deepEqual(readTheme(null, { set: { 'gradient.stops': ['#fff'] } }).problems, ['gradient.stops must be an array of 2, 3, 4, or 5 colors (#rrggbb). Use [] when it is not used.']);
+    const findings = await checkTheme(readTheme(null, { set: { 'color.ink': '#eeeeee' } }).tokens);
+    const text = findings.find((f) => f.what === '図の文字');
+    assert.equal(text?.message, 'The contrast between color.ink (#eeeeee) and color.paper (#ffffff) is 1.16:1. Make it at least 4.5:1.');
+    assert.equal(findingLabel('図の文字'), 'Figure text');
+  } finally {
+    setMessageLang('ja');
+  }
+  assert.equal(findingLabel('図の文字'), '図の文字');
+  assert.match(readTheme(null, { set: { nope: 1 } }).problems[0], /^nope という項目はありません。/);
+  // checkTheme と themeReport が使う分類には、すべて英語の表示名がある。
+  const source = fs.readFileSync(fileURLToPath(new URL('../src/theme.ts', import.meta.url)), 'utf8');
+  const whats = new Set([...source.matchAll(/(?:pair|onFill)\('([^']+)'|what: '([^']+)'/g)].map((m) => m[1] ?? m[2]));
+  assert.ok(whats.size > 15);
+  assert.deepEqual(findingLabelGaps(whats), []);
+
+  // theme check は、~/.zukai/config.json の lang の言語で出す。
+  const { home, dir } = project(ink);
+  fs.mkdirSync(path.join(home, '.zukai'));
+  fs.writeFileSync(path.join(home, '.zukai', 'config.json'), JSON.stringify({ lang: 'en' }));
+  const check = run(['theme', 'check'], { cwd: dir, home });
+  assert.equal(check.code, 1);
+  assert.match(check.out, /^Theme "brand" \(/);
+  assert.match(check.out, /error {2}Figure text {2}The contrast between color\.ink \(#eeeeee\) and color\.paper \(#ffffff\) is 1\.16:1\./);
+  const json = JSON.parse(run(['theme', 'check', '--json'], { cwd: dir, home }).out);
+  assert.ok(json.findings.some((f: { what: string }) => f.what === '図の文字'));
+  fs.writeFileSync(path.join(dir, 'brand/tokens.json'), JSON.stringify({ nope: 1 }));
+  fs.writeFileSync(path.join(dir, 'a.md'), '# 題\n\n本文です。\n');
+  const lint = run(['lint', 'a.md'], { cwd: dir, home });
+  assert.equal(lint.code, 1);
+  assert.match(lint.err, /^The theme has errors\.\n.*There is no item nope\./);
+  assert.match(lint.err, /Run zukai theme check to see them\.\n$/);
 });

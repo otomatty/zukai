@@ -4,7 +4,7 @@
 import { enableCompileCache } from 'node:module';
 import { commandOf } from './commands.ts';
 import type { Command } from './commands.ts';
-import { closest } from './config.ts';
+import { applyMessageLang, closest } from './config.ts';
 
 // 読み込んだコードのコンパイル結果を、OS の一時フォルダに保存して使い回す。2回目からの起動が速くなる。
 // 重い依存は、各コマンドが後から読むので、ここで有効にすれば間に合う。場所は環境変数 NODE_COMPILE_CACHE で変えられる。
@@ -74,6 +74,8 @@ async function main(argv: string[]): Promise<number> {
     console.error(bad);
     return 1;
   }
+  // 設定とテーマの誤りの文を、この PC の設定の lang の言語で出す。設定が読めなくても止めない。
+  applyMessageLang();
   const code = await c.run({ args: parsed.args, opt: (n) => parsed.opts.get(n), has: (n) => parsed.bools.has(n) });
   return code ?? 0;
 }

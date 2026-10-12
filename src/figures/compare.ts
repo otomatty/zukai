@@ -7,9 +7,7 @@ import type { FigureType } from '../types.ts';
 const label = { type: 'string', required: true, desc: '枠の見出し' } as const;
 const rows = {
   type: 'list', required: true, min: 1, max: 'compare.maxRows', desc: '箱の名前を、上の段から順に並べた配列。上の段から下の段へ矢印を引く',
-  // 段の中の箱の数は、書き方の説明に出ないので、注意として添える。
-  note: `1段の箱は${contractLimits.compare.maxCols}個まで`,
-  of: { type: 'list', min: 1, max: 'compare.maxCols', of: { type: 'string' } },
+  of: { type: 'list', min: 1, max: 'compare.maxCols', desc: '1段の箱の名前の配列', of: { type: 'string' } },
 } as const;
 const schema = {
   before: { type: 'object', required: true, desc: '変更前の構成', fields: { label, rows } },

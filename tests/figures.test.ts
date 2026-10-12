@@ -120,3 +120,13 @@ test('任意の項目に null を書くと、書かなかったのと同じに�
     assert.deepEqual(await figures(withNull), await figures(without), withNull);
   }
 });
+
+test('項目の説明は、いくつかの形のうちのまとまりと、配列の中の配列の中身もたどる', async () => {
+  const { describe } = await import('../src/figures/schema.ts');
+  const lines = describe({
+    nodes: { type: 'list', required: true, desc: '要素', of: { type: 'oneOf', options: [{ type: 'string' }, { type: 'object', fields: { label: { type: 'string', required: true, desc: '名前' } } }] } },
+    rows: { type: 'list', desc: '段', of: { type: 'list', min: 1, max: 3, desc: '1段の箱', of: { type: 'string' } } },
+    cells: { type: 'list', desc: '行', of: { type: 'list', of: { type: 'number' } } },
+  });
+  assert.deepEqual(lines, ['nodes: 要素（必須）', 'nodes[].label: 名前（必須）', 'rows: 段（任意）', 'rows[]: 1段の箱（1〜3個）', 'cells: 行（任意）']);
+});
