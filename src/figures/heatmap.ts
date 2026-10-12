@@ -56,12 +56,12 @@ values:
     const text = axisText(t);
     const max = Math.max(...spec.values.flat());
     const top = `${fmt(max)}${spec.unit}`;
-    // マスの色は、値に応じて ramp の2色を混ぜた色（visualMap）。
+    // マスの色は、値に応じて ramp の2色を混ぜた色（visualMap）。値がすべて 0 のときは、ECharts は中間の色で塗る。
     const ramp = neutral(t) ? [t.color.surface, t.chart.muted] : [t.color.accentSurface, t.color.accent];
     // 値が大きいマスにだけ数値を書く。すべてのマスに書くと読みにくい。
     // 文字の色は、マスの色に合わせて白抜きか本文の色を選ぶ。どちらでも読めない中間の濃さのマスには書かない。
     const data = spec.values.flatMap((row, i) => row.map((v, j) => {
-      const label = labelOn(t, mix(ramp[0], ramp[1], max ? v / max : 0));
+      const label = labelOn(t, mix(ramp[0], ramp[1], max ? v / max : 0.5));
       const show = v >= max * 0.6 && label.ratio >= TEXT_CONTRAST;
       return { value: [spec.x[j], spec.y[i], v] as Cell, label: { show, color: label.color } };
     }));

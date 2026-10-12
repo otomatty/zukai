@@ -94,6 +94,16 @@ test('ヒートマップとツリーマップのラベルは、地色ごとに�
   assert.deepEqual(heatmap.validate(spec, limits), []);
   const cells = texts(heatmap.render(spec, t) as string).filter(([s, fill]) => /^\d+$/.test(s) && fill !== t.color.sub); // 凡例の目盛り（color.sub）は除く
   assert.deepEqual(cells, [['100', t.color.onAccent], ['80', t.color.onAccent], ['60', t.color.ink]]);
+  // 値がすべて 0 のときは、ECharts はマスを ramp の中間の色で塗る。文字の色も、その色で選ぶ。
+  // 淡い側を黒、濃い側を白にすると、ramp の端（黒）では白、中間（#808080）では黒が読みやすい色になる。
+  const darkMid = { ...t, color: { ...t.color, accentSurface: '#000000', accent: '#ffffff', ink: '#000000', onAccent: '#ffffff' } };
+  const zero = { type: 'heatmap' as const, unit: '件', x: ['a', 'b'], y: ['p', 'q'], values: [[0, 0], [0, 0]] };
+  assert.deepEqual(heatmap.validate(zero, limits), []);
+  const mid = heatmap.render(zero, darkMid) as string;
+  const fill = mid.match(/fill="rgb\((\d+),(\d+),(\d+)\)"/)!.slice(1).map(Number);
+  assert.deepEqual(fill, [128, 128, 128]);
+  // 中間の灰色（#808080）の上では黒（5.32:1）で書く。ramp の端（黒）で判定すると、白（3.95:1）で書いてしまう。
+  assert.deepEqual([...new Set(texts(mid).filter(([s, f]) => s === '0' && f !== t.color.sub).map(([, f]) => f))], ['#000000']);
   // ツリーマップは、上の階層の色ごとに選ぶ。既定の青は白、オレンジと緑は本文の色。どれも 4.5:1 以上。
   const tree = { type: 'treemap' as const, unit: '件', groups: [{ label: 'A', items: [{ label: 'a1', value: 30 }, { label: 'a2', value: 20 }] }, { label: 'B', items: [{ label: 'b1', value: 30 }] }, { label: 'C', items: [{ label: 'c1', value: 25 }] }] };
   const labels = Object.fromEntries(texts(treemap.render(tree, t) as string));
