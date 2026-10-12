@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { root, settingsFor } from './config.ts';
 import { compile, unknownNames } from './template.ts';
+import { contrast, linear, rgb, textOn, treemapColor, TEXT_CONTRAST } from './color.ts';
 import type { Shape, Template } from './template.ts';
 import type { Limits, Severity, Tokens } from './types.ts';
 
@@ -311,25 +312,13 @@ export const tokensFor = (start?: string): Tokens => themeFor(start).tokens;
 
 // --- 見た目の検査 -------------------------------------------------------------
 
-const rgb = (h: string) => {
-  const s = h.slice(1).length === 3 ? [...h.slice(1)].map((c) => c + c).join('') : h.slice(1);
-  return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16) / 255);
-};
-const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-const luminance = (h: string) => {
-  const [r, g, b] = rgb(h).map(linear);
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-};
 // 半透明の色 fg を、bg の上に重ねた色。
 const blend = (fg: string, bg: string, alpha: number) => `#${rgb(fg).map((v, i) => Math.round((v * alpha + rgb(bg)[i] * (1 - alpha)) * 255).toString(16).padStart(2, '0')).join('')}`;
 // 淡いグラデーションの濃さ。figures/svg.ts の TINT と同じ値にする（このファイルは図の部品を読まないため、ここにも置く）。
 const TINT_ALPHA = 0.16;
 
-// WCAG のコントラスト比。
-export const contrast = (a: string, b: string): number => {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-};
+// WCAG のコントラスト比。計算は src/color.ts にある（図も、地色に合う文字の色を選ぶのに使う）。
+export { contrast };
 
 // 色覚の違いの見え方（Viénot ら、1999）。1型（protan）と2型（deutan）を確かめる。3型は少なく、この近似の精度も低いので見ない。
 // 色の見え方を変える行列。null は通常の見え方。
@@ -361,7 +350,7 @@ export const distance = (a: string, b: string, m: Matrix | null = null): number 
 // 文字は 4.5:1（WCAG AA）。系列の色は、凡例とラベルが添うので、背景と見分けられる 2.5:1 までにする。
 // 既定の系列の緑（#1baf7a）が白地で 2.8:1 で、図の部品の基準の 3:1 では、検証済みの組み合わせまで知らせてしまうため。
 // 系列どうしの差は ΔE 23。既定の3色の最も近い組（1型色覚で 25）は通し、赤と緑の定番の組（2型色覚で 21）は知らせる。
-const TEXT = 4.5;
+const TEXT = TEXT_CONTRAST;
 const SERIES_BG = 2.5;
 export const SERIES_GAP = 23;
 // chart.mode が neutral のときの灰色（chart.muted）は、強調した1つを引き立てるため、系列の色より淡くてよい。
@@ -373,6 +362,8 @@ const MUTED_BG = 2;
 const FAINT = 1.4;
 // 系列の色を順に使う型（stack など）の、色の数の上限。contract/limits.json の stack.maxItems と同じ。
 const MAX_SERIES = 5;
+// ツリーマップの上の階層の数の上限。contract/limits.json の treemap.maxGroups と同じ。
+const TREEMAP_GROUPS = 3;
 
 // 見た目の検査。severity は error（文字が読めない）か warn（見分けにくい）。
 export interface ThemeFinding {
@@ -412,8 +403,18 @@ export async function checkTheme(t: Tokens): Promise<ThemeFinding[]> {
     // neutral では、強調しない棒や線を chart.muted（と、それを文字の色に寄せた色）で描く。
     // series でも、系列の色が足りなければ、次の1つを chart.muted、その先を chart.rest で描く（src/figures/chart.ts の seriesColor）。
     if (chart.mode === 'neutral' || chart.series.length < MAX_SERIES) pair('灰色の系列', chart.muted, c.paper, `${chartAt}.muted`, `${at}.paper`, MUTED_BG, 'warn');
-    // neutral のヒートマップは、color.surface から chart.muted までの色のマスに、color.ink で数値を書く。濃い側の chart.muted の上で確かめる。
-    if (chart.mode === 'neutral') pair('ヒートマップの数値', c.ink, chart.muted, `${at}.ink`, `${chartAt}.muted`);
+    // 塗った面の上の文字は、onAccent と ink のうち、地色とのコントラストが高いほうで書く（src/figures/chart.ts の labelOn）。
+    // where は地色の場所、kb は地色の項目の名前。
+    const onFill = (what: string, where: string, bg: string, kb: string) => {
+      const best = textOn(bg, [c.onAccent, c.ink]);
+      if (best.ratio < TEXT) out.push({ severity: 'error', what, message: `${where}の地色 ${kb}（${bg}）に対して、${at}.onAccent（${c.onAccent}）も ${at}.ink（${c.ink}）も、コントラストが ${TEXT}:1 に届きません（高いほうで ${best.ratio.toFixed(2)}:1）。どちらかが届く色にしてください。` });
+    };
+    // ヒートマップは、読める濃さのマスにだけ数値を書く。最も濃いマス（最大値）にも書けないと、数値が1つも出ない。
+    onFill('ヒートマップの数値', 'ヒートマップの最も濃いマス', chart.mode === 'neutral' ? chart.muted : c.accent, chart.mode === 'neutral' ? `${chartAt}.muted` : `${at}.accent`);
+    // ツリーマップは、上の階層の色の上に、見出しと下の階層の名前を書く。neutral では chart.muted を紙の色に寄せた色に塗る。
+    const tokens = { ...t, color: c, chart };
+    const groupKey = (i: number) => (chart.mode === 'neutral' ? `${chartAt}.muted を紙に寄せた色` : i < chart.series.length ? `${chartAt}.series[${i}]` : i === chart.series.length ? `${chartAt}.muted` : `${chartAt}.rest`);
+    for (let i = 0; i < TREEMAP_GROUPS; i++) onFill('ツリーマップの文字', `ツリーマップの${i + 1}つ目の階層`, treemapColor(tokens, i), groupKey(i));
     if (chart.mode === 'series' && chart.series.length < MAX_SERIES - 1) pair('残りの系列', chart.rest, c.paper, `${chartAt}.rest`, `${at}.paper`, FAINT, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {

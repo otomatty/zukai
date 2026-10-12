@@ -75,10 +75,40 @@ test('既定の値は見た目の検査を通り、読めない文字は error�
 
   const redGreen = await checkTheme(readTheme(themeDir({ chart: { series: ['#e41a1c', '#4daf4a', '#377eb8'] } })).tokens);
   assert.ok(redGreen.some((f) => f.severity === 'warn' && /2型色覚で見分けにくい/.test(f.message)));
-  assert.ok(redGreen.every((f) => f.severity === 'warn'));
+  // 系列の見分けは warn。error は、ツリーマップの青（#377eb8）の上で、白も本文の色も 4.5:1 に届かないことだけ。
+  assert.deepEqual(redGreen.filter((f) => f.severity === 'error').map((f) => [f.what, /ツリーマップの3つ目の階層の地色 chart\.series\[2\]（#377eb8）/.test(f.message)]), [['ツリーマップの文字', true]]);
 
   const code = await checkTheme(readTheme(themeDir({ codeTheme: 'no-such-theme' })).tokens);
   assert.ok(code.some((f) => /codeTheme「no-such-theme」/.test(f.message)));
+});
+
+test('ヒートマップとツリーマップのラベルは、地色ごとに白か本文の色を選び、どちらでも読めないマスには数値を書かない', async () => {
+  const { default: heatmap } = await import('../src/figures/heatmap.ts');
+  const { default: treemap } = await import('../src/figures/treemap.ts');
+  const { contrast: ratio } = await import('../src/color.ts');
+  const t = baseTokens();
+  const texts = (svg: string) => [...svg.matchAll(/<text[^>]*fill="([^"]+)"[^>]*>([^<]*)<\/text>/g)].map((m) => [m[2], m[1]]);
+  const { contractLimits: limits } = await import('../src/figures/schema.ts');
+  // 最大値 100 に対して、80 は白、60 は本文の色。72 と 65 は、どちらの色でも 4.5:1 に届かない濃さなので書かない。60% 未満は、これまでどおり書かない。
+  const spec = { type: 'heatmap' as const, unit: '件', x: ['a', 'b', 'c', 'd', 'e'], y: ['p', 'q'], values: [[100, 80, 72, 65, 60], [50, 10, 0, 0, 0]] };
+  assert.deepEqual(heatmap.validate(spec, limits), []);
+  const cells = texts(heatmap.render(spec, t) as string).filter(([s, fill]) => /^\d+$/.test(s) && fill !== t.color.sub); // 凡例の目盛り（color.sub）は除く
+  assert.deepEqual(cells, [['100', t.color.onAccent], ['80', t.color.onAccent], ['60', t.color.ink]]);
+  // ツリーマップは、上の階層の色ごとに選ぶ。既定の青は白、オレンジと緑は本文の色。どれも 4.5:1 以上。
+  const tree = { type: 'treemap' as const, unit: '件', groups: [{ label: 'A', items: [{ label: 'a1', value: 30 }, { label: 'a2', value: 20 }] }, { label: 'B', items: [{ label: 'b1', value: 30 }] }, { label: 'C', items: [{ label: 'c1', value: 25 }] }] };
+  const labels = Object.fromEntries(texts(treemap.render(tree, t) as string));
+  assert.deepEqual([labels.a1, labels.b1, labels.c1], [t.color.onAccent, t.color.ink, t.color.ink]);
+  t.chart.series.forEach((s, i) => assert.ok(ratio([labels.a1, labels.b1, labels.c1][i], s) >= 4.5, s));
+});
+
+test('theme check は、ヒートマップとツリーマップのラベルを書く地色で、白も本文の色も読めない色を知らせる', async () => {
+  const of = async (theme: object, what: string) => (await checkTheme(readTheme(themeDir(theme)).tokens)).filter((f) => f.what === what);
+  // 中間の明るさの系列の色は、白でも本文の色でも 4.5:1 に届かない。
+  const tree = await of({ chart: { series: ['#7a7a7a', '#eb6834', '#1baf7a'] } }, 'ツリーマップの文字');
+  assert.deepEqual(tree.map((f) => [f.severity, /ツリーマップの1つ目の階層の地色 chart\.series\[0\]（#7a7a7a）/.test(f.message)]), [['error', true]]);
+  // ヒートマップは、最も濃いマス（color.accent）にも数値を書けないと、数値が1つも出ない。
+  const heat = await of({ color: { accent: '#7a7a7a' } }, 'ヒートマップの数値');
+  assert.ok(heat.some((f) => f.severity === 'error' && /ヒートマップの最も濃いマスの地色 color\.accent（#7a7a7a）/.test(f.message)), JSON.stringify(heat));
 });
 
 test('rules.md は、動画の節を動画のときだけ、出典とコメントを除いて、見出しを下げて指示に入れる', () => {
@@ -538,9 +568,12 @@ test('neutral の灰色は、紙と見分けられるかを確かめる', async 
   const white = await grey('#ffffff');
   assert.deepEqual(white.map((x) => [x.severity, /chart\.muted（#ffffff）と color\.paper/.test(x.message)]), [['warn', true]]);
   assert.deepEqual(await grey('#a8b0b9'), []);
-  // neutral のヒートマップの数値は、濃いマス（chart.muted）の上の color.ink で確かめる。
-  const heat = (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted: '#1c2530' } })).tokens)).filter((x) => x.what === 'ヒートマップの数値');
-  assert.ok(heat.some((x) => x.severity === 'error' && /color\.ink.*chart\.muted/.test(x.message)), JSON.stringify(heat));
+  // neutral のヒートマップの数値は、最も濃いマス（chart.muted）の上で、color.onAccent か color.ink のどちらかで読めるかを確かめる。
+  // 本文の色と同じ #1c2530 でも、白抜きの文字なら読めるので通す。中間の明るさの灰色は、どちらでも読めない。
+  // 動画の図は、暗い紙に自分の灰色を持つので、資料の図だけを見る。
+  const heat = async (muted: string) => (await checkTheme(readTheme(themeDir({ chart: { mode: 'neutral', muted } })).tokens)).filter((x) => x.what === 'ヒートマップの数値' && !/video\./.test(x.message));
+  assert.deepEqual(await heat('#1c2530'), []);
+  assert.ok((await heat('#7a7a7a')).some((x) => x.severity === 'error' && /ヒートマップの最も濃いマスの地色 chart\.muted（#7a7a7a）/.test(x.message)));
   // series でも、系列の色が3つなら、4つ目を chart.muted、5つ目を chart.rest で描くので確かめる。5つあれば使わない。
   assert.deepEqual((await grey('#ffffff', 'series')).map((x) => x.severity), ['warn']);
   const five = ['#0432ff', '#ff2f92', '#ff2600', '#a77bff', '#00695c'];
