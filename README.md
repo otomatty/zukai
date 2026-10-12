@@ -567,6 +567,8 @@ npm test            # テストを動かす
 npm run check       # 型の検査とテストを続けて行う
 ```
 
+プルリクエストと main への push では、GitHub Actions（`.github/workflows/ci.yml`）が同じ検査を行います。CI では Playwright と Chromium も入れるので、動画と撮影のテストも飛ばさずに動きます。
+
 | 決まり | 理由 |
 |---|---|
 | enum、namespace、引数のプロパティを使わない（`erasableSyntaxOnly`） | Node は型を取り除くだけで、変換はしないため |

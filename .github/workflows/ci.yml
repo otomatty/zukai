@@ -1,0 +1,38 @@
+# プルリクエストと main への push ごとに、型の検査、テスト、Lint の期待どおりの動き（zukai corpus）を確かめる。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 型の検査
+        run: npm run typecheck
+      # 動画と撮影のテストは、ブラウザが無いと飛ばされる。CI では Playwright と Chromium を入れて、飛ばさずに動かす。
+      # Playwright は zukai の通常の依存に入れていないので、ここでだけ、型に使っている playwright-core と同じ版を入れる。
+      - name: Playwright と Chromium を入れる
+        run: |
+          npm install --no-save "playwright@$(node -p "require('./node_modules/playwright-core/package.json').version")"
+          npx playwright install --with-deps chromium
+      - name: テスト
+        run: npm test
+      - name: Lint の期待どおりの動き
+        run: node src/cli.ts corpus
