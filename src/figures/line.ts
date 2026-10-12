@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.ts';
-import { renderChart, axisText, isNumber, fmt, highlight, neutral, grey, modeGuide } from './chart.ts';
+import { renderChart, axisText, isNumber, fmt, highlight, neutral, grey, modeGuide, duplicateLabel } from './chart.ts';
 import type { FigureType } from '../types.ts';
 
 export interface LineSeries {
@@ -72,6 +72,7 @@ marker:
         errors.push(`series[${i}].values は、x と同じ${x.length}個の数値にしてください。`);
       }
     });
+    errors.push(...duplicateLabel(spec.series, 'series'));
     if (spec.series.filter((s) => s?.emphasis).length > 1) errors.push('emphasis を付けられる系列は1つまでです。');
     if (spec.marker !== undefined) {
       errors.push(...unknownKeys(spec.marker, ['at', 'label'], 'marker'));

@@ -54,3 +54,41 @@ test('動画の <zk-options> と役割の名前に、オブジェクトが元か
   assert.ok(scene?.findings.some((f) => f.rule === 'V017'));
   assert.equal(scene?.heading, '節（constructor）');
 });
+
+test('treemap は、別のグループにある同じ名前の項目も、それぞれの枠で収まりを確かめる', async () => {
+  const { default: treemap } = await import('../src/figures/treemap.ts');
+  const { baseTokens } = await import('../src/theme.ts');
+  const groups = (small: number) => [
+    { label: '認証サービス', items: [{ label: '実行環境', value: 60 }, { label: 'データベース', value: 30 }] },
+    { label: '管理画面', items: [{ label: '配信', value: 30 }, { label: '実行環境', value: small }] },
+  ];
+  // 2つ目のグループの「実行環境」だけが小さい。1つ目の大きな枠と取り違えると、見逃す。
+  assert.equal(treemap.fit({ type: 'treemap', unit: '万円', groups: groups(0.5) }, baseTokens()).length, 1);
+  assert.deepEqual(treemap.fit({ type: 'treemap', unit: '万円', groups: groups(20) }, baseTokens()), []);
+});
+
+test('bar、stack、line は、同じ名前の項目や系列を F001 で知らせる', async () => {
+  const file = path.join(project(), 'a.md');
+  const cases = [
+    ['bar', 'type: bar\nunit: 件\nitems:\n  - label: 東京\n    value: 3\n  - label: 東京\n    value: 5', 'items'],
+    ['stack', 'type: stack\nunit: 件\nitems:\n  - label: 東京\n    value: 3\n  - label: 東京\n    value: 5', 'items'],
+    ['line', 'type: line\nunit: 件\nx: [1月, 2月]\nseries:\n  - label: 東京\n    values: [1, 2]\n  - label: 東京\n    values: [3, 4]', 'series'],
+  ];
+  for (const [name, figure, where] of cases) {
+    const r = await lint(doc(figure), file, { textlint: false });
+    assert.ok(r.findings.some((f) => f.rule === 'F001' && f.message.includes(`${where} の label「東京」が2回あります`)), name);
+    // 名前を変えれば通る。
+    const ok = await lint(doc(figure.replace(/東京([^]*)東京/, '東京$1大阪')), file, { textlint: false });
+    assert.deepEqual(ok.findings.filter((f) => f.rule.startsWith('F')), [], name);
+  }
+});
+
+test('capture は、screenshot に image が無いと、撮る前に行の番号を添えて知らせる', async () => {
+  const { capture } = await import('../src/capture.ts');
+  const dir = project();
+  const file = path.join(dir, 'a.md');
+  fs.writeFileSync(file, doc('type: screenshot\nurl: https://example.com/'));
+  await assert.rejects(capture(file), /L\d+ の screenshot には image（PNG 画像のパス）が必要です/);
+  fs.writeFileSync(file, doc('type: screenshot\nurl: 5\nimage: shots/a.png'));
+  await assert.rejects(capture(file), /L\d+ の screenshot の url は、文字で書いてください/);
+});

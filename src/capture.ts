@@ -8,7 +8,7 @@ import type { FigureBlock } from './types.ts';
 
 // Playwright の型。playwright は入れていない環境もあるので、型は同じ API を持つ playwright-core から取る。
 type Playwright = typeof import('playwright-core');
-// 撮影に読む、screenshot の仕様の項目。形は lint が確かめる。撮影は lint の前にも行うので、ここでは確かめずに読む。
+// 撮影に読む、screenshot の仕様の項目。形は lint が確かめる。撮影は lint の前にも行うので、url と image だけは、撮る前にここで確かめる。
 type Shot = { url: string; image: string; viewport?: number; height?: number; mask?: string[]; marks?: { selector?: string }[] };
 // 撮った画面ごとの結果。missing は、画面に見つからなかった枠のセレクター。
 export interface Captured {
@@ -20,16 +20,22 @@ export interface Captured {
 const PLAYWRIGHT: string = 'playwright';
 
 export async function capture(docFile: string): Promise<Captured[]> {
+  const baseDir = path.dirname(path.resolve(docFile));
+  const doc = parse(fs.readFileSync(docFile, 'utf8'));
+  const shots = doc.sections.flatMap((s) => s.blocks).filter((b): b is FigureBlock & { spec: Shot } => b.kind === 'figure' && b.spec?.type === 'screenshot' && !!b.spec.url);
+  if (!shots.length) return [];
+  // 保存先と URL が無いと、撮った後に例外で止まり、それまでに撮った画面も記録されない。撮り始める前に知らせる。
+  for (const { spec, line } of shots) {
+    const raw: Record<string, unknown> = spec;
+    if (typeof raw.url !== 'string') throw new Error(`L${line} の screenshot の url は、文字で書いてください。`);
+    if (typeof raw.image !== 'string' || !raw.image.endsWith('.png')) throw new Error(`L${line} の screenshot には image（PNG 画像のパス）が必要です。撮った画面を、このパスに保存します。`);
+  }
   let chromium: Playwright['chromium'];
   try {
     ({ chromium } = (await import(PLAYWRIGHT)) as Playwright);
   } catch {
     throw new Error('撮影には Playwright が必要です。npm install playwright と npx playwright install chromium を実行してください。');
   }
-  const baseDir = path.dirname(path.resolve(docFile));
-  const doc = parse(fs.readFileSync(docFile, 'utf8'));
-  const shots = doc.sections.flatMap((s) => s.blocks).filter((b): b is FigureBlock & { spec: Shot } => b.kind === 'figure' && b.spec?.type === 'screenshot' && !!b.spec.url);
-  if (!shots.length) return [];
   // 設定の値は、読むときに型を確かめてある（chromium はパスの文字）。
   const executablePath = machineSetting('chromium') as string | null;
   const browser = await chromium.launch(executablePath ? { executablePath } : {});

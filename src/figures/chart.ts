@@ -36,6 +36,8 @@ export function renderChart(option: ChartOption, t: Tokens, height: number, titl
 // 要素の位置と大きさ。型によって持つ値が違い（矩形は x、y、width、height、扇形は cx、cy、r など）、位置を持たない要素もある。
 export interface ItemLayout {
   name: string;
+  // データに書いた id。書かなければ ECharts が付ける。
+  id: string;
   x?: number;
   y?: number;
   width?: number;
@@ -43,13 +45,13 @@ export interface ItemLayout {
 }
 // ECharts の公開の型には、系列のデータを読む口（getModel）が無い。使う部分だけの形を書いておく。
 interface WithModel {
-  getModel(): { getSeriesByIndex(i: number): { getData(): { count(): number; getName(i: number): string; getItemLayout(i: number): Omit<ItemLayout, 'name'> | null } } };
+  getModel(): { getSeriesByIndex(i: number): { getData(): { count(): number; getName(i: number): string; getId(i: number): string; getItemLayout(i: number): Omit<ItemLayout, 'name' | 'id'> | null } } };
 }
 export function layoutOf(option: ChartOption, t: Tokens, height: number): ItemLayout[] {
   const chart = echarts().init(null, null, { renderer: 'svg', ssr: true, width: t.figure.width, height });
   chart.setOption({ animation: false, ...option });
   const data = (chart as unknown as WithModel).getModel().getSeriesByIndex(0).getData();
-  const out = Array.from({ length: data.count() }, (_, i) => ({ name: data.getName(i), ...data.getItemLayout(i) }));
+  const out = Array.from({ length: data.count() }, (_, i) => ({ name: data.getName(i), id: data.getId(i), ...data.getItemLayout(i) }));
   chart.dispose();
   return out;
 }
@@ -62,6 +64,17 @@ export const isNumber = (v: unknown): v is number => typeof v === 'number' && Nu
 export const fmt = (v: number): string => v.toLocaleString('ja-JP');
 
 // チャートに共通する検証の部品。
+// 名前が重なると、読み手は見分けられない。凡例は名前で系列を引くので、2つ目の系列も1つ目の値で書かれてしまう。
+export function duplicateLabel(items: readonly unknown[], where: string): string[] {
+  const seen = new Set<string>();
+  for (const it of items) {
+    const label = it && typeof it === 'object' ? (it as { label?: unknown }).label : undefined;
+    if (typeof label !== 'string') continue;
+    if (seen.has(label)) return [`${where} の label「${label}」が2回あります。名前を変えて、見分けられるようにしてください。`];
+    seen.add(label);
+  }
+  return [];
+}
 export const unitError = (spec: { readonly unit?: unknown }, name: string): string[] => (typeof spec.unit !== 'string' || !spec.unit ? [`${name} には unit（値の単位）が必要です。`] : []);
 
 // グラフの色の付け方。series は系列ごとに色を変え、neutral は灰色を基本にして強調するものだけに色を付ける。

@@ -63,10 +63,11 @@ groups:
 
   // 枠が小さいと、ECharts は名前を省略するか、表示しない。読者が項目を見分けられなくなるので、収まらない項目を検査で止める。
   fit(spec, t) {
-    const boxes = layoutOf(option(spec, t), t, HEIGHT);
+    // 枠は id（groups と items の番号）で引く。名前で引くと、別のグループにある同じ名前の項目（例の「実行環境」など）を取り違える。
+    const boxes = layoutOf(option(spec, t, true), t, HEIGHT);
     const out: string[] = [];
-    for (const it of spec.groups.flatMap((g) => g.items)) {
-      const box = boxes.find((b) => b.name === it.label && b.width !== undefined);
+    for (const [i, g] of spec.groups.entries()) for (const [j, it] of g.items.entries()) {
+      const box = boxes.find((b) => b.id === idOf(i, j) && b.width !== undefined);
       const need = Math.max(px(it.label, 12), px(fmt(it.value) + spec.unit, 12)) + 8;
       // find で width があることを確かめた。width を持つ枠は、height も持つ。
       if (box && (box.width! < need || box.height! < 42)) out.push(`「${it.label}」の枠が小さく、名前と値を表示できません。小さい項目を1つにまとめるか、bar か表にしてください。`);
@@ -81,7 +82,10 @@ groups:
 
 const HEIGHT = 280;
 
-function option(spec: TreemapSpec, t: Tokens): ChartOption {
+const idOf = (group: number, item: number) => `zk-${group}-${item}`;
+
+// ids は、検査のために項目へ id を付けるか。描く図には付けない。
+function option(spec: TreemapSpec, t: Tokens, ids = false): ChartOption {
   return {
     series: [{
       type: 'treemap', left: 0, right: 0, top: 0, bottom: 0, roam: false, nodeClick: false, breadcrumb: { show: false }, squareRatio: 1.2,
@@ -93,7 +97,7 @@ function option(spec: TreemapSpec, t: Tokens): ChartOption {
         { itemStyle: { borderColor: t.color.paper, borderWidth: 0, gapWidth: 2 } },
         { itemStyle: { borderWidth: 0, gapWidth: 0, borderRadius: 3 } },
       ],
-      data: spec.groups.map((g, i) => ({ name: g.label, itemStyle: { color: neutral(t) ? mix(t.chart.muted, t.color.paper, [0.72, 0.8, 0.86][i % 3]) : seriesColor(t, i) }, children: g.items.map((it) => ({ name: it.label, value: it.value })) })),
+      data: spec.groups.map((g, i) => ({ name: g.label, itemStyle: { color: neutral(t) ? mix(t.chart.muted, t.color.paper, [0.72, 0.8, 0.86][i % 3]) : seriesColor(t, i) }, children: g.items.map((it, j) => ({ name: it.label, value: it.value, ...(ids ? { id: idOf(i, j) } : {}) })) })),
     }],
   };
 }

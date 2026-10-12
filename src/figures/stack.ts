@@ -1,5 +1,5 @@
 import { px, unknownKeys } from './svg.ts';
-import { renderChart, isNumber, fmt, unitError, seriesColor, highlight, neutral, grey, modeGuide } from './chart.ts';
+import { renderChart, isNumber, fmt, unitError, seriesColor, highlight, neutral, grey, modeGuide, duplicateLabel } from './chart.ts';
 import type { FigureType } from '../types.ts';
 
 export interface StackItem {
@@ -43,6 +43,7 @@ items:
       if (typeof it?.label !== 'string') errors.push(`items[${i}] に label がありません。`);
       if (!isNumber(it?.value) || it.value <= 0) errors.push(`items[${i}].value は0より大きい数値にしてください。`);
     });
+    errors.push(...duplicateLabel(spec.items, 'items'));
     if (spec.items.filter((it) => it?.emphasis).length > 1) errors.push('emphasis を付けられる内訳は1つまでです。');
     return errors;
   },
