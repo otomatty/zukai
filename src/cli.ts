@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 // コマンドの入口。引数を定義（commands.ts）で検査してから、各コマンドの処理を呼ぶ。
 // ここでは重い依存を読み込まない。help、setup、doctor が、依存の欠けた環境でも動くようにするため。
+import { enableCompileCache } from 'node:module';
 import { commandOf } from './commands.ts';
 import type { Command } from './commands.ts';
 import { closest } from './config.ts';
+
+// 読み込んだコードのコンパイル結果を、OS の一時フォルダに保存して使い回す。2回目からの起動が速くなる。
+// 重い依存は、各コマンドが後から読むので、ここで有効にすれば間に合う。場所は環境変数 NODE_COMPILE_CACHE で変えられる。
+enableCompileCache();
 
 // --名前=値 はオプション、--名前 は真偽のフラグ、それ以外は引数。-h は --help と同じ。
 interface Parsed {

@@ -1,16 +1,23 @@
 // チャートの型が共有する部品。描画は ECharts に任せ、配色と線の太さは contract/tokens.json から渡す。
-import * as echarts from 'echarts';
+import { createRequire } from 'node:module';
+import type * as Echarts from 'echarts';
 import { gradientVector } from './svg.ts';
 import type { Tokens } from '../types.ts';
 
-export type ChartOption = echarts.EChartsOption;
+export type ChartOption = Echarts.EChartsOption;
 // 強調するものの色。単色か、ECharts のグラデーション。
-export type ChartColor = string | echarts.LinearGradientObject;
+export type ChartColor = string | Echarts.LinearGradientObject;
+
+// ECharts は、チャートを描くときに初めて読む。読み込みに時間がかかり、チャートの無い原稿の Lint と描画を遅くするため。
+// 1つのファイルにまとめた版（CommonJS）を require で読む。ES モジュールの版は、ファイルが多く、読み込みがさらに遅い。
+const require = createRequire(import.meta.url);
+let loaded: typeof Echarts | null = null;
+const echarts = (): typeof Echarts => (loaded ??= require('echarts') as typeof Echarts);
 
 // 生成時に SVG の文字列へ変換する。ブラウザは使わない。
 export function renderChart(option: ChartOption, t: Tokens, height: number, title: string): string {
   const width = t.figure.width;
-  const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width, height });
+  const chart = echarts().init(null, null, { renderer: 'svg', ssr: true, width, height });
   chart.setOption({
     animation: false,
     // フォント名に引用符が残ると、PNG への変換で SVG を読めなくなる。
@@ -39,7 +46,7 @@ interface WithModel {
   getModel(): { getSeriesByIndex(i: number): { getData(): { count(): number; getName(i: number): string; getItemLayout(i: number): Omit<ItemLayout, 'name'> | null } } };
 }
 export function layoutOf(option: ChartOption, t: Tokens, height: number): ItemLayout[] {
-  const chart = echarts.init(null, null, { renderer: 'svg', ssr: true, width: t.figure.width, height });
+  const chart = echarts().init(null, null, { renderer: 'svg', ssr: true, width: t.figure.width, height });
   chart.setOption({ animation: false, ...option });
   const data = (chart as unknown as WithModel).getModel().getSeriesByIndex(0).getData();
   const out = Array.from({ length: data.count() }, (_, i) => ({ name: data.getName(i), ...data.getItemLayout(i) }));
