@@ -267,8 +267,10 @@ test('toString のような名前を、サービスや AI ツールと取り違�
 });
 
 test('setup の表示文は日本語と英語が揃い、--lang=en で英語の確認を出して言語を保存する', async () => {
-  const { phraseGaps } = await import('../src/locale.js');
+  const { phraseGaps, t } = await import('../src/locale.js');
   assert.deepEqual(phraseGaps(), []);
+  assert.equal(t('en', 'plan.empty'), '(none)');
+  assert.equal(t('ja', 'plan.empty'), '（なし）');
   const home = tmp('lang-home');
   const project = tmp('lang');
   fs.mkdirSync(path.join(project, '.git'));

@@ -61,6 +61,7 @@ const catalog = {
   'plan.write': { ja: '書く', en: 'write' },
   'plan.update': { ja: '新しくする', en: 'update' },
   'plan.none': { ja: '変更はありません。', en: 'No changes.' },
+  'plan.empty': { ja: '（なし）', en: '(none)' },
   'plan.confirm': { ja: 'この内容で書き込みますか', en: 'Write this?' },
   'plan.cancel': { ja: '何も書き込んでいません。', en: 'Nothing was written.' },
   'plan.wrote': { ja: '書き込みました。', en: 'Wrote the settings.' },

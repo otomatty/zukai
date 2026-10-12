@@ -319,7 +319,7 @@ function printPlan(plan, lang = 'ja') {
   }
   for (const [file, list] of byFile) {
     const what = list.map((it) =>
-      it.kind === 'create' ? tr('plan.create') : it.kind === 'skill' ? (it.state === 'missing' ? tr('plan.write') : tr('plan.update')) : `${it.key}=${display(it.key, it.value)}`,
+      it.kind === 'create' ? tr('plan.create') : it.kind === 'skill' ? (it.state === 'missing' ? tr('plan.write') : tr('plan.update')) : `${it.key}=${it.value === null ? tr('plan.empty') : display(it.key, it.value)}`,
     );
     const label = list.find((it) => it.label)?.label;
     const wrap = label ? (lang === 'en' ? ` (${label})` : `（${label}）`) : '';
