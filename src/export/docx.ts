@@ -6,6 +6,7 @@ import type { ExportDocument } from './document.ts';
 import { imageOf } from './images.ts';
 import { pngFont } from '../png.ts';
 
+/** 本文と表を編集可能なWord要素にし、図を画像として埋め込んだDOCXを返す。 */
 export async function writeDocx(doc: ExportDocument): Promise<Buffer> {
   const font = pngFont();
   const color = doc.tokens.color.ink.slice(1);

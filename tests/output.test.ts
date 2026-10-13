@@ -132,6 +132,34 @@ test('図だけの出力は順番を保ち、本文を混ぜない', async () =>
   }
 });
 
+test('原稿のハードリンクを保存先に指定しても原稿を上書きしない', async () => {
+  const { dir, file } = fixture();
+  const out = path.join(dir, 'linked.html');
+  fs.linkSync(file, out);
+  await assert.rejects(buildOutput(file, { out }), /原稿と同じ/);
+  assert.equal(fs.readFileSync(file, 'utf8'), source);
+  assert.equal(fs.readFileSync(out, 'utf8'), source);
+});
+
+test('フォルダ内の生成先が原稿のハードリンクなら、どの生成物も書き込まない', async () => {
+  const { dir, file } = fixture();
+  const out = path.join(dir, 'linked-markdown');
+  fs.mkdirSync(out);
+  fs.linkSync(file, path.join(out, 'README.md'));
+  await assert.rejects(buildOutput(file, { format: 'markdown', out }), /原稿と重なります/);
+  assert.equal(fs.readFileSync(file, 'utf8'), source);
+  assert.deepEqual(fs.readdirSync(out), ['README.md']);
+});
+
+test('内容が原稿と同じでも別ファイルなら、保存先を更新できる', async () => {
+  const { dir, file } = fixture();
+  const out = path.join(dir, 'separate.html');
+  fs.copyFileSync(file, out);
+  await buildOutput(file, { out });
+  assert.equal(fs.readFileSync(file, 'utf8'), source);
+  assert.equal(extract(fs.readFileSync(out, 'utf8')), source);
+});
+
 test('Word は編集できる文章・表と画像を含む OOXML を生成する', async () => {
   const { file } = fixture();
   const result = await buildOutput(file, { format: 'docx' });

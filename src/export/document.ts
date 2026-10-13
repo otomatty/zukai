@@ -19,9 +19,13 @@ import { projectOf } from '../config.ts';
 import type { ImageFormat } from '../output-formats.ts';
 import type { RawSpec, Limits, Tokens } from '../types.ts';
 
+/** GFMの表・タスクリスト・参照を維持できる構文木として読む。 */
 export const readMarkdown = (source: string): Root => fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
+/** GFMの構文木を、フェンス付きコードブロックを使うMarkdownに戻す。 */
 export const writeMarkdown = (tree: Root): string => toMarkdown(tree, { extensions: [gfmToMarkdown()], fences: true });
+/** 装飾を除いた本文を取得し、画像は代替テキストとして扱う。 */
 export const textOf = (node: Nodes): string => 'value' in node ? node.value : node.type === 'image' ? node.alt ?? '' : 'children' in node ? node.children.map(textOf).join('') : '';
+/** 文字列をMarkdown記法として解釈せず、1つの段落にする。 */
 export const paragraph = (text: string): RootContent => ({ type: 'paragraph', children: [{ type: 'text', value: text }] });
 const link = (text: string, url: string): PhrasingContent => ({ type: 'link', url, children: [{ type: 'text', value: text }] });
 const remote = (url: string) => /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(url);
@@ -37,6 +41,10 @@ export interface ExportDocument {
   warnings: string[];
 }
 
+/**
+ * 図と根拠を閲覧用の本文へ変換し、画像データをメモリ上に集める。
+ * 相対参照はfileを基準に読み、出力内のリンクはoutDirを基準に直す。ファイルは書き込まない。
+ */
 export async function prepareDocument(source: string, file: string, outDir: string, imageFormat: ImageFormat = 'png'): Promise<ExportDocument> {
   const theme = themeFor(path.dirname(path.resolve(file)));
   const ctx = { baseDir: path.dirname(path.resolve(file)), tokens: theme.tokens, types: typesFor(theme) };

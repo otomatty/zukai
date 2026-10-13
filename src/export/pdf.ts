@@ -6,6 +6,7 @@ import { esc } from '../figures/svg.ts';
 import { imageOf } from './images.ts';
 import type { ExportDocument } from './document.ts';
 
+/** 画像を埋め込み、JavaScriptと外部通信を無効にしたChromiumでA4のPDFを生成する。 */
 export async function writePdf(doc: ExportDocument): Promise<Buffer> {
   const md = new MarkdownIt({ html: false });
   const image = md.renderer.rules.image!;

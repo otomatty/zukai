@@ -8,6 +8,7 @@ import type { StateSpec } from '../figures/state.ts';
 const quote = (s: unknown) => String(s).replace(/[&"<>:;#\r\n]/g, (ch) => /[\r\n]/.test(ch) ? ' ' : `#${ch.charCodeAt(0)};`);
 const label = (s: { label: string; note?: string; ref?: number }) => quote(`${s.label}${s.note ? ` / ${s.note}` : ''}${s.ref ? ` [${s.ref}]` : ''}`);
 
+/** 検証済みの組み込み図を変換する。未対応の型はnullを返し、呼び出し側で画像に戻せるようにする。 */
 export function mermaid(spec: RawSpec): string | null {
   if (spec.type === 'flow') {
     const s = spec as FlowSpec;

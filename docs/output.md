@@ -32,7 +32,7 @@ zukai build 原稿.md --format=png         # 原稿.png/fig-01.png など
 zukai build 原稿.md --format=markdown --out=dist/guide
 ```
 
-`--out` は、Markdown・Confluence・SVG・PNG ではフォルダ、それ以外ではファイルです。元の原稿と重なるパスには出力できません。同じ保存先へ再出力すると、同名の生成物を上書きします。以前の出力で作った余分な画像は自動削除しません。
+`--out` は、Markdown・Confluence・SVG・PNG ではフォルダ、それ以外ではファイルです。元の原稿と重なるパスには出力できません。シンボリックリンクやハードリンクで原稿とつながった保存先も、書き込み前に検査します。同じ保存先へ再出力すると、同名の生成物を上書きします。以前の出力で作った余分な画像は自動削除しません。
 
 ### Markdown の図を選ぶ
 

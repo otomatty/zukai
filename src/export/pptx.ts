@@ -8,7 +8,7 @@ import { pngFont } from '../png.ts';
 // パッケージの型定義は CJS と判定されるが、import 側の実体は default のクラス。
 const Presentation = PptxGenJS as unknown as typeof PptxGenJS.default;
 
-// 日本語は1文字、ASCIIは半文字として折り返す。長文も削らずに次のスライドへ送る。
+/** 日本語を幅1、ASCIIを幅0.6として折り返す。改行とUnicodeのコードポイントを維持する。 */
 export function wrapText(text: string, columns = 42): string[] {
   return text.split('\n').flatMap((line) => {
     const lines: string[] = [];
@@ -23,6 +23,7 @@ export function wrapText(text: string, columns = 42): string[] {
   });
 }
 
+/** 見出しで区切り、本文と表の続きを次のスライドへ送る。図は画像として埋め込む。 */
 export async function writePptx(doc: ExportDocument): Promise<Buffer> {
   const pptx = new Presentation();
   pptx.layout = 'LAYOUT_WIDE';

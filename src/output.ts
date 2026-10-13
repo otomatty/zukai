@@ -7,6 +7,7 @@ import type { ExportDocument } from './export/document.ts';
 interface Result { files: Map<string, Buffer | string>; warnings: string[] }
 interface Context { file: string; source: string; out: string; imageFormat: ImageFormat }
 const one = (file: string, content: string | Buffer, warnings: string[] = []): Result => ({ files: new Map([[file, content]]), warnings });
+/** 文書用の依存は、その形式が選ばれたときに読み込む。 */
 async function prepare(ctx: Context): Promise<ExportDocument> {
   const { prepareDocument } = await import('./export/document.ts');
   return prepareDocument(ctx.source, ctx.file, ctx.out, ctx.imageFormat);
@@ -45,6 +46,7 @@ const exporters: Record<OutputFormat, (ctx: Context) => Promise<Result>> = {
   },
 };
 
+/** 原稿内の図を登場順に番号付けし、本文を含めずに出力する。 */
 async function figures(c: Context, ext: 'svg' | 'png'): Promise<Result> {
   const doc = await prepare({ ...c, imageFormat: 'svg' });
   if (!doc.figures.length) throw new Error('原稿に図がありません。SVG・PNG出力には figure ブロックが必要です。');
@@ -54,13 +56,21 @@ async function figures(c: Context, ext: 'svg' | 'png'): Promise<Result> {
   return { files, warnings: doc.warnings };
 }
 
-// 既存のファイルは実体のパスで比べ、シンボリックリンク経由の原稿上書きも防ぐ。
+/** 実体のパスとファイルIDを比べ、シンボリックリンク・ハードリンク経由の上書きも防ぐ。 */
 function sameFile(a: string, b: string): boolean {
   const resolve = (p: string) => fs.existsSync(p) ? fs.realpathSync(p) : path.resolve(p);
   const left = resolve(a), right = resolve(b);
-  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right;
+  if (process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right) return true;
+  if (!fs.existsSync(a) || !fs.existsSync(b)) return false;
+  // Windows のファイルIDも丸めずに比較するため、BigIntで取得する。
+  const aStat = fs.statSync(a, { bigint: true }), bStat = fs.statSync(b, { bigint: true });
+  return aStat.dev === bStat.dev && aStat.ino === bStat.ino;
 }
 
+/**
+ * 原稿を指定形式へ変換し、生成物と注意を返す。形式・オプション・原稿との衝突を検査する。
+ * すべての生成と衝突検査が成功してから書き込む。既存の同名生成物は上書きする。
+ */
 export async function buildOutput(file: string, options: { format?: string; out?: string; imageFormat?: string } = {}): Promise<{ out: string; files: string[]; warnings: string[] }> {
   const format = options.format ?? 'html';
   const definition = outputFormats.find((f) => f.name === format);
