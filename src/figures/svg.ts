@@ -56,11 +56,19 @@ function emphasisCss(t: Tokens): string[] {
   return [`.zk-box-em{${box}}`, `.zk-on-em{fill:${on}}`, `.zk-on-em-note{fill:${onNote}}`];
 }
 
+// 描画の座標はそのままに、表示範囲を四辺へ広げる。HTML と PNG に同じ余白と紙の色を付ける。
+export function frame(t: Tokens, height: number, title: string): string {
+  const { width, margin } = t.figure;
+  const w = width + margin * 2;
+  const h = height + margin * 2;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-margin} ${-margin} ${w} ${h}" width="100%" role="img" aria-label="${esc(title)}"><rect class="zk-background" x="${-margin}" y="${-margin}" width="${w}" height="${h}" fill="${t.color.paper}"/>`;
+}
+
 export function open(t: Tokens, height: number, title: string): string {
   const c = t.color;
   const f = t.figure;
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f.width} ${height}" width="100%" role="img" aria-label="${esc(title)}">`,
+    frame(t, height, title),
     '<style>',
     `.zk-text{font-family:${t.font.replace(/"/g, "'")};fill:${c.ink};font-size:${t.size.label}px;font-weight:600}`,
     `.zk-note{font-family:${t.font.replace(/"/g, "'")};fill:${c.sub};font-size:${t.size.note}px}`,

@@ -187,7 +187,7 @@
     const parts = [];
     for (const ch of /** @type {SVGElement[]} */ ([...svg.children])) {
       const tag = ch.tagName.toLowerCase();
-      if (['style', 'defs', 'title'].includes(tag)) continue;
+      if (['style', 'defs', 'title'].includes(tag) || ch.classList.contains('zk-background')) continue;
       if (tag === 'text' && parts.length && /** @type {FigurePart} */ (parts.at(-1)).kind === 'draw') {
         /** @type {FigurePart} */ (parts.at(-1)).extra.push(ch);
         /** @type {FigurePart} */ (parts.at(-1)).label ??= ch.textContent;
