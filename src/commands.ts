@@ -439,6 +439,27 @@ export const commands: Command[] = [
     },
   },
   {
+    name: 'gui',
+    group: 'はじめる',
+    summary: '資料の確認と書き出し、設定、テーマ、Confluence への公開をブラウザで操作する画面を起動し、URL を出力する',
+    flags: [
+      { name: 'no-open', desc: 'ブラウザを開かない' },
+      { name: 'serve', hidden: true, desc: '画面の本体を、このプロセスで動かす' },
+    ],
+    examples: ['zukai gui'],
+    related: ['view', 'config', 'theme', 'publish'],
+    async run({ has }) {
+      const gui = await import('./gui.ts');
+      const { projectOf } = await import('./config.ts');
+      const project = projectOf(process.cwd());
+      if (has('serve')) {
+        // ensure が切り離したプロセスで起動する本体。直接実行すると、起動のエラーを確かめられる。
+        const server = await gui.serve(project);
+        console.log(`http://127.0.0.1:${(server.address() as AddressInfo).port}/`);
+      } else console.log(await gui.ensure(project, { open: !has('no-open') }));
+    },
+  },
+  {
     name: 'video',
     group: '動画',
     summary: '原稿から解説動画（MP4）を作る',

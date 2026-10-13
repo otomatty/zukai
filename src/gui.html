@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="zukai-token" content="__ZUKAI_TOKEN__">
+<title>zukai</title>
+<link rel="icon" href="data:,">
+<!-- zukai gui の画面。サーバーは src/gui.ts。処理はすべて /api/ を呼び、CLI と同じ関数で動かす。 -->
+<style>
+:root{--fg:#1c2530;--muted:#5b6673;--line:#dfe4ea;--soft:#f3f5f7;--accent:#0f5f8a;--accent-soft:#e2eff6;--ng:#b3261e;--ng-soft:#fbe9e7;--warn:#8a5a00;--warn-soft:#fff4dc;--ok:#1e6b3a;--ok-soft:#e5f4ea}
+*{box-sizing:border-box}
+body{margin:0;display:grid;grid-template-rows:auto 1fr;height:100vh;font-family:system-ui,"Yu Gothic UI","Hiragino Sans",sans-serif;font-size:14px;color:var(--fg);background:#fff}
+button,input,select,textarea{font:inherit;color:inherit}
+header{display:flex;align-items:center;gap:16px;padding:0 12px;border-bottom:1px solid var(--line)}
+header h1{margin:0;font-size:.95rem}
+header .project{font-size:.75rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;text-align:right}
+nav.tabs{display:flex;gap:2px}
+nav.tabs button{border:0;background:none;padding:12px 14px;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)}
+nav.tabs button[aria-selected=true]{color:var(--fg);font-weight:600;border-bottom-color:var(--accent)}
+nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+section.tab{min-height:0;overflow:auto}
+section.tab[hidden]{display:none}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:#0c4f73}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.small{padding:3px 8px;font-size:.8rem}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.75rem;font-weight:600;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.ng,.pill.error{background:var(--ng-soft);color:var(--ng)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.skip,.pill.muted{background:var(--soft);color:var(--muted)}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.muted{color:var(--muted)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85em;background:var(--soft);padding:1px 4px;border-radius:3px}
+#toast{position:fixed;right:16px;bottom:16px;max-width:520px;padding:10px 14px;border-radius:8px;background:var(--fg);color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.2);white-space:pre-wrap;z-index:20}
+#toast.error{background:var(--ng)}
+#toast a{color:#fff}
+/* 資料 */
+#docs{display:grid;grid-template-columns:280px 1fr;height:100%}
+#docs[hidden]{display:none}
+#doclist{overflow:auto;border-right:1px solid var(--line);background:var(--soft)}
+#doclist .filter{padding:8px;border-bottom:1px solid var(--line)}
+#doclist .filter input{width:100%;padding:5px 8px;border:1px solid var(--line);border-radius:6px}
+#doclist button{display:block;width:100%;text-align:left;padding:9px 14px;border:0;border-bottom:1px solid #e3e7ec;background:none;cursor:pointer}
+#doclist button.on{background:var(--accent-soft);font-weight:600}
+#doclist button small{display:block;font-size:.72rem;color:var(--muted);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#docmain{display:flex;flex-direction:column;min-width:0;min-height:0}
+#doctools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)}
+#doctools h2{margin:0 8px 0 0;font-size:1rem;flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:5px 10px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--accent-soft);font-weight:600}
+#docbody{flex:1;display:flex;min-height:0}
+#docbody iframe{flex:1;border:0;min-width:0}
+#source{flex:1;margin:0;padding:16px;overflow:auto;white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85rem;line-height:1.6}
+#lintpanel{width:320px;border-left:1px solid var(--line);overflow:auto;padding:12px}
+#lintpanel h3{margin:0 0 8px;font-size:.9rem}
+#lintpanel ul{list-style:none;margin:0;padding:0}
+#lintpanel li{padding:8px 0;border-bottom:1px solid var(--line);font-size:.82rem;line-height:1.5}
+#lintpanel li .rule{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted);font-size:.75rem}
+.empty{padding:40px;color:var(--muted)}
+/* 設定、テーマ、Confluence */
+.page{max-width:960px;margin:0 auto;padding:20px 24px 60px}
+.page h2{font-size:1.1rem;margin:24px 0 8px}
+.page h2:first-child{margin-top:0}
+.page p.lead{color:var(--muted);margin:0 0 16px;line-height:1.6}
+.card{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:12px}
+.checks{list-style:none;margin:0;padding:0}
+.checks li{display:grid;grid-template-columns:70px 160px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.checks li:last-child{border-bottom:0}
+.checks .fix{grid-column:3;font-size:.8rem}
+.problems{border-color:var(--ng);background:var(--ng-soft)}
+.group h3{font-size:.95rem;margin:20px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.item{display:grid;grid-template-columns:200px 1fr;gap:4px 16px;padding:12px 0;border-bottom:1px dashed var(--line)}
+.item .name{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;word-break:break-all}
+.item .desc{font-size:.8rem;color:var(--muted);line-height:1.5;margin-bottom:6px}
+.item .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.item input[type=text],.item input[type=password],.item input[type=number],.item select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;min-width:240px}
+.item textarea,.variants{width:100%;min-height:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.8rem}
+.item .status{font-size:.75rem;color:var(--muted);margin-top:4px}
+.files{font-size:.8rem;color:var(--muted)}
+.files div{padding:2px 0}
+.frame{width:100%;height:70vh;border:1px solid var(--line);border-radius:8px;margin-top:12px}
+.inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.inline input[type=text]{padding:5px 8px;border:1px solid var(--line);border-radius:6px;min-width:260px}
+@media (max-width:860px){#docs{grid-template-columns:1fr}#doclist{max-height:30vh;border-right:0;border-bottom:1px solid var(--line)}#lintpanel{display:none}.item{grid-template-columns:1fr}.checks li{grid-template-columns:60px 1fr}.checks .fix{grid-column:2}}
+</style>
+</head>
+<body>
+<header>
+<h1>zukai</h1>
+<nav class="tabs" role="tablist">
+<button role="tab" data-tab="docs" aria-selected="true">資料</button>
+<button role="tab" data-tab="settings" aria-selected="false">設定</button>
+<button role="tab" data-tab="theme" aria-selected="false">テーマ</button>
+<button role="tab" data-tab="confluence" aria-selected="false">Confluence</button>
+</nav>
+<span class="project" title="__ZUKAI_PROJECT__">__ZUKAI_PROJECT__</span>
+</header>
+
+<section class="tab" id="tab-docs" role="tabpanel">
+<div id="docs">
+<aside id="doclist"><div class="filter"><input id="docfilter" type="search" placeholder="資料を絞り込む" aria-label="資料を絞り込む"></div><div id="docitems"></div></aside>
+<div id="docmain">
+<div id="doctools" hidden>
+<h2 id="doctitle"></h2>
+<span id="lintpill" class="pill muted">検査中</span>
+<span class="seg" role="group" aria-label="表示"><button id="mode-preview" aria-pressed="true">プレビュー</button><button id="mode-source" aria-pressed="false">原稿</button></span>
+<a id="download" class="btn" download>HTML を保存</a>
+<button id="build-html" class="btn">HTML を書き出す</button>
+<button id="build-confluence" class="btn">Confluence 用に書き出す</button>
+<button id="publish" class="btn primary">Confluence に公開</button>
+</div>
+<div id="docbody">
+<p class="empty" id="docempty">資料はまだありません。AI ツールが .zukai/answers に原稿を保存するか、プロジェクトに図のある原稿（.md）を置くと、ここに表示します。</p>
+<iframe id="docframe" title="資料" hidden></iframe>
+<pre id="source" hidden></pre>
+<aside id="lintpanel" hidden><h3>Lint の結果</h3><div id="lintsummary" class="muted"></div><ul id="lintlist"></ul></aside>
+</div>
+</div>
+</div>
+</section>
+
+<section class="tab" id="tab-settings" role="tabpanel" hidden>
+<div class="page">
+<h2>状態</h2>
+<p class="lead">必要なものがそろっているかを確かめます（<code>zukai doctor</code> と同じです）。</p>
+<div class="card"><ul class="checks" id="doctor"><li class="muted">確かめています…</li></ul></div>
+<h2>設定</h2>
+<p class="lead">値を変えて「保存」を押すと、選んだ置き場所の設定ファイルに書きます。「既定に戻す」は、今効いている置き場所から値を消します。下の置き場所ほど優先します（この PC &lt; チーム &lt; 手元 &lt; 本人だけ &lt; 環境変数）。</p>
+<div id="settings-files" class="files"></div>
+<div id="settings-problems"></div>
+<div id="settings-form"></div>
+</div>
+</section>
+
+<section class="tab" id="tab-theme" role="tabpanel" hidden>
+<div class="page">
+<h2>今のテーマ</h2>
+<div class="card" id="theme-state"><span class="muted">読み込んでいます…</span></div>
+<div id="theme-setting"></div>
+<h2>見本</h2>
+<p class="lead">今のテーマで、すべての図の型を描いた見本を表示します（<code>zukai theme preview</code> と同じです）。</p>
+<div class="inline"><button id="theme-preview" class="btn">見本を表示</button></div>
+<iframe id="theme-preview-frame" class="frame" title="テーマの見本" hidden></iframe>
+<h2>案を比べる</h2>
+<p class="lead">今のテーマと案を、同じ図で横に並べます。1行に1つの案を書きます。例: <code>emphasis.box=tint</code>、複数の値は <code>+</code> でつなぎます。</p>
+<textarea id="variants" class="variants" placeholder="emphasis.box=fill&#10;emphasis.box=tint"></textarea>
+<div class="inline"><input id="compare-types" type="text" placeholder="図の型（省略すると flow,timeline,bar,line,stack,treemap）" aria-label="図の型"><button id="theme-compare" class="btn">並べて表示</button></div>
+<iframe id="theme-compare-frame" class="frame" title="テーマの比較" hidden></iframe>
+<h2>テーマのフォルダを作る</h2>
+<p class="lead">tokens.json（色とフォント）と rules.md（描き方のルール）のひな形を、プロジェクトの中に作ります。作ったあとで「このテーマを使う」を押すと、チームの設定の theme に書きます。</p>
+<div class="inline"><input id="theme-dir" type="text" value="zukai-theme" aria-label="フォルダ"><button id="theme-init" class="btn">フォルダを作る</button><button id="theme-use" class="btn">このテーマを使う</button></div>
+</div>
+</section>
+
+<section class="tab" id="tab-confluence" role="tabpanel" hidden>
+<div class="page">
+<h2>接続の状態</h2>
+<div class="card"><ul class="checks" id="confluence-state"><li class="muted">確かめています…</li></ul></div>
+<p class="lead">資料をページとして公開するには、「資料」タブで資料を選び、「Confluence に公開」を押します。Lint の error が残っている資料は公開しません。初回はページを作り、原稿の先頭にページ ID を書き込みます。2回目からは同じページを更新します。</p>
+<h2>接続先と認証</h2>
+<p class="lead">メールアドレスと API トークンは「本人だけ」の設定（~/.zukai/credentials.json、本人だけが読める権限）に保存します。保存したトークンは画面に表示しません。</p>
+<div id="confluence-form"></div>
+</div>
+</section>
+
+<div id="toast" hidden role="status" aria-live="polite"></div>
+
+<script>
+const TOKEN = document.querySelector('meta[name=zukai-token]').content;
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'class') el.className = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c instanceof Node ? c : String(c));
+  return el;
+}
+async function api(method, url, body) {
+  const res = await fetch(url, { method, headers: { 'x-zukai-token': TOKEN, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({ error: `応答を読めませんでした（${res.status}）。` }));
+  if (!res.ok) throw new Error(data.error || `失敗しました（${res.status}）。`);
+  return data;
+}
+let toastTimer;
+function toast(message, { error = false, link = null } = {}) {
+  const t = $('toast');
+  t.className = error ? 'error' : '';
+  t.replaceChildren(message, ...(link ? ['\n', h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, link)] : []));
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), link || error ? 15000 : 5000);
+}
+async function busy(button, fn) {
+  button.disabled = true;
+  try { await fn(); } catch (e) { toast(e.message, { error: true }); } finally { button.disabled = false; }
+}
+
+// --- タブ -------------------------------------------------------------------
+const loaded = {};
+function selectTab(name) {
+  for (const b of document.querySelectorAll('nav.tabs button')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
+  for (const s of document.querySelectorAll('section.tab')) s.hidden = s.id !== `tab-${name}`;
+  try { localStorage.setItem('zukai-gui-tab', name); } catch {}
+  if (name === 'settings') loadSettings();
+  if (name === 'theme') loadTheme();
+  if (name === 'confluence') loadConfluence();
+}
+for (const b of document.querySelectorAll('nav.tabs button')) b.onclick = () => selectTab(b.dataset.tab);
+
+// --- 資料 -------------------------------------------------------------------
+let items = [], shown = null, mode = 'preview', follow = true, drawn = '';
+const docUrl = (item, extra = '') => `/doc?path=${encodeURIComponent(item.path)}&v=${item.mtime}${extra}`;
+function renderList() {
+  const q = $('docfilter').value.trim().toLowerCase();
+  const visible = items.filter((i) => !q || i.title.toLowerCase().includes(q) || i.path.toLowerCase().includes(q));
+  const key = JSON.stringify([visible, shown && shown.path]);
+  if (key === drawn) return;
+  drawn = key;
+  $('docitems').replaceChildren(...visible.map((item) => h('button', { class: shown && shown.path === item.path ? 'on' : '', title: item.path, onclick: () => { follow = item === items[0]; show(item); } },
+    item.title,
+    h('small', {}, `${item.answer ? 'AI の返答 · ' : ''}${new Date(item.mtime).toLocaleString('ja-JP')}`),
+    h('small', {}, item.path))));
+}
+async function show(item) {
+  const changed = !shown || shown.path !== item.path || shown.mtime !== item.mtime;
+  shown = item;
+  $('docempty').hidden = true;
+  $('doctools').hidden = false;
+  $('lintpanel').hidden = false;
+  $('doctitle').textContent = item.title;
+  $('doctitle').title = item.path;
+  $('download').href = docUrl(item, '&download=1');
+  renderList();
+  if (!changed) return;
+  applyMode();
+  lintShown();
+}
+function applyMode() {
+  if (!shown) return;
+  $('mode-preview').setAttribute('aria-pressed', String(mode === 'preview'));
+  $('mode-source').setAttribute('aria-pressed', String(mode === 'source'));
+  $('docframe').hidden = mode !== 'preview';
+  $('source').hidden = mode !== 'source';
+  if (mode === 'preview') {
+    const url = docUrl(shown);
+    if ($('docframe').getAttribute('src') !== url) $('docframe').src = url;
+  } else {
+    api('GET', `/api/source?path=${encodeURIComponent(shown.path)}`).then((r) => ($('source').textContent = r.source)).catch((e) => toast(e.message, { error: true }));
+  }
+}
+$('mode-preview').onclick = () => { mode = 'preview'; applyMode(); };
+$('mode-source').onclick = () => { mode = 'source'; applyMode(); };
+let lintSeq = 0;
+async function lintShown() {
+  const seq = ++lintSeq, item = shown;
+  $('lintpill').className = 'pill muted';
+  $('lintpill').textContent = '検査中';
+  $('lintsummary').textContent = 'Lint を実行しています…';
+  $('lintlist').replaceChildren();
+  try {
+    const r = await api('GET', `/api/lint?path=${encodeURIComponent(item.path)}`);
+    if (seq !== lintSeq) return;
+    const errors = r.findings.filter((f) => f.severity === 'error').length;
+    $('lintpill').className = `pill ${r.ok ? 'ok' : 'ng'}`;
+    $('lintpill').textContent = r.ok ? `PASS${r.findings.length ? `（warn ${r.findings.length}）` : ''}` : `FAIL（error ${errors}）`;
+    $('lintsummary').textContent = `error ${errors} / warn ${r.findings.length - errors} / 抑制 ${r.suppressed.length}`;
+    $('lintlist').replaceChildren(...r.findings.map((f) => h('li', {}, h('span', { class: `pill ${f.severity}` }, f.severity), ' ', h('span', { class: 'rule' }, `L${f.line} ${f.rule}`), h('div', {}, f.message))));
+  } catch (e) {
+    if (seq !== lintSeq) return;
+    $('lintpill').className = 'pill ng';
+    $('lintpill').textContent = '検査できません';
+    $('lintsummary').textContent = e.message;
+  }
+}
+async function tick() {
+  try { items = await api('GET', '/api/docs'); } catch { return; }
+  if (!items.length) {
+    shown = null;
+    $('docempty').hidden = false;
+    for (const id of ['doctools', 'docframe', 'source', 'lintpanel']) $(id).hidden = true;
+    renderList();
+    return;
+  }
+  const current = shown && items.find((i) => i.path === shown.path);
+  // 最新の資料を見ているときは、新しい資料に切り替える。古い資料を読んでいる間は切り替えない。
+  if (!current || (follow && items[0].path !== shown.path)) { follow = true; show(items[0]); }
+  else if (current.mtime !== shown.mtime) show(current);
+  renderList();
+}
+$('docfilter').oninput = renderList;
+$('build-html').onclick = (e) => busy(e.currentTarget, async () => {
+  const r = await api('POST', '/api/build', { path: shown.path });
+  toast(`${r.out} を書き出しました。`);
+});
+$('build-confluence').onclick = (e) => busy(e.currentTarget, async () => {
+  const r = await api('POST', '/api/build', { path: shown.path, format: 'confluence' });
+  toast(`${r.out} に、本文、図 ${r.figures} 枚、原稿を書き出しました。`);
+});
+$('publish').onclick = (e) => busy(e.currentTarget, async () => {
+  if (!confirm(`「${shown.title}」を Confluence に公開します。\n初回はページを作り、原稿の先頭にページ ID を書き込みます。よろしいですか。`)) return;
+  toast('公開しています…');
+  const r = await api('POST', '/api/publish', { path: shown.path });
+  if (!r.ok) {
+    toast(`Lint の error が ${r.lint.findings.filter((f) => f.severity === 'error').length} 件残っているため、公開を中止しました。`, { error: true });
+    lintShown();
+    return;
+  }
+  toast(`ページを${r.created ? '作成' : '更新'}し、添付 ${r.attachments} 件を登録しました。`, { link: r.url });
+});
+
+// --- 設定 -------------------------------------------------------------------
+const statusLabel = { ok: 'OK', ng: '不足', warn: '注意', skip: '対象外' };
+function renderChecks(list, checks) {
+  list.replaceChildren(...checks.map((c) => h('li', {},
+    h('span', {}, h('span', { class: `pill ${c.status}` }, statusLabel[c.status] || c.status)),
+    h('strong', {}, c.label),
+    h('span', {}, c.detail),
+    c.fix && c.status !== 'skip' ? h('span', { class: 'fix muted' }, '直し方: ', h('code', {}, c.fix)) : null)));
+}
+const originText = (cfg, item) => item.origin ? cfg.scopeNames[item.origin] + (item.origin === 'env' ? `（${item.env}）` : '') : '未設定';
+function valueText(item) {
+  if (item.secret) return item.isSet ? '設定済み' : '未設定';
+  if (item.value === null || item.value === undefined) return '（なし）';
+  if (item.labels && item.labels[item.value]) return `${item.labels[item.value]}（${item.value}）`;
+  return typeof item.value === 'string' ? item.value : JSON.stringify(item.value);
+}
+// 項目の型に合った入力欄。値を読む関数を返す。
+function field(item) {
+  const id = `f-${item.key}`;
+  if (item.type === 'enum' || item.type === 'boolean') {
+    const options = item.type === 'boolean' ? [['true', 'はい（true）'], ['false', 'いいえ（false）']] : item.values.map((v) => [v, item.labels && item.labels[v] ? `${item.labels[v]}（${v}）` : v]);
+    const el = h('select', { id }, options.map(([v, l]) => h('option', { value: v, selected: String(item.value) === v }, l)));
+    return [el, () => (item.type === 'boolean' ? el.value === 'true' : el.value)];
+  }
+  if (item.type === 'terms') {
+    const el = h('textarea', { id, spellcheck: 'false' });
+    el.value = JSON.stringify(item.value ?? [], null, 2);
+    return [el, () => el.value];
+  }
+  const attrs = { id, type: item.secret ? 'password' : item.type === 'number' ? 'number' : 'text', autocomplete: item.secret ? 'new-password' : 'off', spellcheck: 'false' };
+  if (item.type === 'number') Object.assign(attrs, { step: 'any', min: item.min ?? null, max: item.max ?? null });
+  if (item.secret) attrs.placeholder = item.isSet ? '設定済み（変えるときだけ入力）' : '未設定';
+  if (item.suggest) attrs.list = `${id}-list`;
+  const el = h('input', attrs);
+  if (!item.secret && item.value !== null && item.value !== undefined) el.value = String(item.value);
+  const extra = item.suggest ? h('datalist', { id: `${id}-list` }, item.suggest.map((v) => h('option', { value: v }))) : null;
+  return [[el, extra], () => el.value];
+}
+function itemRow(cfg, item, reload) {
+  const [input, read] = field(item);
+  const scopes = item.scopes;
+  const scopeSel = scopes.length > 1 ? h('select', { 'aria-label': '書く場所' }, scopes.map((s) => h('option', { value: s, selected: s === item.origin || (!scopes.includes(item.origin) && s === scopes[0]) }, `${cfg.scopeNames[s]}に保存`))) : null;
+  const save = h('button', { class: 'btn small primary' }, '保存');
+  const reset = h('button', { class: 'btn small', disabled: !item.origin || item.origin === 'default' || item.origin === 'env' }, item.secret ? '消す' : '既定に戻す');
+  save.onclick = () => busy(save, async () => {
+    const value = read();
+    if (item.secret && !value) throw new Error('値が空です。変えるときだけ入力します。');
+    const r = await api('POST', '/api/config', { key: item.key, value, scope: scopeSel ? scopeSel.value : scopes[0] });
+    toast(`${cfg.scopeNames[r.scope]}の設定に ${item.key} を保存しました。${r.shadowedBy ? `\nただし、${r.shadowedBy}の値が優先されます。` : ''}`);
+    reload();
+  });
+  reset.onclick = () => busy(reset, async () => {
+    if (!confirm(`${item.key} を${cfg.scopeNames[item.origin]}の設定から消します。よろしいですか。`)) return;
+    await api('POST', '/api/config/unset', { key: item.key, scope: item.origin });
+    toast(`${item.key} を消しました。`);
+    reload();
+  });
+  return h('div', { class: 'item' },
+    h('div', {}, h('label', { class: 'name', for: `f-${item.key}` }, item.key)),
+    h('div', {},
+      h('div', { class: 'desc' }, item.description),
+      h('div', { class: 'row' }, input, scopeSel, save, reset),
+      h('div', { class: 'status' }, `今の値: ${valueText(item)}（${originText(cfg, item)}）`)));
+}
+function renderForm(target, cfg, filter, reload) {
+  const groups = new Map();
+  for (const item of cfg.items.filter(filter)) {
+    if (!groups.has(item.group)) groups.set(item.group, []);
+    groups.get(item.group).push(item);
+  }
+  target.replaceChildren(...[...groups].map(([name, list]) => h('div', { class: 'group' }, h('h3', {}, name), list.map((i) => itemRow(cfg, i, reload)))));
+}
+function renderProblems(target, cfg) {
+  target.replaceChildren(...(cfg.problems.length ? [h('div', { class: 'card problems' }, h('strong', {}, '設定に誤りがあります'), h('ul', {}, cfg.problems.map((p) => h('li', {}, `${p.file ? `${p.file}: ` : ''}${p.message}`))))] : []));
+}
+async function loadSettings() {
+  api('GET', '/api/doctor').then((r) => renderChecks($('doctor'), r.checks)).catch((e) => $('doctor').replaceChildren(h('li', {}, e.message)));
+  try {
+    const cfg = await api('GET', '/api/config');
+    $('settings-files').replaceChildren(...['user', 'team', 'local', 'credentials'].map((s) => h('div', {}, `${cfg.scopeNames[s]}: `, h('code', {}, cfg.files[s].path), cfg.files[s].exists ? '' : '（まだ無い）')));
+    renderProblems($('settings-problems'), cfg);
+    renderForm($('settings-form'), cfg, (i) => i.group !== 'Confluence', loadSettings);
+  } catch (e) {
+    toast(e.message, { error: true });
+  }
+}
+
+// --- テーマ -----------------------------------------------------------------
+async function loadTheme() {
+  const state = $('theme-state');
+  try {
+    const r = await api('GET', '/api/theme');
+    const errors = r.findings.filter((f) => f.severity === 'error').length;
+    state.replaceChildren(...[
+      h('div', { class: 'inline' }, h('strong', {}, r.dir ? `${r.name}（${r.dir}）` : 'zukai の既定の見た目'), h('span', { class: `pill ${r.ok ? 'ok' : 'ng'}` }, r.ok ? 'PASS' : 'FAIL'), h('span', { class: 'muted' }, `error ${errors} / warn ${r.findings.length - errors}`)),
+      r.findings.length ? h('ul', { class: 'checks' }, r.findings.map((f) => h('li', {}, h('span', {}, h('span', { class: `pill ${f.severity}` }, f.severity)), h('strong', {}, f.what), h('span', {}, f.message)))) : null].filter(Boolean));
+  } catch (e) {
+    state.replaceChildren(h('span', { class: 'pill ng' }, '読めません'), ' ', e.message);
+  }
+  try {
+    const cfg = await api('GET', '/api/config');
+    renderForm($('theme-setting'), cfg, (i) => i.key === 'theme', loadTheme);
+  } catch (e) {
+    toast(e.message, { error: true });
+  }
+}
+function showFrame(frame, url) {
+  frame.hidden = false;
+  frame.src = url;
+}
+$('theme-preview').onclick = () => showFrame($('theme-preview-frame'), `/theme/preview?t=${Date.now()}`);
+$('theme-compare').onclick = () => {
+  const variants = $('variants').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!variants.length) return toast('比べる案を1行に1つ書いてください。例: emphasis.box=tint', { error: true });
+  const q = new URLSearchParams();
+  variants.forEach((v) => q.append('v', v));
+  if ($('compare-types').value.trim()) q.set('types', $('compare-types').value.trim());
+  q.set('t', Date.now());
+  showFrame($('theme-compare-frame'), `/theme/compare?${q}`);
+};
+$('theme-init').onclick = (e) => busy(e.currentTarget, async () => {
+  const r = await api('POST', '/api/theme/init', { dir: $('theme-dir').value.trim() });
+  toast(r.written.length ? `${r.written.join('、')} を作りました。` : `${r.dir} には、tokens.json と rules.md がすでにあります。`);
+});
+$('theme-use').onclick = (e) => busy(e.currentTarget, async () => {
+  const dir = $('theme-dir').value.trim() || 'zukai-theme';
+  const r = await api('POST', '/api/config', { key: 'theme', value: dir, scope: 'team' });
+  toast(`チームの設定の theme を ${dir} にしました。${r.shadowedBy ? `\nただし、${r.shadowedBy}の値が優先されます。` : ''}`);
+  loadTheme();
+});
+
+// --- Confluence -------------------------------------------------------------
+async function loadConfluence() {
+  api('GET', '/api/doctor').then((r) => renderChecks($('confluence-state'), r.checks.filter((c) => c.id.startsWith('confluence')))).catch((e) => $('confluence-state').replaceChildren(h('li', {}, e.message)));
+  try {
+    const cfg = await api('GET', '/api/config');
+    renderForm($('confluence-form'), cfg, (i) => i.group === 'Confluence', loadConfluence);
+  } catch (e) {
+    toast(e.message, { error: true });
+  }
+}
+
+let first = 'docs';
+try { first = localStorage.getItem('zukai-gui-tab') || 'docs'; } catch {}
+selectTab(['docs', 'settings', 'theme', 'confluence'].includes(first) ? first : 'docs');
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>
