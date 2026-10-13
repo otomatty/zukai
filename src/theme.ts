@@ -79,7 +79,12 @@ export const CHOICES: Record<string, string[]> = {
   'chart.mode': ['series', 'neutral'],
 };
 // 範囲のある数値。ここに無い数値は、0より大きければよい。
-const RANGES: Record<string, [number, number]> = { 'gradient.angle': [0, 360], 'figure.radius': [0, Infinity] };
+const RANGES: Record<string, [number, number]> = {
+  'gradient.angle': [0, 360],
+  'figure.radius': [0, Infinity],
+  // 0なら余白なし。上限は図の幅の半分にし、画像の幅を余白なしの2倍までに抑える。
+  'figure.margin': [0, baseTokens().figure.width / 2],
+};
 
 // base の形に合う値だけを重ねる。base に無い名前、型の違う値、色でない値は problems に入れ、重ねない。
 function overlay(base: Json, over: Json, at: string, problems: string[]): Json {

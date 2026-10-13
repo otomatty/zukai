@@ -66,6 +66,23 @@ test('無い項目、変えられない値、色でない値、外へ出られ�
   for (const font of [baseTokens().font, 'ヒラギノ角ゴ ProN, sans-serif', "'BIZ UDPGothic', system-ui"]) assert.deepEqual(readTheme(themeDir({ font })).problems, [], font);
 });
 
+test('図の余白は0で無効にでき、図の幅の半分を超える値や数値でない値は受け付けない', () => {
+  const base = baseTokens();
+  const max = base.figure.width / 2;
+  // テーマのファイルと、theme compareなどの値の指定は、同じ範囲を使う。
+  assert.deepEqual(readTheme(themeDir({ figure: { margin: 0 } })).problems, []);
+  for (const margin of [0, 0.5, base.figure.margin, 32, max]) {
+    const theme = readTheme(null, { set: { 'figure.margin': margin } });
+    assert.deepEqual(theme.problems, [], String(margin));
+    assert.equal(theme.tokens.figure.margin, margin);
+  }
+  for (const margin of [-0.5, -1, max + 0.5, 100000, Infinity, NaN, '24', null]) {
+    const theme = readTheme(null, { set: { 'figure.margin': margin } });
+    assert.match(theme.problems.join('\n'), new RegExp(`figure\\.margin は、0〜${max} の数値`), String(margin));
+    assert.equal(theme.tokens.figure.margin, base.figure.margin, String(margin));
+  }
+});
+
 test('既定の値は見た目の検査を通り、読めない文字は error、見分けにくい系列は warn にする', async () => {
   assert.deepEqual(await checkTheme(baseTokens()), []);
   assert.ok(contrast('#000000', '#ffffff') > 20);

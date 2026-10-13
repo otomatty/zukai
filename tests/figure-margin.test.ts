@@ -23,6 +23,7 @@ const stable = (svg: string) => {
   return svg.replace(/\bzr\d+-[\w-]+/g, (id) => `chart-${ids.get(id) ?? ids.set(id, ids.size).get(id)}`);
 };
 
+// 四辺の余白が紙の色で埋まり、図形が重ならないことをRGBAのピクセルで確かめる。
 function checkMargin(image: RenderedImage, t: Tokens) {
   const rgba = Buffer.from([...t.color.paper.slice(1).match(/../g)!.map((n) => parseInt(n, 16)), 255]);
   const row = Buffer.alloc(image.width * 4);
@@ -77,6 +78,17 @@ test('組み込みの全24型は、図の座標を変えずに紙の色の余白
     // PNG への変換でも SVG の背景色を使い、別の背景指定で余白の色が変わらない。
     assert.deepEqual(toPng(svg, '#ff00ff').data, padded.asPng(), type.name);
   }
+});
+
+test('余白を0に設定したテーマは、余白なしのHTML用SVGとPNGを描ける', () => {
+  const theme = readTheme(null, { set: { 'figure.margin': 0 } });
+  assert.deepEqual(theme.problems, []);
+  const spec = yaml(types.flow.example);
+  const svg = types.flow.render(spec, theme.tokens);
+  assert.match(svg, /viewBox="0 0 720 72"/);
+  const png = toPng(svg, theme.tokens.color.paper);
+  assert.equal(png.width, 1440);
+  assert.equal(png.height, 144);
 });
 
 const playwright: typeof import('playwright-core') | null = await import('playwright' as string).catch(() => null);

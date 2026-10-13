@@ -64,6 +64,7 @@ export function frame(t: Tokens, height: number, title: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-margin} ${-margin} ${w} ${h}" width="100%" role="img" aria-label="${esc(title)}"><rect class="zk-background" x="${-margin}" y="${-margin}" width="${w}" height="${h}" fill="${t.color.paper}"/>`;
 }
 
+// SVGの枠と背景に、図形のスタイルと矢印・グラデーションの定義を加える。heightは余白を含まない図の高さ。
 export function open(t: Tokens, height: number, title: string): string {
   const c = t.color;
   const f = t.figure;
