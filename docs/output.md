@@ -55,11 +55,15 @@ zukai build 原稿.md --format=markdown --image-format=mermaid
 
 GitHubで共有するときは `README.md` と `assets/` を一緒にコミットしてください。既存の相対画像も `assets/` へコピーし、文書への相対リンクは出力先からのパスに直します。Markdownだけを別の場所へ移す場合は、画像とリンクのパスも合わせて変更する必要があります。`source/` は原稿のコピーで、テーマ・設定・原稿が参照する外部ファイルの一式は含みません。
 
+画像とリンクの参照定義が重複した場合は、大文字小文字を区別せず、最初の定義を使います。図の補足内の定義はその補足だけに適用し、本文の定義を変えません。この扱いはPDF・Word・PowerPointでも共通です。
+
 ### PDF・Word・PowerPoint の条件
 
 PDFの生成にはChromiumが必要です。`npx playwright-core install chromium` で用意するか、`zukai config set chromium <実行ファイル> --scope=user` で使うブラウザを指定してください。生成時にWebサイトへアクセスせず、画像は文書に埋め込みます。
 
 Word・PowerPointはブラウザなしで生成できます。本文と表は編集可能ですが、図はPNG画像です。日本語フォントは `png.font` の設定を使うため、受け手のPCでも同じフォントがあると見た目がそろいます。PowerPointでは9列以上の表を行ごとの文章として出力し、注意を表示します。表の中の画像は表の後ろに、見出し内の画像は見出しの下に配置します。
+
+Word・PowerPointのページ背景と本文には、テーマの `color.paper` と `color.ink` を使います。コードの背景とWordの表の見出し行には `color.surface` を使い、本文色とのコントラストが足りない場合はページ背景と同じ色にします。
 
 PDF・Word・PowerPointで通常のMarkdown画像を使う場合は、画像をローカルに保存して相対パスで参照してください。PNG・JPEG・GIF・BMP・SVGに対応します。外部URLの画像は取りに行かず、エラーで知らせます。通常のHTMLブロックは実行せず、コードの文字列として残します。独自の図の型が後続の説明を出す場合は、`after` の `markdown` にも説明を書くと、これらの形式で本文として扱えます。補足内の画像とリンクも原稿の場所を基準に解決し、本文と同じように変換します。
 

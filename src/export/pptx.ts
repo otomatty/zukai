@@ -3,6 +3,7 @@ import type { Nodes } from 'mdast';
 import { textOf } from './document.ts';
 import type { ExportDocument } from './document.ts';
 import { imageOf } from './images.ts';
+import { officeSurface, officeTextColor } from './office-colors.ts';
 import { pngFont } from '../png.ts';
 
 // パッケージの型定義は CJS と判定されるが、import 側の実体は default のクラス。
@@ -38,11 +39,13 @@ export async function writePptx(doc: ExportDocument): Promise<Buffer> {
   let y = 1.4;
   let newSection = true;
   const color = doc.tokens.color.ink.slice(1);
+  const surface = officeSurface(doc.tokens);
+  const footerColor = officeTextColor(doc.tokens, doc.tokens.color.sub);
   /** 手動で作るスライドと表の自動改ページで、背景・見出し・フッターを揃える。 */
   function decorate(target: Slide | Slide['newAutoPagedSlides'][number]) {
     target.background = { color: doc.tokens.color.paper.slice(1) };
     target.addText(heading, { x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontFace, fontSize: 27, bold: true, color, margin: 0, breakLine: false, fit: 'shrink' });
-    target.addText('zukai', { x: 11.5, y: 7.1, w: 1.1, h: 0.2, fontSize: 10, color: '64748B', align: 'right', margin: 0 });
+    target.addText('zukai', { x: 11.5, y: 7.1, w: 1.1, h: 0.2, fontSize: 10, color: footerColor, align: 'right', margin: 0 });
   }
   function next() {
     slide = pptx.addSlide();
@@ -57,7 +60,7 @@ export async function writePptx(doc: ExportDocument): Promise<Buffer> {
       const count = Math.max(1, Math.floor((6.8 - y) / 0.4));
       const chunk = lines.splice(0, count);
       const h = chunk.length * 0.4 + 0.06;
-      slide.addText(chunk.join('\n'), { x: 0.65, y, w: 12.0, h, fontFace: code ? 'Consolas' : fontFace, fontSize: code ? 16 : 20, color, margin: 0, valign: 'top', breakLine: false, ...(code ? { fill: { color: 'F2F4F6' } } : {}) });
+      slide.addText(chunk.join('\n'), { x: 0.65, y, w: 12.0, h, fontFace: code ? 'Consolas' : fontFace, fontSize: code ? 16 : 20, color, margin: 0, valign: 'top', breakLine: false, ...(code ? { fill: { color: surface } } : {}) });
       y += h + 0.16;
     }
   }

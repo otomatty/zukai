@@ -69,6 +69,22 @@ test('参照形式の画像も同梱し、空白のあるパスを解決する',
   assert.equal(path.resolve(result.out, links.at(-1)!.url), path.resolve(dir, '../guide.md'));
 });
 
+test('重複した参照定義は大文字小文字を区別せず最初の画像とリンクを使う', async () => {
+  const { file, dir } = fixture();
+  const seed = await buildOutput(file, { format: 'png' });
+  fs.copyFileSync(path.join(seed.out, 'fig-01.png'), path.join(dir, 'first.png'));
+  fs.writeFileSync(file, '# 参照\n\n![画像][photo] [文書][page]\n\n[photo]: first.png\n[PHOTO]: missing.png\n[page]: first.md\n[PAGE]: wrong.md\n');
+  const out = path.join(dir, 'nested/export');
+  const doc = await prepareDocument(fs.readFileSync(file, 'utf8'), file, out);
+  const nodes = walk(doc.tree);
+  const img = nodes.find((n) => n.type === 'image');
+  assert.ok(img?.type === 'image');
+  assert.deepEqual(doc.assets.get(img.url), fs.readFileSync(path.join(dir, 'first.png')));
+  const link = nodes.find((n) => n.type === 'link');
+  assert.ok(link?.type === 'link');
+  assert.equal(path.resolve(out, link.url), path.join(dir, 'first.md'));
+});
+
 test('コードの根拠は抜粋と行番号を残す', async () => {
   const { dir, file } = fixture();
   fs.writeFileSync(path.join(dir, 'impl.ts'), 'export const answer = 42;\n');
@@ -119,7 +135,7 @@ test('図の補足内の参照定義を解決し、本文の同名定義を変�
   const { file, dir } = fixture();
   const seed = await buildOutput(file, { format: 'png' });
   fs.copyFileSync(path.join(seed.out, 'fig-01.png'), path.join(dir, 'shot.png'));
-  t.mock.method(screenshot, 'after', () => ({ html: '', storage: '', markdown: '![詳細][photo]\n\n[補足][page]\n\n[photo]: shot.png\n[page]: extra.md#note\n' }));
+  t.mock.method(screenshot, 'after', () => ({ html: '', storage: '', markdown: '![詳細][photo]\n\n[補足][page]\n\n[photo]: shot.png\n[PHOTO]: missing.png\n[page]: extra.md#note\n[PAGE]: wrong.md\n' }));
   fs.writeFileSync(file, '# 画面\n\n[page]: original.md\n\n```yaml figure\ntype: screenshot\nimage: shot.png\nmarks:\n  - at: [10, 10, 50, 40]\n    note: 補足を確認\n```\n\n[本文][page]\n');
   const out = path.join(dir, 'nested/export');
   const doc = await prepareDocument(fs.readFileSync(file, 'utf8'), file, out);
@@ -272,6 +288,45 @@ test('PowerPoint は本文と図を含み、長文の末尾を次のスライド
   assert.match(xml.replace(/<[^>]+>/g, ''), /表の末尾です/);
   assert.doesNotMatch(xml, /動画だけの内容/);
   assert.equal(wrapText('aあ😀'.repeat(100)).join(''), 'aあ😀'.repeat(100));
+});
+
+test('Word は暗いテーマのページ・コード・表で本文が読める背景を使う', async () => {
+  for (const surface of [undefined, '#263544']) {
+    const { file, dir } = fixture();
+    fs.mkdirSync(path.join(dir, 'dark'));
+    fs.writeFileSync(path.join(dir, 'dark/tokens.json'), JSON.stringify({ color: { paper: '#101820', ink: '#F1F5F9', surface } }));
+    fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ theme: 'dark' }));
+    fs.writeFileSync(file, '# 暗い資料\n\n## 見出し\n\n本文と `inline code` [リンク](guide.md)\n\n```js\nconst answer = 42;\n```\n\n|項目|値|\n|---|---|\n|状態|保存|\n');
+    const zip = await zipOf((await buildOutput(file, { format: 'docx' })).out);
+    const xml = await zip.file('word/document.xml')!.async('string');
+    assert.match(xml.match(/<w:background\b[^>]*>/)?.[0] ?? '', /w:color="101820"/);
+    const shading = xml.match(/<w:shd\b[^>]*>/g) ?? [];
+    assert.ok(shading.length >= 3);
+    for (const fill of shading) assert.match(fill, new RegExp(`w:fill="${surface?.slice(1) ?? '101820'}"`));
+    assert.match(await zip.file('word/styles.xml')!.async('string'), /w:color\b[^>]*w:val="F1F5F9"/i);
+    const heading = [...xml.matchAll(/<w:p>[\s\S]*?<\/w:p>/g)].map((m) => m[0]).find((p) => p.includes('w:val="Heading1"'))!;
+    assert.match(heading, /w:color\b[^>]*w:val="F1F5F9"/i);
+    assert.match(xml.match(/<w:hyperlink\b[\s\S]*?<\/w:hyperlink>/)?.[0] ?? '', /w:color\b[^>]*w:val="F1F5F9"/i);
+  }
+});
+
+test('PowerPoint は暗いテーマのコードにも読める背景を使う', async () => {
+  for (const surface of [undefined, '#263544']) {
+    const { file, dir } = fixture();
+    fs.mkdirSync(path.join(dir, 'dark'));
+    fs.writeFileSync(path.join(dir, 'dark/tokens.json'), JSON.stringify({ color: { paper: '#101820', ink: '#F1F5F9', surface } }));
+    fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ theme: 'dark' }));
+    fs.writeFileSync(file, '# 暗い資料\n\n```js\nconst answer = 42;\n```\n');
+    const zip = await zipOf((await buildOutput(file, { format: 'pptx' })).out);
+    const xml = await zip.file('ppt/slides/slide1.xml')!.async('string');
+    const code = [...xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map((m) => m[0]).find((sp) => sp.includes('const answer'))!;
+    assert.ok(code);
+    const shape = code.match(/<p:spPr>[\s\S]*?<\/p:spPr>/)?.[0] ?? '';
+    assert.match(shape, new RegExp(`<a:srgbClr val="${surface?.slice(1) ?? '101820'}"`));
+    assert.match(code, /<a:srgbClr val="F1F5F9"/);
+    const footer = [...xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map((m) => m[0]).find((sp) => sp.includes('<a:t>zukai</a:t>'))!;
+    assert.match(footer, /<a:srgbClr val="F1F5F9"/);
+  }
 });
 
 test('PowerPoint は長い表の続きにもテーマの背景・見出し・フッターを適用する', async () => {

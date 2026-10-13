@@ -95,7 +95,10 @@ export async function prepareDocument(source: string, file: string, outDir: stri
   const warnings: string[] = [];
   const definitions = new Map<string, Definition>();
   const collect = (node: Nodes, into = definitions) => {
-    if (node.type === 'definition') into.set(node.identifier.toUpperCase(), { ...node });
+    if (node.type === 'definition') {
+      const id = node.identifier.toUpperCase();
+      if (!into.has(id)) into.set(id, { ...node });
+    }
     if ('children' in node) node.children.forEach((child) => collect(child, into));
   };
   collect(tree);
@@ -160,8 +163,11 @@ export async function prepareDocument(source: string, file: string, outDir: stri
           if (extra.markdown) {
             const fragment = readMarkdown(extra.markdown);
             // 補足内の参照定義は本文へ漏らさず、画像とリンクは同じ処理で変換する。
-            const fragmentDefinitions = new Map(localDefinitions);
+            const fragmentDefinitions = new Map<string, Definition>();
             collect(fragment, fragmentDefinitions);
+            for (const [id, definition] of localDefinitions) {
+              if (!fragmentDefinitions.has(id)) fragmentDefinitions.set(id, definition);
+            }
             await convert(fragment, fragmentDefinitions);
             after.push(...fragment.children);
           } else if (extra.html) {
