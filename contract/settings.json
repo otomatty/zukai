@@ -174,7 +174,7 @@
       "default": null,
       "env": "ZUKAI_CHROMIUM",
       "scopes": ["user"],
-      "description": "capture、video、frames が使う Chromium の実行ファイル。省略すると Playwright が入れたものを使う"
+      "description": "PDF出力、capture、video、frames が使う Chromium の実行ファイル。省略すると Playwright が入れたものを使う"
     }
   }
 }

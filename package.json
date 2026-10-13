@@ -24,17 +24,30 @@
     "@resvg/resvg-js": "^2.6.2",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
     "aws-icons": "^3.3.0",
+    "docx": "^9.10.0",
     "echarts": "^6.1.0",
+    "image-size": "^2.0.4",
     "markdown-it": "^15.0.2",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "mdast-util-to-markdown": "^2.2.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "playwright-core": "^1.64.0",
+    "pptxgenjs": "^4.0.1",
     "shiki": "^4.5.0",
     "textlint": "^15.8.0",
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
     "yaml": "^2.9.1"
   },
+  "overrides": {
+    "pptxgenjs": {
+      "image-size": "^2.0.4"
+    }
+  },
   "devDependencies": {
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^24.19.2",
-    "playwright-core": "^1.64.0",
+    "jszip": "^3.10.2",
     "typescript": "^7.0.2"
   }
 }

@@ -210,8 +210,8 @@ export interface FigureType<S = RawSpec> {
   texts?(spec: S, ctx?: FigureContext): string[];
   title?(spec: S, t: Tokens): string;
   render(spec: S, t: Tokens, ctx?: FigureContext): string;
-  // 図の後ろに続ける HTML と Confluence の本文（画面の注釈の一覧など）。
-  after?(spec: S, ctx?: FigureContext): { html: string; storage: string };
+  // 図の後ろに続ける本文（画面の注釈の一覧など）。markdown は文書・Office 出力にも使う。
+  after?(spec: S, ctx?: FigureContext): { html: string; storage: string; markdown?: string };
 }
 
 // 型の一覧。型ごとに仕様の形が違うので、一覧では仕様の形を問わない。

@@ -2,7 +2,7 @@
 
 zukai は、AI が書いた原稿から、図を中心にした日本語の資料を作るツールです。システムの設計書や社内の説明資料など、ブラウザで縦に読んでいくドキュメントを作れます。
 
-AI に文章と図の内容を Markdown で書いてもらい、zukai で検査して HTML に変換します。作った資料は、HTML ファイルで渡したり、Confluence のページとして共有したりできます。
+AI に文章と図の内容を Markdown で書いてもらい、zukai で検査して資料に変換します。HTML、画像付きの Markdown、PDF、Word、PowerPoint、Confluence 用のフォルダに書き出せます。図だけを SVG や PNG にすることもできます。
 
 ## 仕組み
 
@@ -10,7 +10,7 @@ AI に文章と図の内容を Markdown で書いてもらい、zukai で検査�
 
 1. AI が、見出し・文章・図の内容を Markdown の原稿に書く。図には、種類や箱の名前、要素どうしの関係を指定する。
 2. `zukai lint` が、原稿の構成、図の項目数や文字の収まり、文章の書き方を検査する。検査に AI は使わない。
-3. 検査で見つかった問題を直し、`zukai build` で HTML を作る。zukai が原稿の指定をもとに図を描き、本文と一緒に配置する。
+3. 検査で見つかった問題を直し、`zukai build` で資料を作る。既定は HTML で、`--format` で形式を選べる。zukai が原稿の指定をもとに図を描き、本文と一緒に配置する。
 
 ![原稿を書き、Lint で検査し、HTML に変換する](docs/images/pipeline.png)
 
@@ -38,6 +38,8 @@ AI には、最初に図の型の一覧を渡し、使う型が決まってか�
 
 - HTML で渡す場合は、図と本文を 1 つのファイルにまとめる。原稿も HTML の中に保存するので、受け取った人が取り出して編集できる。
 - Confluence で共有する場合は、図を PNG として添付し、ページの本文から表示する。編集用の Markdown 原稿もページに添付する。
+- Markdown で共有する場合は、本文と図の画像をフォルダにまとめる。PNG・SVG・Mermaid を選べる。
+- PDF・Word・PowerPoint で渡す場合は、図を画像として文書に埋め込む。Word と PowerPoint の本文は編集できる。
 
 ![ファイルは 1 枚の HTML、Confluence は PNG と本文](docs/images/share.png)
 
@@ -66,6 +68,10 @@ zukai setup         # 使う AI ツール、出力の形、共有先を質問に
 ```bash
 zukai lint 原稿.md
 zukai build 原稿.md  # 原稿.html を書き出す
+zukai build 原稿.md --format=markdown  # 本文と画像をまとめたフォルダ
+zukai build 原稿.md --format=pdf       # PDF。Chromium が必要
+zukai build 原稿.md --format=docx      # Word
+zukai build 原稿.md --format=pptx      # PowerPoint
 ```
 
 コマンドの一覧と詳しい設定手順は [docs/setup.md](docs/setup.md) にあります。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.ts` の後ろにコマンド名と引数を書いて実行できます。

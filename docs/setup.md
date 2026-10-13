@@ -44,6 +44,10 @@ zukai capture 原稿.md               # screenshot の URL を撮影し、枠の
 zukai lint 原稿.md --model=モデル名  # 検査する。error が1件でもあれば終了コード1
 zukai build 原稿.md                 # 原稿.html を書き出す
 zukai build 原稿.md --format=confluence  # Confluence 用のフォルダを書き出す
+zukai build 原稿.md --format=markdown    # 本文と画像をフォルダに書き出す
+zukai build 原稿.md --format=pdf         # PDF。Chromium が必要
+zukai build 原稿.md --format=docx        # Word
+zukai build 原稿.md --format=pptx        # PowerPoint
 zukai publish 原稿.md               # Confluence Cloud にページを作る。2回目以降は更新する
 zukai extract 原稿.html             # HTML に埋め込んだ原稿を取り出す
 zukai view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
