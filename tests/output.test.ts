@@ -10,6 +10,7 @@ import { extract, render, renderConfluence } from '../src/render.ts';
 import { prepareDocument, readMarkdown } from '../src/export/document.ts';
 import { wrapText } from '../src/export/pptx.ts';
 import { mermaid } from '../src/export/mermaid.ts';
+import screenshot from '../src/figures/screenshot.ts';
 import type { Nodes } from 'mdast';
 
 const source = `# 注文の処理\n\n図と本文を共有します。\n\n## 注文の流れ\n\n注文を受け付けて保存します。\n\n\`\`\`yaml figure\ntype: flow\nsteps:\n  - label: 受付\n    note: 内容を確認\n  - label: 保存\n\`\`\`\n\n**説明**を残します。[リンク](../guide.md#note)\n\n|項目|値|\n|---|---|\n|状態|保存済み|\n\n- 一つ目\n- 二つ目\n\n\`\`\`js\nconst example = "![触らない](missing.png)";\n\`\`\`\n\n\`\`\`yaml narration\n- 動画だけの内容です。\n\`\`\`\n\n\`\`\`html motion\n<div>動画用のHTML</div>\n\`\`\`\n`;
@@ -89,6 +90,44 @@ test('スクリーンショットの枠の説明と撮影元を本文に残す',
   assert.match(doc.markdown, /1\. この場所を確認します/);
   assert.ok(walk(doc.tree).some((node) => node.type === 'link' && node.url === 'https://example.com'));
   assert.doesNotMatch(doc.markdown, /<ol/);
+});
+
+test('図の補足に含まれる画像を同梱し、リンクを出力先に合わせ、Officeにも埋め込む', async () => {
+  const { file, dir } = fixture();
+  const seed = await buildOutput(file, { format: 'png' });
+  for (const name of ['shot.png', 'detail.png']) fs.copyFileSync(path.join(seed.out, 'fig-01.png'), path.join(dir, name));
+  fs.writeFileSync(file, '# 画面\n\n```yaml figure\ntype: screenshot\nimage: shot.png\nmarks:\n  - at: [10, 10, 50, 40]\n    note: "![詳細](detail.png) [説明](guide.md#note)"\n```\n');
+  const out = path.join(dir, 'nested/export');
+  const result = await buildOutput(file, { format: 'markdown', out });
+  const nodes = walk(readMarkdown(fs.readFileSync(path.join(result.out, 'README.md'), 'utf8')));
+  const images = nodes.filter((n) => n.type === 'image');
+  assert.equal(images.length, 2);
+  for (const img of images) assert.ok(fs.existsSync(path.join(out, img.url)), img.url);
+  const link = nodes.find((n) => n.type === 'link');
+  assert.ok(link?.type === 'link');
+  assert.equal(path.resolve(out, link.url.split('#')[0]), path.join(dir, 'guide.md'));
+  assert.ok(link.url.endsWith('#note'));
+  const docx = await zipOf((await buildOutput(file, { format: 'docx' })).out);
+  assert.equal((await docx.file('word/document.xml')!.async('string')).match(/<w:drawing>/g)?.length, 2);
+  const pptx = await zipOf((await buildOutput(file, { format: 'pptx' })).out);
+  const slides = Object.keys(pptx.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+  const xml = (await Promise.all(slides.map((name) => pptx.file(name)!.async('string')))).join('');
+  assert.equal(xml.match(/<p:pic>/g)?.length, 2);
+});
+
+test('図の補足内の参照定義を解決し、本文の同名定義を変更しない', async (t) => {
+  const { file, dir } = fixture();
+  const seed = await buildOutput(file, { format: 'png' });
+  fs.copyFileSync(path.join(seed.out, 'fig-01.png'), path.join(dir, 'shot.png'));
+  t.mock.method(screenshot, 'after', () => ({ html: '', storage: '', markdown: '![詳細][photo]\n\n[補足][page]\n\n[photo]: shot.png\n[page]: extra.md#note\n' }));
+  fs.writeFileSync(file, '# 画面\n\n[page]: original.md\n\n```yaml figure\ntype: screenshot\nimage: shot.png\nmarks:\n  - at: [10, 10, 50, 40]\n    note: 補足を確認\n```\n\n[本文][page]\n');
+  const out = path.join(dir, 'nested/export');
+  const doc = await prepareDocument(fs.readFileSync(file, 'utf8'), file, out);
+  const images = walk(doc.tree).filter((n) => n.type === 'image');
+  assert.equal(images.length, 2);
+  for (const img of images) assert.ok(doc.assets.has(img.url));
+  const links = walk(doc.tree).filter((n) => n.type === 'link');
+  assert.deepEqual(links.map((n) => path.resolve(out, n.url.split('#')[0])), [path.join(dir, 'extra.md'), path.join(dir, 'original.md')]);
 });
 
 test('バイナリ形式は外部画像を黙って省略せず、出力前に知らせる', async () => {
@@ -252,6 +291,30 @@ test('PowerPoint は長い表の続きにもテーマの背景・見出し・フ
     assert.match(xml, /<a:t>テーマの表<\/a:t>/, name);
     assert.match(xml, /<a:t>zukai<\/a:t>/, name);
     assert.match(xml, /<a:tbl>/, name);
+  }
+});
+
+test('PowerPoint は見出し内の画像を、本文がない最後の見出しまで埋め込む', async () => {
+  const { dir, file } = fixture();
+  const seed = await buildOutput(file, { format: 'png' });
+  fs.copyFileSync(path.join(seed.out, 'fig-01.png'), path.join(dir, 'header.png'));
+  fs.writeFileSync(file, '# 前の節\n\n前の本文\n\n## 見出し [![ロゴ][logo]](https://example.com)\n\n見出しの本文\n\n## 最後 ![末尾](header.png)\n\n[logo]: header.png\n');
+  const zip = await zipOf((await buildOutput(file, { format: 'pptx' })).out);
+  const names = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+  const slides = await Promise.all(names.map((name) => zip.file(name)!.async('string')));
+  const pictured = slides.filter((xml) => xml.includes('<p:pic>'));
+  assert.equal(pictured.length, 2);
+  assert.ok(pictured.some((xml) => xml.includes('見出し') && xml.includes('ロゴ')));
+  assert.ok(pictured.some((xml) => xml.includes('最後') && xml.includes('末尾')));
+  assert.match(slides.join(''), /見出しの本文/);
+});
+
+test('PowerPoint は見出し内でも外部画像を黙って省略せず、出力前に知らせる', async () => {
+  const { file } = fixture();
+  for (const depth of [1, 2]) {
+    fs.writeFileSync(file, `${'#'.repeat(depth)} [![外部画像](https://example.invalid/header.png)](https://example.com)\n`);
+    await assert.rejects(buildOutput(file, { format: 'pptx' }), /ローカルに保存/);
+    assert.equal(fs.existsSync(file.replace('.md', '.pptx')), false);
   }
 });
 

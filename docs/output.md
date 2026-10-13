@@ -59,9 +59,9 @@ GitHubで共有するときは `README.md` と `assets/` を一緒にコミッ�
 
 PDFの生成にはChromiumが必要です。`npx playwright-core install chromium` で用意するか、`zukai config set chromium <実行ファイル> --scope=user` で使うブラウザを指定してください。生成時にWebサイトへアクセスせず、画像は文書に埋め込みます。
 
-Word・PowerPointはブラウザなしで生成できます。本文と表は編集可能ですが、図はPNG画像です。日本語フォントは `png.font` の設定を使うため、受け手のPCでも同じフォントがあると見た目がそろいます。PowerPointでは9列以上の表を行ごとの文章として出力し、注意を表示します。表の中の画像は表の後ろに配置します。
+Word・PowerPointはブラウザなしで生成できます。本文と表は編集可能ですが、図はPNG画像です。日本語フォントは `png.font` の設定を使うため、受け手のPCでも同じフォントがあると見た目がそろいます。PowerPointでは9列以上の表を行ごとの文章として出力し、注意を表示します。表の中の画像は表の後ろに、見出し内の画像は見出しの下に配置します。
 
-PDF・Word・PowerPointで通常のMarkdown画像を使う場合は、画像をローカルに保存して相対パスで参照してください。PNG・JPEG・GIF・BMP・SVGに対応します。外部URLの画像は取りに行かず、エラーで知らせます。通常のHTMLブロックは実行せず、コードの文字列として残します。独自の図の型が後続の説明を出す場合は、`after` の `markdown` にも説明を書くと、これらの形式で本文として扱えます。
+PDF・Word・PowerPointで通常のMarkdown画像を使う場合は、画像をローカルに保存して相対パスで参照してください。PNG・JPEG・GIF・BMP・SVGに対応します。外部URLの画像は取りに行かず、エラーで知らせます。通常のHTMLブロックは実行せず、コードの文字列として残します。独自の図の型が後続の説明を出す場合は、`after` の `markdown` にも説明を書くと、これらの形式で本文として扱えます。補足内の画像とリンクも原稿の場所を基準に解決し、本文と同じように変換します。
 
 PNG の日本語フォントは、OS に標準で入っているもの（macOS はヒラギノ角ゴ、Windows は Yu Gothic UI、それ以外は Noto Sans CJK JP）を使います。変えたいときは、`zukai config set png.font フォント名 --scope=user` を実行します。環境変数 `ZUKAI_PNG_FONT` でも指定できます。
 

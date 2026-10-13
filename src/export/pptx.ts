@@ -82,7 +82,12 @@ export async function writePptx(doc: ExportDocument): Promise<Buffer> {
   function blocks(nodes: Nodes[], prefix = '') {
     for (const node of nodes) {
       if (node.type === 'definition') continue;
-      if (node.type === 'heading') { heading = textOf(node); newSection = true; continue; }
+      if (node.type === 'heading') {
+        heading = textOf(node);
+        newSection = true;
+        imagesIn(node).forEach((img) => image(img.url, img.alt));
+        continue;
+      }
       if (node.type === 'paragraph') {
         let buffer = prefix;
         function content(child: Nodes) {

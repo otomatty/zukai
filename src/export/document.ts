@@ -94,9 +94,9 @@ export async function prepareDocument(source: string, file: string, outDir: stri
   const figures: ExportDocument['figures'] = [];
   const warnings: string[] = [];
   const definitions = new Map<string, Definition>();
-  const collect = (node: Nodes) => {
-    if (node.type === 'definition') definitions.set(node.identifier.toUpperCase(), { ...node });
-    if ('children' in node) node.children.forEach(collect);
+  const collect = (node: Nodes, into = definitions) => {
+    if (node.type === 'definition') into.set(node.identifier.toUpperCase(), { ...node });
+    if ('children' in node) node.children.forEach((child) => collect(child, into));
   };
   collect(tree);
   let heading = tree.children.find((n) => n.type === 'heading' && n.depth === 1);
@@ -119,7 +119,7 @@ export async function prepareDocument(source: string, file: string, outDir: stri
     return urlPath(path.relative(outDir, path.resolve(ctx.baseDir, decodeURIComponent(match[1])))) + match[2];
   };
 
-  async function convert(node: Nodes): Promise<Nodes[]> {
+  async function convert(node: Nodes, localDefinitions = definitions): Promise<Nodes[]> {
     if (node.type === 'heading') heading = node;
     if (node.type === 'html' && /<!--\s*zukai-/.test(node.value)) {
       node.value = node.value.replace(/<!--\s*zukai-[\s\S]*?-->/g, '');
@@ -157,8 +157,14 @@ export async function prepareDocument(source: string, file: string, outDir: stri
         if (type.after) {
           // 図に付随する文章は既存の型が提供する。Markdown の拡張点も使える。
           const extra = type.after(spec, ctx);
-          if (extra.markdown) after.push(...readMarkdown(extra.markdown).children);
-          else if (extra.html) {
+          if (extra.markdown) {
+            const fragment = readMarkdown(extra.markdown);
+            // 補足内の参照定義は本文へ漏らさず、画像とリンクは同じ処理で変換する。
+            const fragmentDefinitions = new Map(localDefinitions);
+            collect(fragment, fragmentDefinitions);
+            await convert(fragment, fragmentDefinitions);
+            after.push(...fragment.children);
+          } else if (extra.html) {
             after.push({ type: 'html', value: extra.html });
             warnings.push(`L${line}: 図の補足はHTMLとして残しました。`);
           }
@@ -172,7 +178,7 @@ export async function prepareDocument(source: string, file: string, outDir: stri
       }
     }
     if (node.type === 'imageReference' || node.type === 'linkReference') {
-      const def = definitions.get(node.identifier.toUpperCase());
+      const def = localDefinitions.get(node.identifier.toUpperCase());
       if (def) node = node.type === 'imageReference'
         ? { type: 'image', url: def.url, alt: node.alt, title: def.title }
         : { type: 'link', url: def.url, title: def.title, children: node.children };
@@ -181,7 +187,7 @@ export async function prepareDocument(source: string, file: string, outDir: stri
     if (node.type === 'link' || node.type === 'definition') node.url = rebase(node.url);
     if ('children' in node) {
       const children: Nodes[] = [];
-      for (const child of node.children) children.push(...await convert(child));
+      for (const child of node.children) children.push(...await convert(child, localDefinitions));
       (node as { children: Nodes[] }).children = children;
     }
     return [node];
