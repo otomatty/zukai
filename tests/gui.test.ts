@@ -60,6 +60,8 @@ test('AI の返答とプロジェクトの原稿を一覧にし、一覧にな�
     fs.writeFileSync(path.join(project, 'docs/design.md'), MANUSCRIPT);
     // ~~~ の囲みの図も、原稿として見つける。
     fs.writeFileSync(path.join(project, 'docs/tilde.md'), MANUSCRIPT.replaceAll('```', '~~~'));
+    // 長い囲みの中に書いた図の例は、図ではないので一覧に入れない。
+    fs.writeFileSync(path.join(project, 'docs/howto.md'), '# 書き方\n\n````markdown\n```yaml figure\ntype: flow\n```\n````\n');
     // 図の無い Markdown と、node_modules の中は一覧に入れない。
     fs.writeFileSync(path.join(project, 'README.md'), '# 説明\n');
     fs.mkdirSync(path.join(project, 'node_modules/x'), { recursive: true });

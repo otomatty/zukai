@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir, applyMessageLang } from './config.ts';
+import { parse } from './parse.ts';
 import { answersDir, ensureDir, list as listAnswers, fallback, openBrowser } from './view.ts';
 import type { Scope } from './types.ts';
 
@@ -31,8 +32,14 @@ export interface DocItem {
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'vendor']);
-// 図のコードブロックの始まり。parse.ts と同じく、3つまでの字下げと ~~~ の囲みも受け付ける。
-const FIGURE = /^ {0,3}(?:`{3,}|~{3,})\s*(?:ya?ml|svg)\s+figure\b/m;
+// 図のコードブロックの始まりらしい行。3つまでの字下げと ~~~ の囲みも受け付ける。
+// 長い囲みの中の例にも当たるので、絞り込みにだけ使い、最後は parse.ts で図のブロックがあるかを確かめる。
+const FIGURE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*(?:ya?ml|svg)[ \t]+figure\b/m;
+const hasFigure = (source: string): boolean => {
+  if (!FIGURE.test(source)) return false;
+  const doc = parse(source);
+  return [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)].some((b) => b.kind === 'figure');
+};
 
 // プロジェクトの中の原稿（図のブロックを持つ .md）を探す。隠しフォルダ、node_modules、シンボリックリンクは読まない。
 function scan(project: string): DocItem[] {
@@ -57,7 +64,7 @@ function scan(project: string): DocItem[] {
           if (st.size > SCAN.bytes) continue;
           reads++;
           const source = fs.readFileSync(file, 'utf8');
-          if (!FIGURE.test(source)) continue;
+          if (!hasFigure(source)) continue;
           out.push({ path: path.relative(project, file).replaceAll('\\', '/'), title: source.match(/^# (.+)$/m)?.[1] ?? e.name, mtime: st.mtimeMs, answer: false });
         } catch {
           // 読めないファイルは一覧に入れない。
