@@ -53,7 +53,7 @@ test('画面の API は合言葉のある要求だけに答え、ほかのホス
 });
 
 test('AI の返答とプロジェクトの原稿を一覧にし、一覧にない原稿は読ませない', async () => {
-  const { project, server, base, api } = await start();
+  const { project, server, base, page, api } = await start();
   try {
     fs.writeFileSync(path.join(project, '.zukai/answers/a.md'), '# 返答\n\n本文です。\n');
     fs.mkdirSync(path.join(project, 'docs'));
@@ -78,15 +78,23 @@ test('AI の返答とプロジェクトの原稿を一覧にし、一覧にな�
     assert.equal((await api('GET', '/api/source?path=README.md')).status, 404);
     assert.match((await api('GET', '/api/source?path=docs%2Fdesign.md')).data.source, /type: flow/);
 
-    // HTML と Confluence 用のフォルダを、原稿の隣に書き出す。
+    // 画面の形式一覧は、CLI と同じ形式を出す。
+    assert.match(page, /<option value="pptx">PowerPoint<\/option>/);
+    assert.match(page, /<option value="mermaid">Mermaid<\/option>/);
+    // 選んだ形式で、原稿の隣に書き出す。形式を省略すると HTML。
     assert.equal((await api('POST', '/api/build', { path: 'docs/design.md' })).data.out, path.join('docs', 'design.html'));
     assert.ok(fs.readFileSync(path.join(project, 'docs/design.html'), 'utf8').includes('zukai-source'));
     const c = await api('POST', '/api/build', { path: 'docs/design.md', format: 'confluence' });
-    assert.equal(c.data.figures, 1);
+    assert.equal(c.data.out, path.join('docs', 'design.confluence'));
     assert.ok(fs.existsSync(path.join(project, 'docs/design.confluence/body.xhtml')));
+    const md = await api('POST', '/api/build', { path: 'docs/design.md', format: 'markdown', imageFormat: 'svg' });
+    assert.equal(md.data.out, path.join('docs', 'design.markdown'));
+    assert.ok(fs.existsSync(path.join(project, 'docs/design.markdown/README.md')));
+    assert.equal((await api('POST', '/api/build', { path: 'docs/design.md', format: 'nope' })).status, 400);
+    assert.equal((await api('POST', '/api/build', { path: 'docs/design.md', format: 'html', imageFormat: 'svg' })).status, 400);
     // 書き出したフォルダの中の原稿の写しは、一覧に入れない。
     await new Promise((r) => setTimeout(r, 10_100));
-    assert.ok(!(await api('GET', '/api/docs')).data.some((d: { path: string }) => d.path.includes('.confluence/')));
+    assert.ok(!(await api('GET', '/api/docs')).data.some((d: { path: string }) => d.path.includes('.confluence/') || d.path.includes('.markdown/')));
   } finally {
     server.close();
     fs.rmSync(project, { recursive: true, force: true });

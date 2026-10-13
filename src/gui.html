@@ -50,6 +50,9 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85em;backgroun
 #docmain{display:flex;flex-direction:column;min-width:0;min-height:0}
 #doctools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)}
 #doctools h2{margin:0 8px 0 0;font-size:1rem;flex:1;min-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#doctools label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:.8rem}
+#doctools label[hidden]{display:none}
+#doctools select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{border:0;background:#fff;padding:5px 10px;cursor:pointer}
 .seg button[aria-pressed=true]{background:var(--accent-soft);font-weight:600}
@@ -109,10 +112,11 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85em;backgroun
 <h2 id="doctitle"></h2>
 <span id="lintpill" class="pill muted">検査中</span>
 <span class="seg" role="group" aria-label="表示"><button id="mode-preview" aria-pressed="true">プレビュー</button><button id="mode-source" aria-pressed="false">原稿</button></span>
-<a id="download" class="btn" download>HTML を保存</a>
 <button id="reload" class="btn" title="設定、テーマ、画像、参照するコードの変更を反映する">再読み込み</button>
-<button id="build-html" class="btn">HTML を書き出す</button>
-<button id="build-confluence" class="btn">Confluence 用に書き出す</button>
+<label>形式<select id="format" aria-label="書き出す形式">__ZUKAI_FORMATS__</select></label>
+<label id="image-format-wrap" hidden>図<select id="image-format" aria-label="Markdown の図の形式">__ZUKAI_IMAGE_FORMATS__</select></label>
+<button id="build" class="btn">書き出す</button>
+<a id="download" class="btn" download>HTML を保存</a>
 <button id="publish" class="btn primary">Confluence に公開</button>
 </div>
 <div id="docbody">
@@ -311,13 +315,13 @@ async function tick() {
   renderList();
 }
 $('docfilter').oninput = renderList;
-$('build-html').onclick = (e) => busy(e.currentTarget, async () => {
-  const r = await api('POST', '/api/build', { path: shown.path });
-  toast(`${r.out} を書き出しました。`);
-});
-$('build-confluence').onclick = (e) => busy(e.currentTarget, async () => {
-  const r = await api('POST', '/api/build', { path: shown.path, format: 'confluence' });
-  toast(`${r.out} に、本文、図 ${r.figures} 枚、原稿を書き出しました。`);
+$('format').onchange = () => { $('image-format-wrap').hidden = $('format').value !== 'markdown'; };
+$('build').onclick = (e) => busy(e.currentTarget, async () => {
+  const format = $('format').value;
+  const body = { path: shown.path, format };
+  if (format === 'markdown') body.imageFormat = $('image-format').value;
+  const r = await api('POST', '/api/build', body);
+  toast(`${r.out} を書き出しました。${r.warnings.length ? `\n${r.warnings.join('\n')}` : ''}`);
 });
 $('publish').onclick = (e) => busy(e.currentTarget, async () => {
   if (!confirm(`「${shown.title}」を Confluence に公開します。\n初回はページを作り、原稿の先頭にページ ID を書き込みます。よろしいですか。`)) return;

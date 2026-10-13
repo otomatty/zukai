@@ -11,6 +11,8 @@ import type { AddressInfo } from 'node:net';
 import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir, applyMessageLang } from './config.ts';
 import { parse } from './parse.ts';
 import { answersDir, ensureDir, list as listAnswers, fallback, openBrowser } from './view.ts';
+import { imageFormats, outputFormats } from './output-formats.ts';
+import type { ImageFormat, OutputFormat } from './output-formats.ts';
 import type { Scope } from './types.ts';
 
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
@@ -57,8 +59,8 @@ function scan(project: string): DocItem[] {
       if (e.name.startsWith('.')) continue;
       const file = path.join(dir, e.name);
       if (e.isDirectory()) {
-        // build --format=confluence が書き出したフォルダには、原稿の写しがある。写しを原稿として出さない。
-        if (depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence')) walk(file, depth + 1);
+        // 書き出したフォルダには原稿の写しがある。写しを原稿として出さない。
+        if (depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown')) walk(file, depth + 1);
       } else if (e.isFile() && e.name.endsWith('.md')) {
         try {
           const st = fs.statSync(file);
@@ -212,21 +214,9 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       }
       case 'POST /api/build': {
         const file = docFile(str('path'));
-        const source = fs.readFileSync(file, 'utf8');
-        const stem = file.replace(/\.md$/, '');
-        if (str('format') === 'confluence') {
-          const { bundle } = await import('./confluence.ts');
-          const dir = `${stem}.confluence`;
-          const page = await bundle(source, file);
-          fs.mkdirSync(dir, { recursive: true });
-          for (const f of page.files) fs.writeFileSync(path.join(dir, f.name), f.data);
-          fs.writeFileSync(path.join(dir, 'body.xhtml'), page.body);
-          fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ title: page.title, representation: 'storage', attachments: page.files.map((f) => f.name) }, null, 2) + '\n');
-          return { out: path.relative(project, dir), figures: page.files.length - 1 };
-        }
-        const { render } = await import('./render.ts');
-        fs.writeFileSync(`${stem}.html`, await render(source, file));
-        return { out: path.relative(project, `${stem}.html`) };
+        const { buildOutput } = await import('./output.ts');
+        const result = await buildOutput(file, { format: str('format') ?? undefined, imageFormat: str('imageFormat') ?? undefined });
+        return { out: path.relative(project, result.out), warnings: result.warnings };
       }
       case 'POST /api/publish': {
         // CLI の publish と同じく、Lint に合格した原稿だけを登録する。
@@ -295,7 +285,7 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       if (req.method !== 'GET') return send(res, 405, 'text/plain; charset=utf-8', 'GET だけを受け付けます。');
       if (url.pathname === '/') {
         const nonce = crypto.randomBytes(16).toString('base64');
-        const html = PAGE.replace('__ZUKAI_TOKEN__', token).replaceAll('__ZUKAI_PROJECT__', esc(project)).replaceAll('<script>', `<script nonce="${nonce}">`);
+        const html = PAGE.replace('__ZUKAI_TOKEN__', token).replaceAll('__ZUKAI_PROJECT__', esc(project)).replace('__ZUKAI_FORMATS__', optionTags(outputFormats.map((f) => f.name), FORMAT_LABEL)).replace('__ZUKAI_IMAGE_FORMATS__', optionTags(imageFormats, IMAGE_LABEL)).replaceAll('<script>', `<script nonce="${nonce}">`);
         return send(res, 200, 'text/html; charset=utf-8', html, { 'content-security-policy': shellCsp(nonce), 'referrer-policy': 'no-referrer' });
       }
       if (url.pathname === '/health') return json(res, 200, { zukai: true, gui: true, project });
@@ -331,6 +321,9 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
 }
 
 const esc = (s: unknown) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const FORMAT_LABEL: Record<OutputFormat, string> = { html: 'HTML', confluence: 'Confluence', markdown: 'Markdown', pdf: 'PDF', docx: 'Word', pptx: 'PowerPoint', svg: '図（SVG）', png: '図（PNG）' };
+const IMAGE_LABEL: Record<ImageFormat, string> = { png: 'PNG', svg: 'SVG', mermaid: 'Mermaid' };
+const optionTags = (names: readonly string[], labels: Record<string, string>) => names.map((name) => `<option value="${esc(name)}">${esc(labels[name] ?? name)}</option>`).join('');
 
 // 画面が動いていなければ、切り離したプロセスで起動し、初回はブラウザで開く。どちらの場合も URL を返す。
 // AI ツールの多くは、終わらないコマンドを待ち続けるので、このコマンド自体はすぐに終わる。
