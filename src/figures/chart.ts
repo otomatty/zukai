@@ -1,7 +1,7 @@
 // チャートの型が共有する部品。描画は ECharts に任せ、配色と線の太さは contract/tokens.json から渡す。
 import { createRequire } from 'node:module';
 import type * as Echarts from 'echarts';
-import { gradientVector } from './svg.ts';
+import { frame, gradientVector } from './svg.ts';
 import { mix, seriesColor, textOn } from '../color.ts';
 import type { Tokens } from '../types.ts';
 
@@ -29,8 +29,8 @@ export function renderChart(option: ChartOption, t: Tokens, height: number, titl
   // グラデーションの色からは、ECharts が重ねたときの色を作れず、壊れた CSS（fill:[object Object]）を出すため。
   const svg = chart.renderToSVGString().replace(/\.[\w-]+:hover \{[^}]*\}\n?/g, '');
   chart.dispose();
-  // 幅に合わせて伸縮するよう、固定の幅と高さを外す。viewBox は ECharts が付けている。
-  return svg.replace(/<svg ([^>]*?)width="[\d.]+" height="[\d.]+"/, `<svg $1width="100%" role="img" aria-label="${title.replace(/"/g, '&quot;')}"`);
+  // ECharts の座標を保ち、他の図と同じ余白と背景を付ける。
+  return svg.replace(/<svg\b[^>]*>/, () => frame(t, height, title));
 }
 
 // 描画せずに、各要素が置かれる位置と大きさだけを調べる。文字が収まるかの検査に使う。
