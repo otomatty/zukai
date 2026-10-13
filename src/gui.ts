@@ -85,8 +85,10 @@ function configItems(project: string) {
   const items = listedKeys(cfg).map((key) => {
     const s = specOf(key)!;
     const origin = cfg.origins[key] ?? null;
-    // 画面で直す値は、書いたままの値（パスは相対パスのまま）にする。
-    const value = s.secret ? null : origin && origin !== 'default' ? cfg.raw[key] : (s.default ?? null);
+    // 画面で直す値は、書いたままの値にする。ただしパスは、画面がプロジェクトの根から解決するので、
+    // チームと手元に書いた値（プロジェクトの根から解決する）だけをそのまま出し、この PC と環境変数の値は絶対パスにして出す。
+    const asWritten = origin === 'team' || origin === 'local' || s.type !== 'path';
+    const value = s.secret ? null : origin && origin !== 'default' ? (asWritten ? cfg.raw[key] : cfg.values[key]) : (s.default ?? null);
     return {
       key,
       group: s.group,
@@ -127,10 +129,16 @@ function shadowOf(project: string, key: string, scope: Scope): string | null {
 }
 
 // プロジェクトの中のパスにする。外を指すパスは断る。
+// シンボリックリンクをたどった先も確かめる。まだ無いフォルダは、いちばん近い今あるフォルダの実体で確かめる。
 function inside(project: string, rel: string): string {
   const abs = path.resolve(project, rel);
-  const r = path.relative(project, abs);
-  if (r.startsWith('..') || path.isAbsolute(r)) throw new Error(`プロジェクトの外（${rel}）には書けません。`);
+  const within = (base: string, p: string) => {
+    const r = path.relative(base, p);
+    return !(r.startsWith('..') || path.isAbsolute(r));
+  };
+  let existing = abs;
+  while (!fs.existsSync(existing)) existing = path.dirname(existing);
+  if (!within(project, abs) || !within(fs.realpathSync(project), fs.realpathSync(existing))) throw new Error(`プロジェクトの外（${rel}）には書けません。`);
   return abs;
 }
 

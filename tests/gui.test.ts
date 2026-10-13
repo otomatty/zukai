@@ -109,6 +109,12 @@ test('設定を書き、消す。秘密の値は画面に返さない', async ()
     assert.deepEqual([token.value, token.isSet, token.origin], [null, true, 'credentials']);
     assert.ok(!JSON.stringify(cfg).includes('secret-token'));
     assert.equal(cfg.items.find((i: { key: string }) => i.key === 'output').value, 'video');
+    // この PC の設定のパスは ~/.zukai から解決するので、画面には絶対パスで出す。そのまま保存しても場所が変わらない。
+    fs.writeFileSync(path.join(home, '.zukai/config.json'), JSON.stringify({ chromium: 'bin/chrome' }));
+    const chromium = (await api('GET', '/api/config')).data.items.find((i: { key: string }) => i.key === 'chromium');
+    assert.equal(chromium.value, path.join(home, '.zukai/bin/chrome'));
+    await api('POST', '/api/config', { key: 'chromium', value: chromium.value, scope: 'user' });
+    assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.zukai/config.json'), 'utf8')).chromium, path.join(home, '.zukai/bin/chrome'));
 
     r = await api('POST', '/api/config/unset', { key: 'output', scope: 'local' });
     assert.equal(r.data.removed.scope, 'local');
@@ -124,6 +130,16 @@ test('テーマのフォルダはプロジェクトの中にだけ作る', async
   const { project, server, base, api } = await start();
   try {
     assert.equal((await api('POST', '/api/theme/init', { dir: '../outside' })).status, 400);
+    // プロジェクトの中のシンボリックリンクから、外に作らせない。Windows で作る権限がなければ確かめない。
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-gui-out-'));
+    try {
+      fs.symlinkSync(outside, path.join(project, 'linked'));
+    } catch {}
+    if (fs.existsSync(path.join(project, 'linked'))) {
+      assert.equal((await api('POST', '/api/theme/init', { dir: 'linked/theme' })).status, 400);
+      assert.deepEqual(fs.readdirSync(outside), []);
+    }
+    fs.rmSync(outside, { recursive: true, force: true });
     assert.ok(!fs.existsSync(path.join(project, '../outside')));
     const r = await api('POST', '/api/theme/init', { dir: 'my-theme' });
     assert.equal(r.data.written.length, 2);

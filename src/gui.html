@@ -110,6 +110,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85em;backgroun
 <span id="lintpill" class="pill muted">検査中</span>
 <span class="seg" role="group" aria-label="表示"><button id="mode-preview" aria-pressed="true">プレビュー</button><button id="mode-source" aria-pressed="false">原稿</button></span>
 <a id="download" class="btn" download>HTML を保存</a>
+<button id="reload" class="btn" title="設定、テーマ、画像、参照するコードの変更を反映する">再読み込み</button>
 <button id="build-html" class="btn">HTML を書き出す</button>
 <button id="build-confluence" class="btn">Confluence 用に書き出す</button>
 <button id="publish" class="btn primary">Confluence に公開</button>
@@ -185,6 +186,8 @@ function h(tag, attrs, ...children) {
   return el;
 }
 async function api(method, url, body) {
+  // 書き込む要求の後は、資料を描き直す。
+  if (method === 'POST' && url.startsWith('/api/config')) stale = true;
   const res = await fetch(url, { method, headers: { 'x-zukai-token': TOKEN, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => ({ error: `応答を読めませんでした（${res.status}）。` }));
   if (!res.ok) throw new Error(data.error || `失敗しました（${res.status}）。`);
@@ -210,6 +213,7 @@ function selectTab(name) {
   for (const b of document.querySelectorAll('nav.tabs button')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
   for (const s of document.querySelectorAll('section.tab')) s.hidden = s.id !== `tab-${name}`;
   try { localStorage.setItem('zukai-gui-tab', name); } catch {}
+  if (name === 'docs' && stale) reload();
   if (name === 'settings') loadSettings();
   if (name === 'theme') loadTheme();
   if (name === 'confluence') loadConfluence();
@@ -217,8 +221,9 @@ function selectTab(name) {
 for (const b of document.querySelectorAll('nav.tabs button')) b.onclick = () => selectTab(b.dataset.tab);
 
 // --- 資料 -------------------------------------------------------------------
-let items = [], shown = null, mode = 'preview', follow = true, drawn = '';
-const docUrl = (item, extra = '') => `/doc?path=${encodeURIComponent(item.path)}&v=${item.mtime}${extra}`;
+// stale は、設定やテーマを変えた後で、資料を描き直す必要があること。原稿が同じでも、描いた結果が変わるため。
+let items = [], shown = null, mode = 'preview', follow = true, drawn = '', stale = false, rev = 0;
+const docUrl = (item, extra = '') => `/doc?path=${encodeURIComponent(item.path)}&v=${item.mtime}.${rev}${extra}`;
 function renderList() {
   const q = $('docfilter').value.trim().toLowerCase();
   const visible = items.filter((i) => !q || i.title.toLowerCase().includes(q) || i.path.toLowerCase().includes(q));
@@ -244,6 +249,14 @@ async function show(item) {
   applyMode();
   lintShown();
 }
+// 原稿が変わっていなくても、描き直して検査し直す。
+function reload() {
+  if (!shown) return;
+  stale = false;
+  rev++;
+  applyMode();
+  lintShown();
+}
 function applyMode() {
   if (!shown) return;
   $('mode-preview').setAttribute('aria-pressed', String(mode === 'preview'));
@@ -257,6 +270,7 @@ function applyMode() {
     api('GET', `/api/source?path=${encodeURIComponent(shown.path)}`).then((r) => ($('source').textContent = r.source)).catch((e) => toast(e.message, { error: true }));
   }
 }
+$('reload').onclick = reload;
 $('mode-preview').onclick = () => { mode = 'preview'; applyMode(); };
 $('mode-source').onclick = () => { mode = 'source'; applyMode(); };
 let lintSeq = 0;
