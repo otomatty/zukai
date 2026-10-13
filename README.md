@@ -74,6 +74,8 @@ zukai build 原稿.md --format=docx      # Word
 zukai build 原稿.md --format=pptx      # PowerPoint
 ```
 
+コマンドを使わずに操作したいときは、`zukai gui` でブラウザの画面を開きます。AI が書いた資料の確認と書き出し、設定の変更、テーマの確認、Confluence への公開ができます。詳しくは [docs/output.md](docs/output.md#操作画面zukai-gui) にあります。
+
 コマンドの一覧と詳しい設定手順は [docs/setup.md](docs/setup.md) にあります。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.ts` の後ろにコマンド名と引数を書いて実行できます。
 
 ## ドキュメント

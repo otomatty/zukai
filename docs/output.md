@@ -120,3 +120,24 @@ zukai setup skills --skills=user --tools=claude --yes  # この PC の全プロ�
 - 127.0.0.1 だけで待ち受け、`.zukai/answers` の原稿だけを読む。ページへの要求が30分なければ終了する
 
 資料は `.zukai/answers` に置くので、Git の管理に入りません。
+
+## 操作画面（zukai gui）
+
+`zukai gui` は、AI が書いた資料の確認と書き出し、設定、テーマ、Confluence への公開を、ブラウザで操作する画面を起動します。プロジェクトごとのポートで動き、すでに動いていればその画面をブラウザで開きます。処理は CLI と同じ関数を呼ぶので、結果は CLI と同じです。
+
+```bash
+zukai gui            # 画面を起動し、ブラウザで開く。URL を出力する
+zukai gui --no-open  # URL だけを出力する
+```
+
+| タブ | できること | 同じ処理の CLI |
+|---|---|---|
+| 資料 | `.zukai/answers` の資料と、プロジェクトの中の図のある原稿を一覧にする。プレビューと原稿の表示、Lint の結果の確認、HTML の保存と書き出し、Confluence 用のフォルダの書き出し、Confluence への公開 | `lint`、`build`、`publish` |
+| 設定 | 足りないものの確認と、設定の項目ごとの変更。書く場所（この PC、チーム、手元）を選んで保存し、「既定に戻す」で消す | `doctor`、`config` |
+| テーマ | 今のテーマの確認、見本の表示、案を並べた比較、テーマのフォルダの作成と切り替え | `theme check`、`theme preview`、`theme compare`、`theme init` |
+| Confluence | 接続の状態の確認と、URL、スペース ID、メールアドレス、API トークンの保存 | `doctor`、`config`、`login confluence` |
+
+- 公開は、`publish` と同じく Lint に合格した原稿だけを登録する。押す前に確認を出す
+- API トークンと API キーは、本人だけが読める `~/.zukai/credentials.json` に保存し、画面には「設定済み」とだけ出す
+- 127.0.0.1 だけで待ち受ける。書き込みと公開の要求には、画面を開くたびに埋め込む合言葉を求め、ほかのサイトからの要求を断る
+- 一覧にある原稿だけを読み、テーマのフォルダはプロジェクトの中にだけ作る。画面への要求が30分なければ終了する

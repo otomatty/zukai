@@ -69,8 +69,8 @@ export function list(dir: string): Item[] {
 
 const esc = (s: unknown) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-// render が失敗しても、残った指摘と原稿は読めるようにする。
-const fallback = (source: string, e: Error) => `<!doctype html>
+// render が失敗しても、残った指摘と原稿は読めるようにする。zukai gui も使う。
+export const fallback =(source: string, e: Error) => `<!doctype html>
 <html lang="ja">
 <head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"></head>
 <body>
@@ -262,7 +262,7 @@ export function serve(project: string, port: number = portOf(project)): Promise<
   return new Promise<http.Server>((ok, ng) => server.once('error', ng).listen(port, '127.0.0.1', () => ok(server)));
 }
 
-function openBrowser(url: string) {
+export function openBrowser(url: string) {
   const [cmd, args]: [string, string[]] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : [process.platform === 'darwin' ? 'open' : 'xdg-open', [url]];
   spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).on('error', () => {}).unref();
 }

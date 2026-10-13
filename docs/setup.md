@@ -51,6 +51,7 @@ zukai build 原稿.md --format=pptx        # PowerPoint
 zukai publish 原稿.md               # Confluence Cloud にページを作る。2回目以降は更新する
 zukai extract 原稿.html             # HTML に埋め込んだ原稿を取り出す
 zukai view                         # .zukai/answers の資料を読むページを起動し、URL を出力する
+zukai gui                          # 資料の確認と書き出し、設定、テーマ、Confluence への公開をブラウザで操作する
 zukai theme check                  # デザインのテーマの値と見た目（文字のコントラストなど）を確かめる
 zukai theme preview                # テーマで描いた図の見本を、1枚の HTML に書き出す
 zukai theme compare 案 案...        # 今のテーマと案（emphasis.box=tint など）を、同じ図で横に並べる
