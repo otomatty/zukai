@@ -57,7 +57,8 @@ function scan(project: string): DocItem[] {
       if (e.name.startsWith('.')) continue;
       const file = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (depth < SCAN.depth && !SKIP_DIRS.has(e.name)) walk(file, depth + 1);
+        // build --format=confluence が書き出したフォルダには、原稿の写しがある。写しを原稿として出さない。
+        if (depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence')) walk(file, depth + 1);
       } else if (e.isFile() && e.name.endsWith('.md')) {
         try {
           const st = fs.statSync(file);

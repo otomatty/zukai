@@ -84,6 +84,9 @@ test('AI の返答とプロジェクトの原稿を一覧にし、一覧にな�
     const c = await api('POST', '/api/build', { path: 'docs/design.md', format: 'confluence' });
     assert.equal(c.data.figures, 1);
     assert.ok(fs.existsSync(path.join(project, 'docs/design.confluence/body.xhtml')));
+    // 書き出したフォルダの中の原稿の写しは、一覧に入れない。
+    await new Promise((r) => setTimeout(r, 10_100));
+    assert.ok(!(await api('GET', '/api/docs')).data.some((d: { path: string }) => d.path.includes('.confluence/')));
   } finally {
     server.close();
     fs.rmSync(project, { recursive: true, force: true });

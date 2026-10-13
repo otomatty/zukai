@@ -230,7 +230,7 @@ function renderList() {
   const key = JSON.stringify([visible, shown && shown.path]);
   if (key === drawn) return;
   drawn = key;
-  $('docitems').replaceChildren(...visible.map((item) => h('button', { class: shown && shown.path === item.path ? 'on' : '', title: item.path, onclick: () => { follow = item === items[0]; show(item); } },
+  $('docitems').replaceChildren(...visible.map((item) => h('button', { class: shown && shown.path === item.path ? 'on' : '', title: item.path, onclick: () => { follow = item.path === items[0].path; show(item); } },
     item.title,
     h('small', {}, `${item.answer ? 'AI の返答 · ' : ''}${new Date(item.mtime).toLocaleString('ja-JP')}`),
     h('small', {}, item.path))));
