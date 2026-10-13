@@ -126,10 +126,54 @@ test('形式とオプションを検査し、原稿を上書きせず、失敗�
 
 test('図だけの出力は順番を保ち、本文を混ぜない', async () => {
   const { file } = fixture();
+  fs.appendFileSync(file, '\n> ## 入れ子の図\n>\n> ```svg figure\n> <svg xmlns="http://www.w3.org/2000/svg" width="720" height="200" viewBox="0 0 720 200"><title>二つ目の図</title><rect width="720" height="200" fill="#fff"/></svg>\n> ```\n');
   for (const format of ['svg', 'png']) {
     const result = await buildOutput(file, { format });
-    assert.deepEqual(fs.readdirSync(result.out), [`fig-01.${format}`]);
+    assert.deepEqual(fs.readdirSync(result.out), [`fig-01.${format}`, `fig-02.${format}`]);
+    const document = await buildOutput(file, { format: 'markdown', imageFormat: format });
+    for (const name of ['fig-01', 'fig-02']) assert.deepEqual(fs.readFileSync(path.join(result.out, `${name}.${format}`)), fs.readFileSync(path.join(document.out, 'assets', `${name}.${format}`)));
   }
+});
+
+for (const format of ['svg', 'png']) {
+  test(`${format} は本文の画像とリンクを解決せず、図だけを書き出す`, async () => {
+    const { file } = fixture();
+    fs.appendFileSync(file, '\n![ない画像](missing.png)\n\n[リンク](invalid%ZZ.md)\n');
+    const result = await buildOutput(file, { format });
+    assert.deepEqual(fs.readdirSync(result.out), [`fig-01.${format}`]);
+    const data = fs.readFileSync(path.join(result.out, `fig-01.${format}`));
+    if (format === 'svg') assert.match(data.toString(), /<svg/);
+    else assert.equal(data.subarray(1, 4).toString(), 'PNG');
+    await assert.rejects(buildOutput(file, { format: 'markdown' }), /missing.png/);
+  });
+
+  test(`${format} は本文の refs が壊れていても図を書き出す`, async () => {
+    for (const refs of ['[invalid YAML', '- code: unknown:missing.ts#L1-L1\n  note: 見つからない参照']) {
+      const { file } = fixture();
+      fs.appendFileSync(file, `\n\`\`\`yaml refs\n${refs}\n\`\`\`\n`);
+      const result = await buildOutput(file, { format });
+      assert.deepEqual(fs.readdirSync(result.out), [`fig-01.${format}`]);
+      await assert.rejects(buildOutput(file, { format: 'markdown' }));
+    }
+  });
+}
+
+test('図だけの出力でも、不正な図と図が必要とする画像の欠落は書き込み前に知らせる', async () => {
+  for (const format of ['svg', 'png']) {
+    const { dir, file } = fixture();
+    const out = path.join(dir, 'failed');
+    fs.writeFileSync(file, source.replace('type: flow', 'type: missing'));
+    await assert.rejects(buildOutput(file, { format, out }), /L\d+: 図の型/);
+    fs.writeFileSync(file, '# 画面\n\n```yaml figure\ntype: screenshot\nimage: missing.png\nmarks:\n  - at: [10, 10, 50, 40]\n    note: 図に必要な画像\n```\n');
+    await assert.rejects(buildOutput(file, { format, out }), /missing.png/);
+    assert.equal(fs.existsSync(out), false);
+  }
+});
+
+test('本文にエラーがあっても、図がなければ図がないことを知らせる', async () => {
+  const { file } = fixture();
+  fs.writeFileSync(file, '# 図がない原稿\n\n![ない画像](missing.png)\n');
+  for (const format of ['svg', 'png']) await assert.rejects(buildOutput(file, { format }), /原稿に図がありません/);
 });
 
 test('原稿のハードリンクを保存先に指定しても原稿を上書きしない', async () => {

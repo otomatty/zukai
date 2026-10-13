@@ -7,7 +7,7 @@ import { fromMarkdown } from 'mdast-util-from-markdown';
 import { toMarkdown } from 'mdast-util-to-markdown';
 import { gfm } from 'micromark-extension-gfm';
 import { gfmFromMarkdown, gfmToMarkdown } from 'mdast-util-gfm';
-import type { Root, Nodes, RootContent, Definition, PhrasingContent } from 'mdast';
+import type { Root, Nodes, RootContent, Definition, PhrasingContent, Code } from 'mdast';
 import { themeFor } from '../theme.ts';
 import { typesFor, typeOf } from '../figures/custom.ts';
 import { isFigure, isFreeFigure, isRefs, isVideoOnly } from '../parse.ts';
@@ -41,14 +41,54 @@ export interface ExportDocument {
   warnings: string[];
 }
 
+/** 原稿の場所からテーマ・図の型・検査の上限を揃える。 */
+function figureContext(file: string) {
+  const theme = themeFor(path.dirname(path.resolve(file)));
+  const ctx = { baseDir: path.dirname(path.resolve(file)), tokens: theme.tokens, types: typesFor(theme) };
+  const limits: Limits = readJson('contract/limits.json');
+  return { ctx, limits };
+}
+
+/** 文書出力と図だけの出力で、図の検査・描画・番号付けを共通にする。 */
+function renderFigure(node: Code, context: ReturnType<typeof figureContext>, index: number, heading?: Nodes) {
+  const { ctx, limits } = context;
+  const info = `${node.lang ?? ''} ${node.meta ?? ''}`.trim();
+  const line = node.position?.start.line ?? 1;
+  const spec = (isFreeFigure(info) ? { type: 'free', svg: node.value } : YAML.parse(node.value)) as RawSpec;
+  const type = typeOf(ctx.types, spec);
+  if (!type) throw new Error(`L${line}: 図の型がありません。先に zukai lint を通してください。`);
+  const errors = type.validate(spec, limits, ctx);
+  if (errors.length) throw new Error(`L${line}: ${errors.join('、')}`);
+  const svg = type.render(spec, ctx.tokens, ctx);
+  const name = `fig-${String(index + 1).padStart(2, '0')}`;
+  const alt = [heading ? textOf(heading) : '図', ...type.labels(spec)].join(' / ');
+  return { spec, type, figure: { name, svg, alt } };
+}
+
+/** 本文の画像・リンク・refs・図の後続説明を処理せず、figureブロックだけを検査して描く。 */
+export function prepareFigures(source: string, file: string): Pick<ExportDocument, 'figures' | 'tokens'> {
+  const context = figureContext(file);
+  const tree = readMarkdown(source);
+  const figures: ExportDocument['figures'] = [];
+  let heading: Nodes | undefined = tree.children.find((n) => n.type === 'heading' && n.depth === 1);
+  function visit(node: Nodes) {
+    if (node.type === 'heading') heading = node;
+    if (node.type === 'code' && isFigure(`${node.lang ?? ''} ${node.meta ?? ''}`.trim())) {
+      figures.push(renderFigure(node, context, figures.length, heading).figure);
+    }
+    if ('children' in node) node.children.forEach(visit);
+  }
+  visit(tree);
+  return { figures, tokens: context.ctx.tokens };
+}
+
 /**
  * 図と根拠を閲覧用の本文へ変換し、画像データをメモリ上に集める。
  * 相対参照はfileを基準に読み、出力内のリンクはoutDirを基準に直す。ファイルは書き込まない。
  */
 export async function prepareDocument(source: string, file: string, outDir: string, imageFormat: ImageFormat = 'png'): Promise<ExportDocument> {
-  const theme = themeFor(path.dirname(path.resolve(file)));
-  const ctx = { baseDir: path.dirname(path.resolve(file)), tokens: theme.tokens, types: typesFor(theme) };
-  const limits: Limits = readJson('contract/limits.json');
+  const context = figureContext(file);
+  const { ctx, limits } = context;
   const tree = readMarkdown(source);
   const assets = new Map<string, Buffer>();
   const figures: ExportDocument['figures'] = [];
@@ -109,15 +149,9 @@ export async function prepareDocument(source: string, file: string, outDir: stri
         });
       }
       if (isFigure(info)) {
-        const spec = (isFreeFigure(info) ? { type: 'free', svg: node.value } : YAML.parse(node.value)) as RawSpec;
-        const type = typeOf(ctx.types, spec);
-        if (!type) throw new Error(`L${line}: 図の型がありません。先に zukai lint を通してください。`);
-        const errors = type.validate(spec, limits, ctx);
-        if (errors.length) throw new Error(`L${line}: ${errors.join('、')}`);
-        const svg = type.render(spec, ctx.tokens, ctx);
-        const name = `fig-${String(figures.length + 1).padStart(2, '0')}`;
-        const alt = [heading ? textOf(heading) : '図', ...type.labels(spec)].join(' / ');
-        figures.push({ name, svg, alt });
+        const { spec, type, figure } = renderFigure(node, context, figures.length, heading);
+        const { name, svg, alt } = figure;
+        figures.push(figure);
         const mmd = imageFormat === 'mermaid' && !type.custom ? mermaid(spec) : null;
         const after: RootContent[] = [];
         if (type.after) {

@@ -48,12 +48,13 @@ const exporters: Record<OutputFormat, (ctx: Context) => Promise<Result>> = {
 
 /** 原稿内の図を登場順に番号付けし、本文を含めずに出力する。 */
 async function figures(c: Context, ext: 'svg' | 'png'): Promise<Result> {
-  const doc = await prepare({ ...c, imageFormat: 'svg' });
+  const { prepareFigures } = await import('./export/document.ts');
+  const doc = prepareFigures(c.source, c.file);
   if (!doc.figures.length) throw new Error('原稿に図がありません。SVG・PNG出力には figure ブロックが必要です。');
   const files = new Map<string, string | Buffer>();
   const { toPng } = await import('./png.ts');
   for (const fig of doc.figures) files.set(path.join(c.out, `${fig.name}.${ext}`), ext === 'svg' ? fig.svg : toPng(fig.svg, doc.tokens.color.paper).data);
-  return { files, warnings: doc.warnings };
+  return { files, warnings: [] };
 }
 
 /** 実体のパスとファイルIDを比べ、シンボリックリンク・ハードリンク経由の上書きも防ぐ。 */
