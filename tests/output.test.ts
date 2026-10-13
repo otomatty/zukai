@@ -235,6 +235,26 @@ test('PowerPoint は本文と図を含み、長文の末尾を次のスライド
   assert.equal(wrapText('aあ😀'.repeat(100)).join(''), 'aあ😀'.repeat(100));
 });
 
+test('PowerPoint は長い表の続きにもテーマの背景・見出し・フッターを適用する', async () => {
+  const { dir, file } = fixture();
+  fs.mkdirSync(path.join(dir, 'dark'));
+  fs.writeFileSync(path.join(dir, 'dark/tokens.json'), JSON.stringify({ color: { paper: '#101820', ink: '#F1F5F9' } }));
+  fs.writeFileSync(path.join(dir, 'zukai.config.json'), JSON.stringify({ theme: 'dark' }));
+  fs.writeFileSync(file, '# テーマの表\n\n|項目|内容|\n|---|---|\n' + Array.from({ length: 48 }, (_, i) => `|項目${i}|説明${i}|`).join('\n') + '\n');
+  const result = await buildOutput(file, { format: 'pptx' });
+  const zip = await zipOf(result.out);
+  const slides = Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
+  assert.ok(slides.length > 1, '表が続きのスライドへ分かれる');
+  for (const name of slides) {
+    const xml = await zip.file(name)!.async('string');
+    const background = xml.match(/<p:bg>[\s\S]*?<\/p:bg>/)?.[0] ?? '';
+    assert.match(background, /<a:srgbClr val="101820"\s*\/>/, name);
+    assert.match(xml, /<a:t>テーマの表<\/a:t>/, name);
+    assert.match(xml, /<a:t>zukai<\/a:t>/, name);
+    assert.match(xml, /<a:tbl>/, name);
+  }
+});
+
 test('Mermaid のラベル内の構文文字をエスケープする', () => {
   const value = mermaid({ type: 'sequence', actors: ['A', 'B'], messages: [{ from: 'A', to: 'B', label: 'x;\nend: "quoted"' }] });
   assert.match(value!, /x#59; end#58; #34;quoted#34;/);

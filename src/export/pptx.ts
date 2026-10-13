@@ -7,6 +7,7 @@ import { pngFont } from '../png.ts';
 
 // パッケージの型定義は CJS と判定されるが、import 側の実体は default のクラス。
 const Presentation = PptxGenJS as unknown as typeof PptxGenJS.default;
+type Slide = ReturnType<InstanceType<typeof Presentation>['addSlide']>;
 
 /** 日本語を幅1、ASCIIを幅0.6として折り返す。改行とUnicodeのコードポイントを維持する。 */
 export function wrapText(text: string, columns = 42): string[] {
@@ -33,15 +34,19 @@ export async function writePptx(doc: ExportDocument): Promise<Buffer> {
   const fontFace = pngFont();
   pptx.theme = { headFontFace: fontFace, bodyFontFace: fontFace };
   let heading = doc.title;
-  let slide: ReturnType<InstanceType<typeof Presentation>['addSlide']>;
+  let slide: Slide;
   let y = 1.4;
   let newSection = true;
   const color = doc.tokens.color.ink.slice(1);
+  /** 手動で作るスライドと表の自動改ページで、背景・見出し・フッターを揃える。 */
+  function decorate(target: Slide | Slide['newAutoPagedSlides'][number]) {
+    target.background = { color: doc.tokens.color.paper.slice(1) };
+    target.addText(heading, { x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontFace, fontSize: 27, bold: true, color, margin: 0, breakLine: false, fit: 'shrink' });
+    target.addText('zukai', { x: 11.5, y: 7.1, w: 1.1, h: 0.2, fontSize: 10, color: '64748B', align: 'right', margin: 0 });
+  }
   function next() {
     slide = pptx.addSlide();
-    slide.background = { color: doc.tokens.color.paper.slice(1) };
-    slide.addText(heading, { x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontFace, fontSize: 27, bold: true, color, margin: 0, breakLine: false, fit: 'shrink' });
-    slide.addText('zukai', { x: 11.5, y: 7.1, w: 1.1, h: 0.2, fontSize: 10, color: '64748B', align: 'right', margin: 0 });
+    decorate(slide);
     y = 1.4;
     newSection = false;
   }
@@ -102,7 +107,7 @@ export async function writePptx(doc: ExportDocument): Promise<Buffer> {
         });
         next();
         slide.addTable(rows.map((row) => row.map((value) => ({ text: value }))), { x: 0.65, y: 1.4, w: 12, h: 5.3, colW: Array(cols).fill(12 / cols), fontFace, fontSize: 14, color, border: { pt: 0.5, color: 'CCD5DF' }, margin: 0.08, autoPage: true, autoPageRepeatHeader: true, autoPageHeaderRows: 1, autoPageSlideStartY: 1.4, rowH: 0.35 });
-        for (const continuation of slide.newAutoPagedSlides) continuation.addText(heading, { x: 0.6, y: 0.35, w: 12.1, h: 0.9, fontFace, fontSize: 27, bold: true, color, margin: 0, fit: 'shrink' });
+        for (const continuation of slide.newAutoPagedSlides) decorate(continuation);
         y = 7;
         imagesIn(node).forEach((img) => { if (img.alt) text(img.alt); image(img.url, img.alt); });
       } else if (node.type === 'list') node.children.forEach((item, i) => blocks(item.children, `${prefix}${item.checked == null ? node.ordered ? `${(node.start ?? 1) + i}.` : '•' : item.checked ? '☑' : '☐'} `));
