@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { LintResult } from './lint/index.ts';
 import type { SceneResult } from './video/encode.ts';
+import { outputFormats, imageFormats } from './output-formats.ts';
 
 export const groups = ['はじめる', '設定', '書く', '検査と出力', '動画', '開発'] as const;
 export type Group = (typeof groups)[number];
@@ -340,35 +341,21 @@ export const commands: Command[] = [
   {
     name: 'build',
     group: '検査と出力',
-    summary: '原稿から、原稿を埋め込んだ1枚の HTML か、Confluence 用のフォルダを書き出す',
+    summary: '原稿から HTML、Markdown、PDF、Word、PowerPoint、Confluence、図の SVG・PNG を書き出す',
     args: [{ name: 'file.md', required: true, desc: '原稿' }],
     flags: [
-      { name: 'out', value: 'パス', desc: '書き出す先。既定は、原稿と同じ名前の .html か .confluence フォルダ' },
-      { name: 'format', value: 'confluence', desc: 'Confluence 用の本文（body.xhtml）、図の PNG、原稿をフォルダに書き出す' },
+      { name: 'out', value: 'パス', desc: '書き出す先。Markdown、Confluence、SVG、PNG はフォルダ、それ以外はファイル' },
+      { name: 'format', value: outputFormats.map((f) => f.name).join('|'), desc: '出力形式。省略すると html。既定の保存先は原稿名に形式の拡張子を付けたパス' },
+      { name: 'image-format', value: imageFormats.join('|'), desc: 'Markdown の図の形式。既定は png。Mermaid に変換できない図は PNG で残す' },
     ],
-    examples: ['zukai build 原稿.md', 'zukai build 原稿.md --format=confluence'],
-    settings: ['png.font'],
+    examples: ['zukai build 原稿.md', 'zukai build 原稿.md --format=markdown', 'zukai build 原稿.md --format=markdown --image-format=svg', 'zukai build 原稿.md --format=pdf', 'zukai build 原稿.md --format=docx', 'zukai build 原稿.md --format=pptx', 'zukai build 原稿.md --format=confluence'],
+    settings: ['png.font', 'chromium'],
     related: ['publish', 'extract'],
     async run({ args, opt }) {
-      const source = fs.readFileSync(args[0], 'utf8');
-      const stem = args[0].replace(/\.md$/, '');
-      if (opt('format') === 'confluence') {
-        const { bundle } = await import('./confluence.ts');
-        const dir = opt('out') ?? `${stem}.confluence`;
-        const page = await bundle(source, args[0]);
-        fs.mkdirSync(dir, { recursive: true });
-        for (const f of page.files) fs.writeFileSync(path.join(dir, f.name), f.data);
-        fs.writeFileSync(path.join(dir, 'body.xhtml'), page.body);
-        fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ title: page.title, representation: 'storage', attachments: page.files.map((f) => f.name) }, null, 2) + '\n');
-        console.log(`${dir} に、本文（body.xhtml）、図 ${page.files.length - 1} 枚、原稿を書き出しました。`);
-      } else if (opt('format') !== undefined) {
-        throw new Error(`--format に書けるのは confluence だけです。HTML を書き出すときは --format を付けません。`);
-      } else {
-        const { render } = await import('./render.ts');
-        const out = opt('out') ?? `${stem}.html`;
-        fs.writeFileSync(out, await render(source, args[0]));
-        console.log(`${out} を書き出しました。`);
-      }
+      const { buildOutput } = await import('./output.ts');
+      const result = await buildOutput(args[0], { format: opt('format'), out: opt('out'), imageFormat: opt('image-format') });
+      console.log(`${result.out} を書き出しました。`);
+      for (const warning of result.warnings) console.warn(`注意: ${warning}`);
     },
   },
   {

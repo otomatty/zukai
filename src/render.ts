@@ -20,7 +20,7 @@ export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'
 
 const plainLang = (lang: string | undefined): boolean => !(lang && knownLang(lang)) || ['text', 'txt', 'plaintext', 'plain'].includes(lang);
 
-const css = (t: Tokens): string => `
+export const css = (t: Tokens): string => `
 :root{--ink:${t.color.ink};--sub:${t.color.sub};--line:${t.color.line};--surface:${t.color.surface};--paper:${t.color.paper};--accent:${t.color.accent};--on-accent:${t.color.onAccent};--border:${t.page.border};--error:${t.page.error};--mark:${t.screenshot.note};--on-mark:${t.screenshot.onNote}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:${t.font};line-height:1.85;font-feature-settings:"palt";-webkit-text-size-adjust:100%}

@@ -123,6 +123,7 @@ marks:
     const side = sidecar(spec, ctx);
     const meta = [spec.url ? `撮影元 ${spec.url}` : '', side.captured ? `撮影日 ${side.captured}` : '', side.viewport ? `幅 ${side.viewport}px` : ''].filter(Boolean).join('　');
     return {
+      markdown: spec.marks.map((m, i) => `${i + 1}. ${m.note.replace(/\n/g, ' ')}`).join('\n') + (meta ? `\n\n${meta}\n` : '\n'),
       html: `<ol class="marks">${spec.marks.map((m, i) => `<li><span class="num note">${i + 1}</span>${esc(m.note)}</li>`).join('')}</ol>${meta ? `<p class="meta">${esc(meta)}</p>` : ''}`,
       storage: `<ol>${spec.marks.map((m) => `<li><p>${esc(m.note)}</p></li>`).join('')}</ol>${meta ? `<p><em>${esc(meta)}</em></p>` : ''}`,
     };
