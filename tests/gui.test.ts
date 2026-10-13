@@ -58,13 +58,15 @@ test('AI の返答とプロジェクトの原稿を一覧にし、一覧にな�
     fs.writeFileSync(path.join(project, '.zukai/answers/a.md'), '# 返答\n\n本文です。\n');
     fs.mkdirSync(path.join(project, 'docs'));
     fs.writeFileSync(path.join(project, 'docs/design.md'), MANUSCRIPT);
+    // ~~~ の囲みの図も、原稿として見つける。
+    fs.writeFileSync(path.join(project, 'docs/tilde.md'), MANUSCRIPT.replaceAll('```', '~~~'));
     // 図の無い Markdown と、node_modules の中は一覧に入れない。
     fs.writeFileSync(path.join(project, 'README.md'), '# 説明\n');
     fs.mkdirSync(path.join(project, 'node_modules/x'), { recursive: true });
     fs.writeFileSync(path.join(project, 'node_modules/x/doc.md'), MANUSCRIPT);
 
     const { data: docs } = await api('GET', '/api/docs');
-    assert.deepEqual(docs.map((d: { path: string; answer: boolean }) => [d.path, d.answer]).sort(), [['.zukai/answers/a.md', true], ['docs/design.md', false]]);
+    assert.deepEqual(docs.map((d: { path: string; answer: boolean }) => [d.path, d.answer]).sort(), [['.zukai/answers/a.md', true], ['docs/design.md', false], ['docs/tilde.md', false]]);
 
     const doc = await fetch(`${base}/doc?path=docs%2Fdesign.md`);
     assert.match(doc.headers.get('content-security-policy')!, /default-src 'none'.*frame-ancestors 'self'/);

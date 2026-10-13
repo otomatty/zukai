@@ -14,8 +14,8 @@ import type { Scope } from './types.ts';
 
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
 const IDLE_MS = 30 * 60 * 1000;
-// 原稿を探すときに読む上限。大きなリポジトリでも、一覧がすぐ返るようにする。
-const SCAN = { depth: 6, files: 300, bytes: 1024 * 1024 };
+// 原稿を探すときの上限。files は一覧に入れる数、reads は中身を読む .md の数。大きなリポジトリでも、一覧がすぐ返るようにする。
+const SCAN = { depth: 6, files: 300, reads: 2000, bytes: 1024 * 1024 };
 // プロジェクト全体を探し直す間隔。.zukai/answers は毎回読む。
 const RESCAN_MS = 10 * 1000;
 
@@ -31,11 +31,13 @@ export interface DocItem {
 }
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'vendor']);
-const FIGURE = /^```(?:ya?ml|svg)\s+figure\b/m;
+// 図のコードブロックの始まり。parse.ts と同じく、3つまでの字下げと ~~~ の囲みも受け付ける。
+const FIGURE = /^ {0,3}(?:`{3,}|~{3,})\s*(?:ya?ml|svg)\s+figure\b/m;
 
 // プロジェクトの中の原稿（図のブロックを持つ .md）を探す。隠しフォルダ、node_modules、シンボリックリンクは読まない。
 function scan(project: string): DocItem[] {
   const out: DocItem[] = [];
+  let reads = 0;
   const walk = (dir: string, depth: number) => {
     let entries: fs.Dirent[];
     try {
@@ -44,7 +46,7 @@ function scan(project: string): DocItem[] {
       return;
     }
     for (const e of entries) {
-      if (out.length >= SCAN.files) return;
+      if (out.length >= SCAN.files || reads >= SCAN.reads) return;
       if (e.name.startsWith('.')) continue;
       const file = path.join(dir, e.name);
       if (e.isDirectory()) {
@@ -53,6 +55,7 @@ function scan(project: string): DocItem[] {
         try {
           const st = fs.statSync(file);
           if (st.size > SCAN.bytes) continue;
+          reads++;
           const source = fs.readFileSync(file, 'utf8');
           if (!FIGURE.test(source)) continue;
           out.push({ path: path.relative(project, file).replaceAll('\\', '/'), title: source.match(/^# (.+)$/m)?.[1] ?? e.name, mtime: st.mtimeMs, answer: false });
