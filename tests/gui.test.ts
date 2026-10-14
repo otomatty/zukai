@@ -109,7 +109,7 @@ test('設定を書き、消す。秘密の値は画面に返さない', async ()
     assert.equal(JSON.parse(fs.readFileSync(path.join(project, '.zukai/config.json'), 'utf8')).output, 'video');
     // 値の誤りと、書けない置き場所は断る。
     assert.equal((await api('POST', '/api/config', { key: 'output', value: 'movie' })).status, 400);
-    assert.equal((await api('POST', '/api/config', { key: 'lang', value: 'en', scope: 'team' })).status, 400);
+    assert.equal((await api('POST', '/api/config', { key: 'png.font', value: 'x', scope: 'team' })).status, 400);
     assert.equal((await api('POST', '/api/config', { key: 'nope', value: 'x' })).status, 400);
     // パスは、プロジェクトの根からの相対パスで書く。
     await api('POST', '/api/config', { key: 'theme', value: 'zukai-theme', scope: 'team' });

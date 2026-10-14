@@ -8,9 +8,6 @@ import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValu
 import type { Config, ProjectConfig } from './config.ts';
 import type { RunContext } from './commands.ts';
 import type { Origin, Scope } from './types.ts';
-import { t, hasPhrase, suggestedLang } from './locale.ts';
-import type { Lang, PhraseKey } from './locale.ts';
-import { msg as message, setMessageLang } from './messages.ts';
 
 const SECTIONS = ['skills', 'output', 'video', 'confluence'];
 // セクションを書かずに setup を実行したときに質問するセクション。
@@ -80,30 +77,25 @@ export function skillStatus(project: string): SkillStatus[] {
 const flagKeys: Record<string, string> = { output: 'output', voice: 'video.voice', style: 'video.style', bgm: 'video.bgm', 'confluence-base': 'confluence.base', 'confluence-space': 'confluence.spaceId', 'confluence-parent': 'confluence.parentId' };
 
 // 1項目の値を質問する。今の値を既定の答えにするので、Enter だけで今の値のまま進める。
-async function askValue(key: string, cfg: ProjectConfig, message?: string, lang: Lang = 'ja'): Promise<unknown> {
+async function askValue(key: string, cfg: ProjectConfig, message?: string): Promise<unknown> {
   const p = await ui();
   const s = specOf(key)!;
   const cur = cfg.values[key];
-  const tr = (k: PhraseKey, vars?: Record<string, unknown>) => t(lang, k, vars);
   const msg = message ?? `${key}（${s.description}）`;
-  const enumName = (v: string) => {
-    const id = `enum.${key}.${v}`;
-    if (lang === 'en' && hasPhrase(id)) return `${t('en', id)} (${v})`;
-    return s.labels?.[v] ? `${s.labels[v]}（${v}）` : v;
-  };
+  const enumName = (v: string) => (s.labels?.[v] ? `${s.labels[v]}（${v}）` : v);
   // 今の値が仕様の型に合うことは、loadConfig が確かめている。enum と候補のある項目は文字列、boolean は真偽値。
   if (s.type === 'enum') return p.select({ message: msg, default: (cur as string | null | undefined) ?? undefined, choices: s.values!.map((v) => ({ name: enumName(v), value: v })) });
   if (s.type === 'boolean') return p.confirm({ message: msg, default: (cur as boolean | null | undefined) ?? true });
   if (s.suggest) {
     const now = cur as string | null | undefined;
-    const choices = [...new Set([...(now ? [now] : []), ...s.suggest])].map((v) => ({ name: v === s.default ? tr('hint.defaultMark', { value: v }) : v, value: v }));
-    const v = await p.select({ message: msg, default: now ?? undefined, choices: [...choices, { name: tr('hint.other'), value: '\u0000' }] });
-    return v === '\u0000' ? p.input({ message: tr('hint.name', { key }), validate: (x) => Boolean(x.trim()) || tr('hint.nameRequired') }) : v;
+    const choices = [...new Set([...(now ? [now] : []), ...s.suggest])].map((v) => ({ name: v === s.default ? `${v}（既定）` : v, value: v }));
+    const v = await p.select({ message: msg, default: now ?? undefined, choices: [...choices, { name: 'その他（名前を入力する）', value: '\u0000' }] });
+    return v === '\u0000' ? p.input({ message: `${key} の名前`, validate: (x) => Boolean(x.trim()) || '名前を入力してください。' }) : v;
   }
   // 文字列、数値、パス、URL。空にすると既定値（既定値が無い項目は「なし」）にする。パスは今いるフォルダから解決する。
   const raw = cfg.raw[key] ?? cur;
   const empty = s.default === null || s.default === undefined;
-  const hint = s.type === 'path' ? tr(empty ? 'hint.pathEmpty' : 'hint.pathDefault') : tr(empty ? 'hint.empty' : 'hint.default');
+  const hint = `（${s.type === 'path' ? '今いるフォルダからのパス。' : ''}空なら${empty ? 'なし' : '既定値'}）`;
   const answer = await p.input({
     message: `${msg}${hint}`,
     default: raw === null || raw === undefined ? '' : String(raw),
@@ -139,10 +131,6 @@ export interface Answers {
   values: Record<string, unknown>;
   credentials: Record<string, string>;
   skills: { where: 'project' | 'user' | 'none'; tools: string[] } | null;
-  // 保存する言語。今の設定と違うとき、または利用者が選んだときに書く。
-  lang?: Lang;
-  // 利用者が選んだ言語。同じ設定を対話なしで行うコマンドに残す。
-  chosenLang?: Lang;
 }
 // 変える値。項目の名前と値の組。
 type Changed = [key: string, value: unknown][];
@@ -169,25 +157,14 @@ export async function setup({ sections, opt, has }: { sections: string[]; opt: R
   // project を渡したので、プロジェクトの根は決まっている。
   const cfg = loadConfig(project) as ProjectConfig;
   const ask = interactive(has);
-  const langFlag = opt('lang');
-  if (langFlag !== undefined && langFlag !== 'ja' && langFlag !== 'en') throw new Error('--lang に書けるのは ja か en です。');
-  // 対話では、他の質問の前に言語を選ぶ。選ぶ前なので、この質問だけは日本語と英語を並べる。
-  const lang: Lang = langFlag ?? (ask ? await askLang(suggestedLang(cfg)) : cfg.values.lang === 'en' ? 'en' : 'ja');
-  // 値の検査の文も、選んだ言語で出す。
-  setMessageLang(lang);
-  const tr = (key: PhraseKey, vars?: Record<string, unknown>) => t(lang, key, vars);
   const teamExists = fs.existsSync(cfg.files.team!);
-  console.log(tr('project', { path: project, note: teamExists ? tr('project.team') : tr('project.noteam') }));
-  if (cfg.problems.length) console.log(tr('config.problems'));
+  console.log(`プロジェクト  ${project}${teamExists ? '（zukai.config.json があります。チームの設定を読みました）' : '（zukai.config.json はまだありません）'}`);
+  if (cfg.problems.length) console.log('設定に誤りがあります。最後の確認で表示します。');
 
   // 書ける値かどうかは、すぐ下で確かめる。
   const scopeFlag = opt('scope') as 'team' | 'local' | undefined;
   if (scopeFlag && !['team', 'local'].includes(scopeFlag)) throw new Error('--scope に書けるのは team か local です。');
-  const answers = ask ? await askAll(want, cfg, opt, lang) : fromFlags(want, cfg, opt);
-  const explicit = Boolean(ask || langFlag !== undefined);
-  // 既定値と同じ ja でも、利用者が選んだ言語は保存する。保存しないと、次回は OS のロケールに戻る。
-  if (explicit) answers.chosenLang = lang;
-  if (lang !== cfg.values.lang || (explicit && cfg.origins.lang === 'default')) answers.lang = lang;
+  const answers = ask ? await askAll(want, cfg, opt) : fromFlags(want, cfg, opt);
 
   // チームの設定を変える値は、チームに共有するか、自分だけにするかを1回だけ聞く。1人目の初回は聞かずにチームに書く。
   // 対話では、今効いている値から変えたものだけを候補にする。フラグで渡した値は、すべて候補にする。
@@ -196,10 +173,10 @@ export async function setup({ sections, opt, has }: { sections: string[]; opt: R
   let scope: 'team' | 'local' = scopeFlag ?? 'team';
   if (candidates.length && !scopeFlag && ask && teamExists) {
     scope = await (await ui()).select({
-      message: tr('scope.where', { keys: candidates.map(([k]) => k).join(lang === 'en' ? ', ' : '、') }),
+      message: `変える値（${candidates.map(([k]) => k).join('、')}）を、どこに書きますか`,
       choices: [
-        { name: tr('scope.teamChoice'), value: 'team' },
-        { name: tr('scope.localChoice'), value: 'local' },
+        { name: 'チームに共有する（zukai.config.json。コミットして共有する）', value: 'team' },
+        { name: '自分だけ（.zukai/config.json。Git の管理に入らない）', value: 'local' },
       ],
     });
   }
@@ -207,101 +184,88 @@ export async function setup({ sections, opt, has }: { sections: string[]; opt: R
   const atScope = loadConfig(project, { upTo: scope }).values;
   const changed = candidates.filter(([k, v]) => !same(v, atScope[k]));
 
-  const plan = planOf(project, cfg, answers, changed, scope, want, lang);
-  printPlan(plan, lang);
-  if (!plan.items.length) console.log(tr('plan.none'));
-  else if (ask && !(await (await ui()).confirm({ message: tr('plan.confirm'), default: true }))) {
-    console.log(tr('plan.cancel'));
+  const plan = planOf(project, cfg, answers, changed, scope, want);
+  printPlan(plan);
+  if (!plan.items.length) console.log('変更はありません。');
+  else if (ask && !(await (await ui()).confirm({ message: 'この内容で書き込みますか', default: true }))) {
+    console.log('何も書き込んでいません。');
     return 0;
-  } else apply(plan, lang);
+  } else apply(plan);
 
   const { doctor, printDoctor } = await import('./doctor.ts');
   console.log('');
   printDoctor(await doctor(project));
   if (ask) {
     const cmd = equivalent(project, answers, changed, scope, want);
-    console.log(tr('plan.equiv', { shell: process.platform === 'win32' ? tr('plan.shell') : '', cmd }));
-    if (Object.keys(answers.credentials).length) console.log(tr('plan.login'));
+    console.log(`\n同じ設定を、対話なしで行うコマンド${process.platform === 'win32' ? '（PowerShell）' : ''}:\n  ${cmd}`);
+    if (Object.keys(answers.credentials).length) console.log('  キーとトークンは、それぞれ zukai login gemini、zukai login confluence で保存します。');
   }
   return 0;
 }
 
-async function askLang(current: Lang): Promise<Lang> {
+async function askAll(want: Set<string>, cfg: ProjectConfig, opt: RunContext['opt']): Promise<Answers> {
   const p = await ui();
-  return p.select({
-    message: 'Language / 言語',
-    default: current,
-    choices: [
-      { name: '日本語', value: 'ja' },
-      { name: 'English', value: 'en' },
-    ],
-  });
-}
-
-async function askAll(want: Set<string>, cfg: ProjectConfig, opt: RunContext['opt'], lang: Lang): Promise<Answers> {
-  const p = await ui();
-  const tr = (key: PhraseKey, vars?: Record<string, unknown>) => t(lang, key, vars);
   const answers: Answers = { values: {}, credentials: {}, skills: null };
 
   if (want.has('skills')) {
     const st = skillStatus(cfg.project);
     const installed = (where: 'project' | 'user') => st.some((s) => s.where === where && s.state !== 'missing');
     const where = await p.select({
-      message: tr('skills.where'),
+      message: 'スキル（返答を資料にする手順と、資料からデザインのテーマを作る手順）を書く場所',
       default: !installed('project') && installed('user') ? 'user' : 'project',
       choices: [
-        { name: tr('skills.project', { path: shown(cfg.project) }), value: 'project' },
-        { name: tr('skills.user'), value: 'user' },
-        { name: tr('skills.none'), value: 'none' },
+        { name: `このプロジェクト（${shown(cfg.project)}/.claude/skills など）`, value: 'project' },
+        { name: 'この PC の全プロジェクト（~/.claude/skills など）', value: 'user' },
+        { name: '書かない', value: 'none' },
       ],
     });
     const tools = where === 'none' ? [] : await p.checkbox({
-      message: tr('skills.tools'),
+      message: 'スキルを読ませる AI ツール',
       required: true,
       choices: [
-        { name: tr('skills.claude'), value: 'claude', checked: true },
-        { name: tr('skills.agents'), value: 'agents', checked: true },
+        { name: 'Claude Code（.claude/skills）', value: 'claude', checked: true },
+        { name: 'Codex、Cursor、GitHub Copilot、Devin など（.agents/skills）', value: 'agents', checked: true },
       ],
     });
     answers.skills = { where, tools };
   }
 
   if (want.has('output')) {
-    const team = cfg.origins.output === 'team' ? tr('output.team', { value: cfg.values.output }) : '';
-    answers.values.output = await askValue('output', cfg, tr('output', { team }), lang);
+    const team = cfg.origins.output === 'team' ? `（チームの設定: ${cfg.values.output}）` : '';
+    answers.values.output = await askValue('output', cfg, `出力${team}`);
   }
   if (want.has('video') || answers.values.output === 'video') {
-    answers.values['video.voice'] = await askValue('video.voice', cfg, tr('video.voice'), lang);
-    answers.values['video.style'] = await askValue('video.style', cfg, tr('video.style'), lang);
-    answers.values['video.bgm'] = await askValue('video.bgm', cfg, tr('video.bgm'), lang);
-    if (process.env.GEMINI_API_KEY) console.log(tr('gemini.env'));
+    answers.values['video.voice'] = await askValue('video.voice', cfg, '動画の声');
+    answers.values['video.style'] = await askValue('video.style', cfg, '動画全体の語り口');
+    answers.values['video.bgm'] = await askValue('video.bgm', cfg, 'BGM のファイル');
+    if (process.env.GEMINI_API_KEY) console.log('Gemini の API キー: 環境変数 GEMINI_API_KEY を使います。');
     else {
       const has = Boolean(cfg.values['gemini.apiKey']);
-      console.log(tr('gemini.note'));
-      const key = await readSecret(has ? tr('gemini.keep') : tr('gemini.skip'));
+      console.log('ナレーションの読み上げに、Gemini の API キーを使います。無料枠のキーでは、地域と利用規約によって、送った文が Google の製品改善に使われることがあります。');
+      const key = await readSecret(has ? 'Gemini の API キー（Enter で今のキーのまま）' : 'Gemini の API キー（Enter で後回し。無音の動画になります）');
       if (key) answers.credentials['gemini.apiKey'] = key;
     }
   }
 
   if (want.has('confluence')) {
     const on = await p.select({
-      message: tr('share.where'),
+      message: '資料の共有先',
       default: cfg.values['confluence.base'] ? 'confluence' : 'file',
       choices: [
-        { name: tr('share.file'), value: 'file' },
-        { name: tr('share.confluence'), value: 'confluence' },
+        { name: 'ファイル（HTML）だけ', value: 'file' },
+        { name: 'Confluence にも登録する', value: 'confluence' },
       ],
     });
     if (on === 'file') {
       // ファイルだけにしたときは、接続先を「なし」にする。doctor が、使わない Confluence の認証を求めないようにするため。
       for (const k of ['confluence.base', 'confluence.spaceId', 'confluence.parentId']) if (cfg.values[k] !== null) answers.values[k] = null;
     } else {
-      answers.values['confluence.base'] = await askValue('confluence.base', cfg, tr('confluence.base'), lang);
-      answers.values['confluence.spaceId'] = await askValue('confluence.spaceId', cfg, tr('confluence.space'), lang);
-      answers.values['confluence.parentId'] = await askValue('confluence.parentId', cfg, tr('confluence.parent'), lang);
-      const email = await p.input({ message: tr('confluence.email'), default: cfg.settings.confluence.email ?? '' });
+      answers.values['confluence.base'] = await askValue('confluence.base', cfg, 'Confluence の URL（例: https://example.atlassian.net/wiki）');
+      answers.values['confluence.spaceId'] = await askValue('confluence.spaceId', cfg, 'ページを作るスペースの ID');
+      answers.values['confluence.parentId'] = await askValue('confluence.parentId', cfg, '親ページの ID（空ならスペースの直下）');
+      const email = await p.input({ message: 'Atlassian アカウントのメールアドレス', default: cfg.settings.confluence.email ?? '' });
       if (email.trim() && email.trim() !== cfg.values['confluence.email']) answers.credentials['confluence.email'] = email.trim();
-      const token = await readSecret(cfg.values['confluence.token'] ? tr('confluence.tokenKeep') : tr('confluence.tokenSkip'));
+      const token = await readSecret(cfg.values['confluence.token'] ? 'Atlassian の API トークン（Enter で今のトークンのまま）' : 'Atlassian の API トークン（Enter で後回し）');
       if (token) answers.credentials['confluence.token'] = token;
     }
   }
@@ -314,7 +278,7 @@ function fromFlags(want: Set<string>, cfg: ProjectConfig, opt: RunContext['opt']
     const v = opt(flag);
     if (v === undefined) continue;
     // 空の値は「なし」。既定値がある項目（output など）は「なし」にできないので止める。
-    if (v === '' && invalid(specOf(key)!, null)) throw new Error(message('config.emptyFlag', { flag, key }));
+    if (v === '' && invalid(specOf(key)!, null)) throw new Error(`--${flag} を空にはできません。既定値に戻すときは zukai config unset ${key} を実行します。`);
     answers.values[key] = v === '' ? null : specOf(key)!.type === 'path' ? path.resolve(v) : coerce(key, v, 'team', cfg.project);
   }
   if (want.has('skills') && opt('skills') !== 'none') {
@@ -330,13 +294,12 @@ function fromFlags(want: Set<string>, cfg: ProjectConfig, opt: RunContext['opt']
 }
 
 // 書き込む内容。設定は、今の値と違うものだけを書く。パスは、書く置き場所から見た相対パスにする。
-function planOf(project: string, cfg: Config, answers: Answers, changed: Changed, scope: Scope, want: Set<string>, lang: Lang = 'ja'): Plan {
+function planOf(project: string, cfg: Config, answers: Answers, changed: Changed, scope: Scope, want: Set<string>): Plan {
   const files = filesOf(project);
   const items: PlanItem[] = [];
-  const label = (sc: Scope) => t(lang, `scope.${sc}`);
+  const label = (sc: Scope) => scopeNames[sc];
   const createTeam = !fs.existsSync(files.team) && (scope === 'team' && changed.length > 0 || want.has('skills') && want.has('output'));
   if (createTeam) items.push({ kind: 'create', file: files.team, label: label('team') });
-  if (answers.lang) items.push({ kind: 'set', file: files.user, label: label('user'), scope: 'user', key: 'lang', value: answers.lang });
   for (const [key, v] of changed) {
     // パスの値は、答えを集めるときに絶対パスの文字列にしている。
     const stored = specOf(key)!.type === 'path' && v !== null ? coerce(key, path.relative(process.cwd(), v as string) || '.', scope, project) : v;
@@ -351,10 +314,9 @@ function planOf(project: string, cfg: Config, answers: Answers, changed: Changed
   return { project, items };
 }
 
-function printPlan(plan: Plan, lang: Lang = 'ja') {
+function printPlan(plan: Plan) {
   if (!plan.items.length) return;
-  const tr = (key: PhraseKey, vars?: Record<string, unknown>) => t(lang, key, vars);
-  console.log(tr('plan.title'));
+  console.log('\n書き込む内容');
   const byFile = new Map<string, PlanItem[]>();
   for (const it of plan.items) {
     const list = byFile.get(it.file) ?? [];
@@ -363,16 +325,15 @@ function printPlan(plan: Plan, lang: Lang = 'ja') {
   }
   for (const [file, list] of byFile) {
     const what = list.map((it) =>
-      it.kind === 'create' ? tr('plan.create') : it.kind === 'skill' ? (it.state === 'missing' ? tr('plan.write') : tr('plan.update')) : `${it.key}=${it.value === null ? tr('plan.empty') : display(it.key, it.value)}`,
+      it.kind === 'create' ? '作る' : it.kind === 'skill' ? (it.state === 'missing' ? '書く' : '新しくする') : `${it.key}=${it.value === null ? '（なし）' : display(it.key, it.value)}`,
     );
     const label = list.find((it) => it.label)?.label;
-    const wrap = label ? (lang === 'en' ? ` (${label})` : `（${label}）`) : '';
-    console.log(`  ${shown(file)}${wrap}  ${what.join(lang === 'en' ? ', ' : '、')}`);
+    console.log(`  ${shown(file)}${label ? `（${label}）` : ''}  ${what.join('、')}`);
   }
 }
 
 // .zukai/ は、手元の設定を書くときに setValue が作る。この PC だけに書くときに、プロジェクトに .zukai/ を作らないため。
-function apply(plan: Plan, lang: Lang = 'ja') {
+function apply(plan: Plan) {
   for (const it of plan.items) {
     if (it.kind === 'create') ensureTeamFile(plan.project);
     else if (it.kind === 'set') setValue(plan.project, it.key, it.value, it.scope);
@@ -381,7 +342,7 @@ function apply(plan: Plan, lang: Lang = 'ja') {
       fs.writeFileSync(it.file, it.text);
     }
   }
-  console.log(t(lang, 'plan.wrote'));
+  console.log('書き込みました。');
 }
 
 // 対話の答えと同じ設定を、対話なしで行うコマンド。チームの手順書や、AI への指示にそのまま使える。
@@ -395,8 +356,6 @@ export function equivalent(project: string, answers: Answers, changed: Changed, 
   if (want.size !== DEFAULT_SECTIONS.length || DEFAULT_SECTIONS.some((s) => !want.has(s))) parts.push(...want);
   if (path.resolve(project) !== path.resolve(projectOf(process.cwd()))) parts.push(`--dir=${q(project)}`);
   if (answers.skills) parts.push(`--skills=${answers.skills.where}`, ...(answers.skills.tools.length ? [`--tools=${answers.skills.tools.join(',')}`] : []));
-  const replay = answers.chosenLang ?? answers.lang;
-  if (replay) parts.push(`--lang=${replay}`);
   const flagOf = Object.fromEntries(Object.entries(flagKeys).map(([f, k]) => [k, f]));
   for (const [key, v] of changed) parts.push(`--${flagOf[key]}=${v === null ? "''" : q(specOf(key)!.type === 'path' ? path.relative(process.cwd(), v as string) || '.' : v)}`);
   if (changed.length && scope !== 'team') parts.push(`--scope=${scope}`);
@@ -424,7 +383,7 @@ export async function config({ args, opt, has }: RunContext): Promise<number> {
     case 'get': {
       if (!key) throw new Error('項目の名前を書いてください。例: zukai config get output');
       const s = specOf(key);
-      if (!s) throw new Error(message('config.getUnknown', { key }));
+      if (!s) throw new Error(`項目「${key}」はありません。項目の一覧は zukai help config で表示します。`);
       const cfg = loadConfig(project);
       const v = cfg.values[key] ?? null;
       if (has('json')) console.log(JSON.stringify({ key, value: s.secret && v ? '********' : v, origin: cfg.origins[key] ?? null }));
@@ -485,7 +444,7 @@ function list(project: string, { origin = false, json = false } = {}): number {
     console.log(`${pad(k, width)}${display(k, cfg.values[k])}${origin ? `  ← ${scopeNames[o] ?? '未設定'}${o === 'env' ? `（${specOf(k)!.env}）` : ''}` : ''}`);
   }
   if (cfg.problems.length) {
-    console.log(message('config.listProblems'));
+    console.log('\n設定の誤り');
     for (const p of cfg.problems) console.log(`  ${p.file ? `${shown(p.file)}: ` : ''}${p.message}`);
   }
   return cfg.problems.length ? 1 : 0;

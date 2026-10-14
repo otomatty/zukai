@@ -10,7 +10,6 @@ import { esc } from './figures/svg.ts';
 import { videoTokens } from './video/script.ts';
 import { readTheme, themeReport, VISION, simulate, distance, SERIES_GAP } from './theme.ts';
 import type { Theme, ThemeFinding } from './theme.ts';
-import { findingLabel, msg } from './messages.ts';
 import type { AnyFigureType, FigureContext, RawSpec, Tokens } from './types.ts';
 
 // 実物の画像が要る型は、見本に入れない。
@@ -33,7 +32,7 @@ const isolated = (svg: string, style = 'display:block;width:100%;height:auto') =
 // 見本の原稿は HTML を通す設定で描くので、テーマから来る文字（名前、型の説明、検査の結果）は、HTML として読まれないように書く。
 function source(theme: Theme, findings: ThemeFinding[]): string {
   const t = theme.tokens;
-  const result = findings.length ? findings.map((f) => `- ${f.severity}：${esc(findingLabel(f.what))}。${esc(f.message)}`).join('\n') : '- 問題はありません。';
+  const result = findings.length ? findings.map((f) => `- ${f.severity}：${esc(f.what)}。${esc(f.message)}`).join('\n') : '- 問題はありません。';
   const colors = Object.entries(t.color).map(([k, v]) => `| color.${k} | ${chip(v)}${v} |`);
   const series = [...t.chart.series.map((v, i) => `| chart.series[${i}] | ${chip(v)}${v} |`), `| chart.muted | ${chip(t.chart.muted)}${t.chart.muted} |`];
   const grad = t.gradient.stops.length ? [`| gradient | ${t.gradient.stops.map(chip).join('')}${t.gradient.angle}° |`] : [];
@@ -131,7 +130,7 @@ function exampleSpec(x: AnyFigureType): RawSpec {
 // dir は見本にするテーマのフォルダ。null なら既定の見た目。
 export async function previewTheme(dir: string | null): Promise<{ html: string; findings: ThemeFinding[] }> {
   const theme = readTheme(dir);
-  if (theme.problems.length) throw new Error(msg('theme.previewProblems', { lines: theme.problems.map((p) => `  ${p}`).join('\n') }));
+  if (theme.problems.length) throw new Error(`テーマに誤りがあるので、見本を描けません。\n${theme.problems.map((p) => `  ${p}`).join('\n')}`);
   const { findings } = await themeReport(dir);
   const file = path.join(dir ?? process.cwd(), 'preview.md');
   const html = await render(source(theme, findings), file, { theme });
@@ -181,7 +180,7 @@ export async function compareThemes(dir: string | null, variants: string[], { on
     c.report = c.theme.problems.length ? null : await themeReport(dir, { set: c.set });
   }
   const base = columns[0].theme;
-  if (base.problems.length) throw new Error(msg('theme.compareProblems', { lines: base.problems.map((p) => `  ${p}`).join('\n') }));
+  if (base.problems.length) throw new Error(`テーマに誤りがあるので、見比べられません。\n${base.problems.map((p) => `  ${p}`).join('\n')}`);
   const names = only ?? [...COMPARE_TYPES, ...base.types.map((d) => d.name)];
   const unknown = names.filter((n) => !Object.hasOwn(typesFor(base), n));
   if (unknown.length) throw new Error(`型 ${unknown.join('、')} はありません。`);

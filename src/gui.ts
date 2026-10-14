@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
-import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir, applyMessageLang } from './config.ts';
+import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir } from './config.ts';
 import { parse } from './parse.ts';
 import { answersDir, ensureDir, list as listAnswers, fallback, openBrowser } from './view.ts';
 import { imageFormats, outputFormats } from './output-formats.ts';
@@ -181,7 +181,6 @@ async function readBody(req: http.IncomingMessage): Promise<Record<string, unkno
 export function serve(project: string, port: number = guiPortOf(project)): Promise<http.Server> {
   project = path.resolve(project);
   ensureDir(project);
-  applyMessageLang();
   // ページに埋め込む合言葉。プロセスごとに作り直す。
   const token = crypto.randomBytes(32).toString('hex');
   const cache = { at: 0, items: [] as DocItem[] };

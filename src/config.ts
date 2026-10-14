@@ -11,7 +11,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Origin, Scope, SettingSpec, Settings } from './types.ts';
-import { didYouMean, joinList, msg, setMessageLang } from './messages.ts';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const spec: Record<string, SettingSpec> = JSON.parse(fs.readFileSync(path.join(root, 'contract/settings.json'), 'utf8')).items;
@@ -95,23 +94,23 @@ export function closest(word: string, candidates: Iterable<string>): string | nu
 }
 const unknownKey = (key: string) => {
   const near = closest(key, Object.keys(spec).filter((n) => !n.includes('*')));
-  return msg('config.unknownKey', { key, near: didYouMean(near) });
+  return `項目「${key}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}項目の一覧は zukai help config で確かめられます。`;
 };
 
 // 書ける置き場所の外に書いた値。
-const scopeOnly = (key: string, s: SettingSpec) => msg('config.scopeOnly', { key, scopes: joinList(s.scopes.map((x) => msg('common.quoted', { text: msg(`scope.${x}`) })), 'or') });
+const scopeOnly = (key: string, s: SettingSpec) => `${key} は、${s.scopes.map((x) => `「${scopeNames[x]}」`).join('か')}の設定にだけ書けます。`;
 
 // 値の検査。誤りがあれば、その理由を返す。
 // null は「なし」を明示する値で、既定値が「なし」の項目（BGM、Confluence の URL など）にだけ書ける。下の置き場所の値を「なし」で上書きする。
 // output のように既定値がある項目には書けない。下の置き場所の値が、黙って失われないようにするため。
 export function invalid(s: SettingSpec, v: unknown): string | null {
-  if (v === null) return s.default === null || !('default' in s) ? null : msg('value.nullDefault', { default: JSON.stringify(s.default) });
+  if (v === null) return s.default === null || !('default' in s) ? null : `null は書けません。既定値（${JSON.stringify(s.default)}）に戻すときは、zukai config unset で項目を消します。`;
   switch (s.type) {
     case 'enum':
-      return s.values?.includes(v as string) ? null : msg('value.enum', { values: joinList(s.values ?? []) });
+      return s.values?.includes(v as string) ? null : `${(s.values ?? []).join('、')} のどれかを書いてください。`;
     case 'string':
     case 'path':
-      return typeof v === 'string' && v ? null : msg('value.string');
+      return typeof v === 'string' && v ? null : '文字列で書いてください。';
     case 'url': {
       // 「https://」だけのような、接続先の無い値を通さない。
       let u: URL | null = null;
@@ -121,19 +120,19 @@ export function invalid(s: SettingSpec, v: unknown): string | null {
         // URL として読めない。
       }
       // ? や # を含む URL は、後ろに API のパスを足すと、そのパスが問い合わせの一部になり、別の宛先に届く。
-      if (u && (u.search || u.hash)) return msg('value.urlQuery');
-      return u && /^https?:$/.test(u.protocol) && u.hostname ? null : msg('value.url');
+      if (u && (u.search || u.hash)) return '? や # を含まない URL を書いてください（例: https://example.atlassian.net/wiki）。';
+      return u && /^https?:$/.test(u.protocol) && u.hostname ? null : 'http か https で始まり、接続先のホスト名を含む URL を書いてください。';
     }
     case 'number':
-      if (typeof v !== 'number' || !Number.isFinite(v)) return msg('value.number');
-      return (s.min !== undefined && v < s.min) || (s.max !== undefined && v > s.max) ? msg('value.range', { min: s.min, max: s.max }) : null;
+      if (typeof v !== 'number' || !Number.isFinite(v)) return '数値で書いてください。';
+      return (s.min !== undefined && v < s.min) || (s.max !== undefined && v > s.max) ? `${s.min}〜${s.max} の数値で書いてください。` : null;
     case 'boolean':
-      return typeof v === 'boolean' ? null : msg('value.boolean');
+      return typeof v === 'boolean' ? null : 'true か false で書いてください。';
     case 'terms': {
-      if (!Array.isArray(v)) return msg('value.array');
+      if (!Array.isArray(v)) return '配列で書いてください。';
       const strs = (x: unknown) => x === undefined || (Array.isArray(x) && x.every((e) => typeof e === 'string'));
       const bad = v.findIndex((t: Partial<Record<keyof import('./types.ts').Term, unknown>> | null) => !t || typeof t.use !== 'string' || !t.use || !strs(t.avoid) || !strs(t.except) || !strs(t.examples) || (t.actual !== undefined && typeof t.actual !== 'string'));
-      return bad < 0 ? null : msg('value.term', { n: bad + 1 });
+      return bad < 0 ? null : `${bad + 1}番目の用語に誤りがあります。use は文字列、avoid、except、examples は文字列の配列、actual は文字列で書いてください。`;
     }
     default:
       return null;
@@ -163,14 +162,16 @@ function flatten(obj: object | null | undefined, scope: Scope, file: string, out
     const s = specOf(key);
     if (s) {
       if (!s.scopes.includes(scope)) {
-        problems.push({ file, key, message: s.secret ? msg('config.secretFile', { key, file: path.basename(file), env: s.env }) : scopeOnly(key, s) });
+        problems.push({ file, key, message: s.secret ? `${key} は秘密の値なので、${path.basename(file)} には書けません。zukai login で ~/.zukai/credentials.json に保存するか、環境変数 ${s.env} に置いてください。` : scopeOnly(key, s) });
         continue;
       }
       const why = invalid(s, v);
-      if (why) problems.push({ file, key, message: msg('config.invalidValue', { key, why }) });
+      if (why) problems.push({ file, key, message: `${key} の値が正しくありません。${why}` });
       else out[key] = v;
     } else if (v && typeof v === 'object' && !Array.isArray(v) && isPrefix(key)) {
       flatten(v, scope, file, out, problems, key);
+    } else if (key === 'lang' && scope === 'user') {
+      // 表示を日本語と英語から選べたころに、setup がこの PC の設定に書いた項目。今は使わないので、残っていても誤りにしない。
     } else problems.push({ file, key, message: unknownKey(key) });
   }
   return out;
@@ -184,10 +185,10 @@ export interface JsonFile {
 export function readJson(file: string): JsonFile {
   try {
     const v = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return v && typeof v === 'object' && !Array.isArray(v) ? { data: v } : { data: {}, error: msg('config.notObject', { file }) };
+    return v && typeof v === 'object' && !Array.isArray(v) ? { data: v } : { data: {}, error: `${file} は JSON のオブジェクトで書いてください。` };
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { data: {}, missing: true };
-    return { data: {}, error: msg('config.unreadable', { file, error: (e as Error).message }) };
+    return { data: {}, error: `${file} を読めません。${(e as Error).message}` };
   }
 }
 
@@ -237,7 +238,7 @@ export function loadConfig(project: string | null, { upTo = null }: { upTo?: Sco
     const v = !upTo && s.env && process.env[s.env];
     if (!v) continue;
     const why = invalid(s, v);
-    if (why) problems.push({ file: null, key: name, message: msg('config.envInvalid', { env: s.env, why }) });
+    if (why) problems.push({ file: null, key: name, message: `環境変数 ${s.env} の値が正しくありません。${why}` });
     else {
       raw[name] = v;
       values[name] = s.type === 'path' ? resolvePath('env', project, v) : v;
@@ -257,7 +258,7 @@ export function loadConfig(project: string | null, { upTo = null }: { upTo?: Sco
 export function settingsFor(start?: string): ProjectConfig {
   const cfg = loadConfig(projectOf(start)) as ProjectConfig;
   if (cfg.problems.length) {
-    throw new Error(msg('config.problems', { lines: cfg.problems.map((p) => `  ${p.file ? `${p.file}: ` : ''}${p.message}`).join('\n') }));
+    throw new Error(`設定に誤りがあります。\n${cfg.problems.map((p) => `  ${p.file ? `${p.file}: ` : ''}${p.message}`).join('\n')}\nzukai config list で、効いている値と出どころを確かめられます。`);
   }
   return cfg;
 }
@@ -266,15 +267,6 @@ export function settingsFor(start?: string): ProjectConfig {
 export function machineSetting(key: string): unknown {
   const cfg = loadConfig(null);
   return cfg.problems.some((p) => p.key === key) ? null : cfg.values[key] ?? null;
-}
-
-// 設定とテーマの文の言語を、この PC の設定の lang にする。設定が読めなくてもコマンドを止めず、日本語にする。
-export function applyMessageLang(): void {
-  try {
-    setMessageLang(machineSetting('lang'));
-  } catch {
-    setMessageLang('ja');
-  }
 }
 
 type Tree = Record<string, unknown>;
@@ -311,7 +303,7 @@ export function coerce(key: string, input: unknown, scope: Scope, project: strin
       try {
         v = JSON.parse(input);
       } catch {
-        throw new Error(msg('config.jsonArray', { key }));
+        throw new Error(`${key} は JSON の配列で書いてください。zukai.config.json を直接編集することもできます。`);
       }
     } else if (s.type === 'path') {
       const abs = path.resolve(process.cwd(), input);
@@ -319,7 +311,7 @@ export function coerce(key: string, input: unknown, scope: Scope, project: strin
     }
   }
   const why = invalid(s, v);
-  if (why) throw new Error(msg('config.invalidValue', { key, why }));
+  if (why) throw new Error(`${key} の値が正しくありません。${why}`);
   return v;
 }
 
@@ -343,7 +335,7 @@ export function setValue(project: string, key: string, value: unknown, scope?: S
   if (!s.scopes.includes(scope)) throw new Error(scopeOnly(key, s));
   // どの経路から呼ばれても、読むときに誤りになる値は書かない。
   const why = invalid(s, value);
-  if (why) throw new Error(msg('config.invalidValue', { key, why }));
+  if (why) throw new Error(`${key} の値が正しくありません。${why}`);
   const file = filesOf(project)[scope];
   const cur = readJson(file);
   if (cur.error) throw new Error(cur.error);

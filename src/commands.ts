@@ -78,7 +78,6 @@ export const commands: Command[] = [
       { name: 'confluence-space', value: 'ID', desc: '初回の publish でページを作るスペースの ID' },
       { name: 'confluence-parent', value: 'ID', desc: '初回の publish でページを置く親ページの ID' },
       { name: 'scope', value: 'team|local', desc: 'チームの設定を変えるとき、チームに共有するか（team）、自分だけにするか（local）。省略すると team' },
-      { name: 'lang', value: 'ja|en', desc: 'setup と doctor の表示言語。対話では最初に選ぶ。この PC の設定に書く' },
     ],
     examples: ['zukai setup', 'zukai setup video', 'zukai setup --output=video --voice=Puck --yes'],
     settings: ['output', 'video.voice', 'video.style', 'video.bgm', 'confluence.base', 'confluence.spaceId', 'confluence.parentId'],
@@ -207,9 +206,8 @@ export const commands: Command[] = [
           if (has('json')) console.log(JSON.stringify({ dir: r.dir, name: r.name, ok: r.ok, findings: r.findings }, null, 2));
           else {
             const errors = r.findings.filter((f) => f.severity === 'error').length;
-            const { msg, findingLabel } = await import('./messages.ts');
-            console.log(`${r.dir ? msg('theme.head', { name: r.name, dir: r.dir }) : msg('theme.none')}  ${r.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${r.findings.length - errors}`);
-            for (const f of r.findings) console.log(`  ${f.severity.padEnd(5)}  ${findingLabel(f.what)}  ${f.message}`);
+            console.log(`${r.dir ? `テーマ「${r.name}」（${r.dir}）` : 'テーマなし（既定の見た目）'}  ${r.ok ? 'PASS' : 'FAIL'}  error ${errors} / warn ${r.findings.length - errors}`);
+            for (const f of r.findings) console.log(`  ${f.severity.padEnd(5)}  ${f.what}  ${f.message}`);
           }
           return r.ok ? 0 : 1;
         }

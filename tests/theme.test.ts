@@ -721,42 +721,24 @@ test('型の動きが例外を出したら、図を元に戻して自動の動�
   }
 });
 
-test('テーマの誤りと見た目の検査の文は、lang の言語で出し、分類（what）は日本語のまま持つ', async () => {
-  const { setMessageLang, findingLabel, findingLabelGaps } = await import('../src/messages.ts');
-  const ink = { color: { ink: '#eeeeee' } };
-  try {
-    setMessageLang('en');
-    assert.deepEqual(readTheme(null, { set: { nope: 1, 'chart.mode': 'x' } }).problems, ['There is no item nope. The available items are listed in the tokens.json that zukai theme init creates.', 'chart.mode must be one of series, neutral.']);
-    assert.deepEqual(readTheme(null, { set: { 'gradient.stops': ['#fff'] } }).problems, ['gradient.stops must be an array of 2, 3, 4, or 5 colors (#rrggbb). Use [] when it is not used.']);
-    const findings = await checkTheme(readTheme(null, { set: { 'color.ink': '#eeeeee' } }).tokens);
-    const text = findings.find((f) => f.what === '図の文字');
-    assert.equal(text?.message, 'The contrast between color.ink (#eeeeee) and color.paper (#ffffff) is 1.16:1. Make it at least 4.5:1.');
-    assert.equal(findingLabel('図の文字'), 'Figure text');
-  } finally {
-    setMessageLang('ja');
-  }
-  assert.equal(findingLabel('図の文字'), '図の文字');
-  assert.match(readTheme(null, { set: { nope: 1 } }).problems[0], /^nope という項目はありません。/);
-  // checkTheme と themeReport が使う分類には、すべて英語の表示名がある。
-  const source = fs.readFileSync(fileURLToPath(new URL('../src/theme.ts', import.meta.url)), 'utf8');
-  const whats = new Set([...source.matchAll(/(?:pair|onFill)\('([^']+)'|what: '([^']+)'/g)].map((m) => m[1] ?? m[2]));
-  assert.ok(whats.size > 15);
-  assert.deepEqual(findingLabelGaps(whats), []);
+test('テーマの誤りと見た目の検査の文を、日本語で出す', async () => {
+  assert.deepEqual(readTheme(null, { set: { nope: 1, 'chart.mode': 'x' } }).problems, ['nope という項目はありません。使える項目は zukai theme init で作る tokens.json にあります。', 'chart.mode は、series、neutral のどれかを書きます。']);
+  assert.deepEqual(readTheme(null, { set: { 'gradient.stops': ['#fff'] } }).problems, ['gradient.stops は、2、3、4、5個の色（#rrggbb）の配列で書きます。使わないときは [] にします。']);
+  const findings = await checkTheme(readTheme(null, { set: { 'color.ink': '#eeeeee' } }).tokens);
+  const text = findings.find((f) => f.what === '図の文字');
+  assert.equal(text?.message, 'color.ink（#eeeeee）と color.paper（#ffffff）のコントラストが 1.16:1 です。4.5:1 以上にしてください。');
 
-  // theme check は、~/.zukai/config.json の lang の言語で出す。
-  const { home, dir } = project(ink);
-  fs.mkdirSync(path.join(home, '.zukai'));
-  fs.writeFileSync(path.join(home, '.zukai', 'config.json'), JSON.stringify({ lang: 'en' }));
+  const { home, dir } = project({ color: { ink: '#eeeeee' } });
   const check = run(['theme', 'check'], { cwd: dir, home });
   assert.equal(check.code, 1);
-  assert.match(check.out, /^Theme "brand" \(/);
-  assert.match(check.out, /error {2}Figure text {2}The contrast between color\.ink \(#eeeeee\) and color\.paper \(#ffffff\) is 1\.16:1\./);
+  assert.match(check.out, /^テーマ「brand」（/);
+  assert.match(check.out, /error {2}図の文字 {2}color\.ink（#eeeeee）と color\.paper（#ffffff）のコントラストが 1\.16:1 です。/);
   const json = JSON.parse(run(['theme', 'check', '--json'], { cwd: dir, home }).out);
   assert.ok(json.findings.some((f: { what: string }) => f.what === '図の文字'));
   fs.writeFileSync(path.join(dir, 'brand/tokens.json'), JSON.stringify({ nope: 1 }));
   fs.writeFileSync(path.join(dir, 'a.md'), '# 題\n\n本文です。\n');
   const lint = run(['lint', 'a.md'], { cwd: dir, home });
   assert.equal(lint.code, 1);
-  assert.match(lint.err, /^The theme has errors\.\n.*There is no item nope\./);
-  assert.match(lint.err, /Run zukai theme check to see them\.\n$/);
+  assert.match(lint.err, /^テーマに誤りがあります。\n.*nope という項目はありません。/);
+  assert.match(lint.err, /zukai theme check で確かめられます。\n$/);
 });

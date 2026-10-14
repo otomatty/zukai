@@ -8,8 +8,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { root, settingsFor } from './config.ts';
 import { compile, unknownNames } from './template.ts';
-import { joinList, msg } from './messages.ts';
-import type { MessageKey } from './messages.ts';
 import { contrast, linear, rgb, textOn, treemapColor, TEXT_CONTRAST } from './color.ts';
 import type { Shape, Template } from './template.ts';
 import type { Limits, Severity, Tokens } from './types.ts';
@@ -93,38 +91,38 @@ function overlay(base: Json, over: Json, at: string, problems: string[]): Json {
     if (!at && k.startsWith('$')) continue;
     const key = at ? `${at}.${k}` : k;
     if (!Object.hasOwn(base, k)) {
-      problems.push(msg('theme.noKey', { key }));
+      problems.push(`${key} という項目はありません。使える項目は zukai theme init で作る tokens.json にあります。`);
       continue;
     }
     if (FIXED.includes(key)) {
-      problems.push(msg('theme.fixed', { key }));
+      problems.push(`${key} はテーマでは変えられません。図の幅と動画の大きさは、検査の上限が前提にしています。`);
       continue;
     }
     const b = base[k];
     if (isObj(b)) {
       if (isObj(v)) out[k] = overlay(b, v, key, problems);
-      else problems.push(msg('theme.object', { key }));
+      else problems.push(`${key} は、{ } の中に項目を書きます。`);
     } else if (Array.isArray(b)) {
       const lengths = LENGTHS[key] ?? [b.length];
       if (Array.isArray(v) && lengths.includes(v.length) && v.every(isColor)) out[k] = v.map(long);
-      else problems.push(msg('theme.colors', { key, counts: joinList(lengths.filter(Boolean), 'listOr'), none: lengths.includes(0) ? msg('theme.colorsNone') : '' }));
+      else problems.push(`${key} は、${lengths.filter(Boolean).join('、')}個の色（#rrggbb）の配列で書きます。${lengths.includes(0) ? '使わないときは [] にします。' : ''}`);
     } else if (typeof b === 'number') {
       const [min, max] = RANGES[key] ?? [0, Infinity];
       const ok = typeof v === 'number' && Number.isFinite(v) && (RANGES[key] ? v >= min && v <= max : v > 0);
       if (ok) out[k] = v;
-      else if (!RANGES[key]) problems.push(msg('theme.positive', { key }));
-      else problems.push(max === Infinity ? msg('theme.atLeast', { key, min }) : msg('theme.range', { key, min, max }));
+      else if (!RANGES[key]) problems.push(`${key} は、0より大きい数値で書きます。`);
+      else problems.push(max === Infinity ? `${key} は、${min}以上の数値で書きます。` : `${key} は、${min}〜${max} の数値で書きます。`);
     } else if (CHOICES[key]) {
       if (CHOICES[key].includes(v as string)) out[k] = v;
-      else problems.push(msg('theme.choice', { key, values: joinList(CHOICES[key]) }));
+      else problems.push(`${key} は、${CHOICES[key].join('、')} のどれかを書きます。`);
     } else if (isColor(b)) {
       if (isColor(v)) out[k] = long(v);
-      else problems.push(msg('theme.notColor', { key, value: v }));
+      else problems.push(`${key} の「${v}」は色ではありません。#rrggbb か #rgb で書きます。`);
     } else if (k === 'font') {
       if (isFont(v)) out[k] = v;
-      else problems.push(msg('theme.font', { key }));
+      else problems.push(`${key} は、CSS の font-family の形（"名前", sans-serif のように、引用符で囲んだ名前か英数字の名前をカンマで並べる）で書きます。; { } < > \\ / * と改行は使えません。`);
     } else if (typeof v === 'string' && /^[\w-]+$/.test(v)) out[k] = v;
-    else problems.push(msg('theme.name', { key }));
+    else problems.push(`${key} は、英数字とハイフンの名前で書きます。`);
   }
   return out;
 }
@@ -138,7 +136,7 @@ function withSet(over: Json, set: Record<string, unknown>, problems: string[]): 
   for (const [key, v] of Object.entries(set)) {
     const keys = key.split('.');
     if (keys.some((k) => UNSAFE.includes(k))) {
-      problems.push(msg('theme.noKeyShort', { key }));
+      problems.push(`${key} という項目はありません。`);
       continue;
     }
     let o = over;
@@ -152,8 +150,8 @@ function withSet(over: Json, set: Record<string, unknown>, problems: string[]): 
 }
 // グラデーションを使う描き方は、グラデーションの色が無いと描けない。
 function gradientProblems(t: Tokens): string[] {
-  const uses = [t.emphasis.box !== 'flat' && msg('theme.uses', { key: 'emphasis.box', value: t.emphasis.box }), t.emphasis.chart !== 'flat' && msg('theme.uses', { key: 'emphasis.chart', value: t.emphasis.chart })].filter((u): u is string => Boolean(u));
-  return uses.length && !t.gradient.stops.length ? [msg('theme.gradient', { uses: joinList(uses, 'and') })] : [];
+  const uses = [t.emphasis.box !== 'flat' && `emphasis.box の ${t.emphasis.box}`, t.emphasis.chart !== 'flat' && `emphasis.chart の ${t.emphasis.chart}`].filter((u): u is string => Boolean(u));
+  return uses.length && !t.gradient.stops.length ? [`${uses.join('と')}は、グラデーションで描きます。gradient.stops に2〜5個の色を書いてください。`] : [];
 }
 
 // set は、tokens.json の上にさらに重ねる値（{ 'emphasis.box': 'tint' } の形）。theme compare が案を試すときに使う。
@@ -169,7 +167,7 @@ export function readTheme(dir: string | null, { set = {} }: { set?: Record<strin
   }
   const problems: string[] = [];
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) {
-    return { dir, name: path.basename(dir), tokens: base, rules: '', types: [], problems: [msg('theme.noDir', { dir })] };
+    return { dir, name: path.basename(dir), tokens: base, rules: '', types: [], problems: [`テーマのフォルダ ${dir} がありません。zukai theme init ${dir} で作るか、設定の theme を直してください。`] };
   }
   let tokens = base;
   const file = path.join(dir, 'tokens.json');
@@ -177,10 +175,10 @@ export function readTheme(dir: string | null, { set = {} }: { set?: Record<strin
     try {
       const over = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
       if (isObj(over)) tokens = overlay(base, withSet(over, set, problems), '', problems) as Tokens;
-      else problems.push(msg('theme.tokensObject'));
+      else problems.push('tokens.json は JSON のオブジェクトで書きます。');
       problems.push(...gradientProblems(tokens));
     } catch (e) {
-      problems.push(msg('theme.tokensUnreadable', { error: (e as Error).message }));
+      problems.push(`tokens.json を読めません。${(e as Error).message}`);
     }
   }
   const rulesFile = path.join(dir, 'rules.md');
@@ -197,32 +195,32 @@ const FIELD_TYPES: readonly string[] = ['string', 'number', 'boolean', 'list', '
 const FIELD_KEYS: Record<FieldDef['type'], string[]> = { string: ['max'], number: ['min', 'max'], boolean: [], list: ['min', 'max', 'of'], object: ['fields'] };
 // type.json の fields の形を確かめる。誤りを返す。誤りが無ければ、fields は Fields の形になっている。
 function fieldProblems(fields: unknown, at: string): string[] {
-  if (!isObj(fields) || !Object.keys(fields).length) return [msg('type.fields', { at })];
+  if (!isObj(fields) || !Object.keys(fields).length) return [`${at} は、項目の名前と定義の { } で書きます。`];
   return Object.entries(fields).flatMap(([k, def]): string[] => {
     const where = `${at}.${k}`;
-    if (!/^[A-Za-z][\w]*$/.test(k) || k === 'type' || k === 'theme' || k === 'width') return [msg('type.fieldName', { where })];
-    if (!isObj(def) || typeof def.type !== 'string' || !FIELD_TYPES.includes(def.type)) return [msg('type.fieldType', { where, types: joinList(FIELD_TYPES) })];
+    if (!/^[A-Za-z][\w]*$/.test(k) || k === 'type' || k === 'theme' || k === 'width') return [`${where}: 項目の名前は英字で始め、type、theme、width 以外にします。`];
+    if (!isObj(def) || typeof def.type !== 'string' || !FIELD_TYPES.includes(def.type)) return [`${where}: type は ${FIELD_TYPES.join('、')} のどれかを書きます。`];
     const out: string[] = [];
     const type = def.type as FieldDef['type'];
     // 書き間違えた名前（requred など）は、黙って無視すると任意の項目として AI に伝わるので、誤りにする。
     const allowed = ['type', 'required', 'desc', ...FIELD_KEYS[type]];
     const unknown = Object.keys(def).filter((n) => !allowed.includes(n));
-    if (unknown.length) out.push(msg('type.unknownKeys', { where, names: joinList(unknown), type: def.type, allowed: joinList(allowed) }));
-    if (def.required !== undefined && typeof def.required !== 'boolean') out.push(msg('type.required', { where }));
-    if (def.desc !== undefined && typeof def.desc !== 'string') out.push(msg('type.desc', { where }));
+    if (unknown.length) out.push(`${where}: ${unknown.join('、')} は使えません。${def.type} の項目に書けるのは ${allowed.join('、')} です。`);
+    if (def.required !== undefined && typeof def.required !== 'boolean') out.push(`${where}.required は true か false で書きます。`);
+    if (def.desc !== undefined && typeof def.desc !== 'string') out.push(`${where}.desc は文で書きます。`);
     // 文字の字数と配列の個数の上限は、0以上の整数。数値の項目の範囲は、どんな数値でもよい。
     const count = def.type === 'string' || def.type === 'list';
     for (const n of ['min', 'max']) {
       if (def[n] === undefined) continue;
-      if (typeof def[n] !== 'number' || !Number.isFinite(def[n])) out.push(msg('type.limitNumber', { where, n }));
-      else if (count && (!Number.isInteger(def[n]) || def[n] < 0)) out.push(msg('type.limitInteger', { where, n }));
+      if (typeof def[n] !== 'number' || !Number.isFinite(def[n])) out.push(`${where}.${n} は数値で書きます。`);
+      else if (count && (!Number.isInteger(def[n]) || def[n] < 0)) out.push(`${where}.${n} は0以上の整数で書きます。`);
     }
     // 範囲が逆だと、どの値も検査を通らず、型が使えなくなる。
-    if (typeof def.min === 'number' && typeof def.max === 'number' && def.min > def.max) out.push(msg('type.minOverMax', { where, min: def.min, max: def.max }));
-    if (def.type === 'string' && def.max === undefined) out.push(msg('type.stringMax', { where }));
+    if (typeof def.min === 'number' && typeof def.max === 'number' && def.min > def.max) out.push(`${where}: min（${def.min}）が max（${def.max}）より大きくなっています。`);
+    if (def.type === 'string' && def.max === undefined) out.push(`${where}: 文字の項目には max（全角の字数の上限）が要ります。図からはみ出さないことを、上限で保証するため。`);
     if (def.type === 'list') {
-      if (def.max === undefined) out.push(msg('type.listMax', { where }));
-      if (!isObj(def.of)) out.push(msg('type.listOf', { where }));
+      if (def.max === undefined) out.push(`${where}: 配列の項目には max（個数の上限）が要ります。`);
+      if (!isObj(def.of)) out.push(`${where}: 配列の項目には of（要素の定義）が要ります。`);
       else out.push(...(def.of.type === 'object' ? fieldProblems(def.of.fields, `${where}.of.fields`) : fieldProblems({ item: def.of }, where).map((p) => p.replace('.item', '.of'))));
     }
     if (def.type === 'object') out.push(...fieldProblems(def.fields, `${where}.fields`));
@@ -253,45 +251,45 @@ function readTypes(dir: string): { types: TypeDef[]; problems: string[] } {
     if (!fs.statSync(tdir).isDirectory()) continue;
     const say = (m: string) => problems.push(`${tdir}: ${m}`);
     if (!/^[a-z][a-z0-9-]*$/.test(name)) {
-      say(msg('type.dirName'));
+      say('型の名前（フォルダの名前）は、英小文字で始め、英小文字、数字、ハイフンだけにします。');
       continue;
     }
     let json: unknown;
     try {
       json = JSON.parse(fs.readFileSync(path.join(tdir, 'type.json'), 'utf8'));
     } catch (e) {
-      say((e as NodeJS.ErrnoException).code === 'ENOENT' ? msg('type.noJson') : msg('type.jsonUnreadable', { error: (e as Error).message }));
+      say((e as NodeJS.ErrnoException).code === 'ENOENT' ? 'type.json がありません。' : `type.json を読めません。${(e as Error).message}`);
       continue;
     }
     if (!isObj(json)) {
-      say(msg('type.jsonObject'));
+      say('type.json は JSON のオブジェクトで書きます。');
       continue;
     }
     // 組み込みの型（src/figures/<名前>.ts）と同じ名前は使えない。部品のファイル（svg、chart など）の名前も避ける。
     if (fs.existsSync(path.join(root, 'src/figures', `${name}.ts`))) {
-      say(msg('type.builtin', { name }));
+      say(`型の名前 ${name} は、組み込みの型か zukai の部品と同じ名前です。別の名前にしてください。`);
       continue;
     }
     const before = problems.length;
     for (const k of ['summary', 'when']) {
       const v = json[k];
-      if (typeof v !== 'string' || !v.trim()) say(msg('type.sentence', { key: k }));
+      if (typeof v !== 'string' || !v.trim()) say(`type.json の ${k} を文で書きます。`);
     }
     const fieldErrors = fieldProblems(json.fields, 'fields');
     fieldErrors.forEach(say);
-    if (!isObj(json.example)) say(msg('type.example'));
+    if (!isObj(json.example)) say('type.json の example に、図の仕様の例を { } で書きます（type は書かない）。');
     // 例の type は型の名前を上書きし、zukai type が別の型の例を出してしまう。
-    else if (Object.hasOwn(json.example, 'type')) say(msg('type.exampleType'));
+    else if (Object.hasOwn(json.example, 'type')) say('type.json の example に type は書きません。型の名前はフォルダの名前から付きます。');
     let template: Template | null = null;
     try {
       template = compile(fs.readFileSync(path.join(tdir, 'figure.svg'), 'utf8'));
       // 名前の書き間違い（{{#itmes}} など）は、値の無い任意の項目と同じに空になり、図から黙って消える。読むときに止める。
       if (!fieldErrors.length) {
         const unknown = unknownNames(template, { fields: { ...shapeOf(json.fields as Fields).fields, type: {}, width: {}, theme: shapeOf(baseTokens(), true) } });
-        if (unknown.length) say(msg('type.unknownNames', { names: joinList(unknown.map((n) => `{{${n}}}`)) }));
+        if (unknown.length) say(`figure.svg: ${unknown.map((n) => `{{${n}}}`).join('、')} は、type.json の fields にも、テーマの値（theme.〜）にもありません。`);
       }
     } catch (e) {
-      say((e as NodeJS.ErrnoException).code === 'ENOENT' ? msg('type.noSvg') : `figure.svg: ${(e as Error).message}`);
+      say((e as NodeJS.ErrnoException).code === 'ENOENT' ? 'figure.svg（図のひな形）がありません。' : `figure.svg: ${(e as Error).message}`);
     }
     let motion: string | null = null;
     if (fs.existsSync(path.join(tdir, 'motion.js'))) {
@@ -300,7 +298,7 @@ function readTypes(dir: string): { types: TypeDef[]; problems: string[] } {
         // 書き方だけを確かめる。関数を作るだけで、呼ばない。
         new Function('fig', 'ctx', motion); // eslint-disable-line no-new-func
       } catch (e) {
-        say(msg('type.motion', { error: (e as Error).message }));
+        say(`motion.js を読めません。${(e as Error).message}`);
       }
     }
     // 誤りが無ければ、json は TypeJson の形で、template は読めている。
@@ -312,7 +310,7 @@ function readTypes(dir: string): { types: TypeDef[]; problems: string[] } {
 // 原稿やフォルダから、そのプロジェクトのテーマを読む。誤りがあれば止める。書き間違いを黙って無視しないため。
 export function themeFor(start?: string): Theme {
   const theme = readTheme(settingsFor(start).settings.theme ?? null);
-  if (theme.problems.length) throw new Error(msg('theme.problems', { lines: theme.problems.map((p) => `  ${p}`).join('\n') }));
+  if (theme.problems.length) throw new Error(`テーマに誤りがあります。\n${theme.problems.map((p) => `  ${p}`).join('\n')}\nzukai theme check で確かめられます。`);
   return theme;
 }
 export const tokensFor = (start?: string): Tokens => themeFor(start).tokens;
@@ -382,7 +380,7 @@ export async function checkTheme(t: Tokens): Promise<ThemeFinding[]> {
   const out: ThemeFinding[] = [];
   const pair = (what: string, fg: string, bg: string, kf: string, kb: string, min = TEXT, severity: Severity = 'error') => {
     const r = contrast(fg, bg);
-    if (r < min) out.push({ severity, what, message: msg('check.contrast', { kf, fg, kb, bg, ratio: r.toFixed(2), min }) });
+    if (r < min) out.push({ severity, what, message: `${kf}（${fg}）と ${kb}（${bg}）のコントラストが ${r.toFixed(2)}:1 です。${min}:1 以上にしてください。` });
   };
   const figure = (c: Tokens['color'], chart: Tokens['chart'], at: string) => {
     pair('図の文字', c.ink, c.paper, `${at}.ink`, `${at}.paper`);
@@ -400,8 +398,8 @@ export async function checkTheme(t: Tokens): Promise<ThemeFinding[]> {
     if (t.emphasis.box === 'tint') {
       stops.forEach((s, i) => {
         const bg = blend(s, c.paper, TINT_ALPHA);
-        pair('強調した箱の文字', c.accent, bg, `${at}.accent`, msg('check.tint', { i }));
-        pair('強調した箱の補足', c.sub, bg, `${at}.sub`, msg('check.tint', { i }));
+        pair('強調した箱の文字', c.accent, bg, `${at}.accent`, `gradient.stops[${i}] の淡い面`);
+        pair('強調した箱の補足', c.sub, bg, `${at}.sub`, `gradient.stops[${i}] の淡い面`);
       });
     }
     if (t.emphasis.box === 'outline' || t.emphasis.chart === 'gradient') stops.forEach((s, i) => pair('グラデーションの色', s, c.paper, `gradient.stops[${i}]`, `${at}.paper`, SERIES_BG, 'warn'));
@@ -414,20 +412,20 @@ export async function checkTheme(t: Tokens): Promise<ThemeFinding[]> {
     // where は地色の場所、kb は地色の項目の名前。
     const onFill = (what: string, where: string, bg: string, kb: string) => {
       const best = textOn(bg, [c.onAccent, c.ink]);
-      if (best.ratio < TEXT) out.push({ severity: 'error', what, message: msg('check.onFill', { where, kb, bg, at, onAccent: c.onAccent, ink: c.ink, min: TEXT, ratio: best.ratio.toFixed(2) }) });
+      if (best.ratio < TEXT) out.push({ severity: 'error', what, message: `${where}の地色 ${kb}（${bg}）に対して、${at}.onAccent（${c.onAccent}）も ${at}.ink（${c.ink}）も、コントラストが ${TEXT}:1 に届きません（高いほうで ${best.ratio.toFixed(2)}:1）。どちらかが届く色にしてください。` });
     };
     // ヒートマップは、読める濃さのマスにだけ数値を書く。最も濃いマス（最大値）にも書けないと、数値が1つも出ない。
-    onFill('ヒートマップの数値', msg('check.heatmapCell'), chart.mode === 'neutral' ? chart.muted : c.accent, chart.mode === 'neutral' ? `${chartAt}.muted` : `${at}.accent`);
+    onFill('ヒートマップの数値', 'ヒートマップの最も濃いマス', chart.mode === 'neutral' ? chart.muted : c.accent, chart.mode === 'neutral' ? `${chartAt}.muted` : `${at}.accent`);
     // ツリーマップは、上の階層の色の上に、見出しと下の階層の名前を書く。neutral では chart.muted を紙の色に寄せた色に塗る。
     const tokens = { ...t, color: c, chart };
-    const groupKey = (i: number) => (chart.mode === 'neutral' ? msg('check.mutedPaper', { key: chartAt }) : i < chart.series.length ? `${chartAt}.series[${i}]` : i === chart.series.length ? `${chartAt}.muted` : `${chartAt}.rest`);
-    for (let i = 0; i < TREEMAP_GROUPS; i++) onFill('ツリーマップの文字', msg('check.treemapGroup', { n: i + 1 }), treemapColor(tokens, i), groupKey(i));
+    const groupKey = (i: number) => (chart.mode === 'neutral' ? `${chartAt}.muted を紙に寄せた色` : i < chart.series.length ? `${chartAt}.series[${i}]` : i === chart.series.length ? `${chartAt}.muted` : `${chartAt}.rest`);
+    for (let i = 0; i < TREEMAP_GROUPS; i++) onFill('ツリーマップの文字', `ツリーマップの${i + 1}つ目の階層`, treemapColor(tokens, i), groupKey(i));
     if (chart.mode === 'series' && chart.series.length < MAX_SERIES - 1) pair('残りの系列', chart.rest, c.paper, `${chartAt}.rest`, `${at}.paper`, FAINT, 'warn');
     for (const [vision, m] of Object.entries(VISION)) {
       for (let i = 0; i < chart.series.length; i++) {
         for (let j = i + 1; j < chart.series.length; j++) {
           const d = distance(chart.series[i], chart.series[j], m);
-          if (d < SERIES_GAP) out.push({ severity: 'warn', what: '系列の見分け', message: msg('check.seriesGap', { key: chartAt, a: chart.series[i], b: chart.series[j], vision: msg(`vision.${vision}` as MessageKey), d: d.toFixed(0), gap: SERIES_GAP }) });
+          if (d < SERIES_GAP) out.push({ severity: 'warn', what: '系列の見分け', message: `${chartAt}.series の ${chart.series[i]} と ${chart.series[j]} は、${vision}で見分けにくい色です（差 ${d.toFixed(0)}、${SERIES_GAP} 以上にする）。明るさか色相を離してください。` });
         }
       }
     }
@@ -448,10 +446,10 @@ export async function checkTheme(t: Tokens): Promise<ThemeFinding[]> {
   figure({ ...t.color, ...v.figure.color }, { ...t.chart, ...v.figure.chart }, 'video.figure.color');
   pair('動画の文字', v.ink, v.background, 'video.ink', 'video.background');
   // 字幕の帯は、透明度 80%（cc）で背景に重ねて描く。重ねた色で確かめる。
-  pair('字幕', v.subtitle.ink, blend(v.subtitle.band, v.background, 0.8), 'video.subtitle.ink', msg('check.subtitleBand'));
+  pair('字幕', v.subtitle.ink, blend(v.subtitle.band, v.background, 0.8), 'video.subtitle.ink', 'video.subtitle.band を video.background に重ねた色');
   try {
     const { bundledThemes } = await import('shiki');
-    if (!(t.codeTheme in bundledThemes)) out.push({ severity: 'error', what: 'コードの配色', message: msg('check.codeTheme', { name: t.codeTheme }) });
+    if (!(t.codeTheme in bundledThemes)) out.push({ severity: 'error', what: 'コードの配色', message: `codeTheme「${t.codeTheme}」は Shiki にありません。github-light、github-dark、one-light などの名前を書きます。` });
   } catch {
     // 依存が欠けている。doctor が別に知らせる。
   }
