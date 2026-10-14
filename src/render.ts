@@ -31,6 +31,7 @@ h2{font-size:1.3rem;line-height:1.5;margin:72px 0 10px;padding-top:20px;border-t
 h3{font-size:1.08rem;margin:48px 0 8px;color:var(--accent);break-after:avoid}
 p,li{font-size:.95rem;color:var(--sub);margin:10px 0}
 p,li,blockquote{font-family:${t.bodyFont}}
+h1,h2,h3,h4,h5,h6,table,figure{font-family:${t.font}}
 p.claim{font-size:1.1rem;font-weight:600;color:var(--ink);line-height:1.7;margin:0 0 18px}
 figure{margin:0 0 18px;padding:22px 18px;background:var(--paper);border:1px solid var(--border);border-radius:8px;break-inside:avoid}
 figure>svg{display:block;height:auto}
