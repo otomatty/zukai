@@ -7,9 +7,14 @@ import { imageOf } from './images.ts';
 import { officeSurface, officeTextColor } from './office-colors.ts';
 import { pngFont } from '../png.ts';
 
+// 本文の明朝体。見出しと表は、図と同じゴシック体（png.font）にする。
+// フォントは名前1つで書くため、PNG のフォントと同じく、OS に標準で入っているものを選ぶ。
+const bodyFont = (): string => ({ darwin: 'Hiragino Mincho ProN', win32: 'Yu Mincho' } as Partial<Record<NodeJS.Platform, string>>)[process.platform] ?? 'Noto Serif CJK JP';
+
 /** 本文と表を編集可能なWord要素にし、図を画像として埋め込んだDOCXを返す。 */
 export async function writeDocx(doc: ExportDocument): Promise<Buffer> {
   const font = pngFont();
+  const body = bodyFont();
   const color = doc.tokens.color.ink.slice(1);
   const surface = officeSurface(doc.tokens);
   const linkColor = officeTextColor(doc.tokens, doc.tokens.color.accent);
@@ -29,8 +34,8 @@ export async function writeDocx(doc: ExportDocument): Promise<Buffer> {
   function blocks(nodes: Nodes[], indent = 0): (Paragraph | Table)[] {
     return nodes.flatMap((node): (Paragraph | Table)[] => {
       if (node.type === 'definition') return [];
-      if (node.type === 'heading') return [new Paragraph({ heading: [HeadingLevel.TITLE, HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5][node.depth - 1], children: inline(node, { color }), keepNext: true })];
-      if (node.type === 'table') return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: node.children.map((row, i) => new TableRow({ tableHeader: i === 0, children: row.children.map((cell) => new TableCell({ children: [new Paragraph({ children: inline(cell, i === 0 ? { bold: true } : {}) })], ...(i === 0 ? { shading: { fill: surface } } : {}) })) })) })];
+      if (node.type === 'heading') return [new Paragraph({ heading: [HeadingLevel.TITLE, HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3, HeadingLevel.HEADING_4, HeadingLevel.HEADING_5][node.depth - 1], children: inline(node, { color, font }), keepNext: true })];
+      if (node.type === 'table') return [new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: node.children.map((row, i) => new TableRow({ tableHeader: i === 0, children: row.children.map((cell) => new TableCell({ children: [new Paragraph({ children: inline(cell, i === 0 ? { bold: true, font } : { font }) })], ...(i === 0 ? { shading: { fill: surface } } : {}) })) })) })];
       if (node.type === 'list') return node.children.flatMap((item, i) => {
         const result = blocks(item.children, indent + 1);
         // 番号を文字として持たせ、開始番号と入れ子の順序を維持する。
@@ -47,5 +52,5 @@ export async function writeDocx(doc: ExportDocument): Promise<Buffer> {
     });
   }
   const children = blocks(doc.tree.children);
-  return Packer.toBuffer(new Document({ title: doc.title, creator: 'zukai', background: { color: doc.tokens.color.paper.slice(1) }, styles: { default: { document: { run: { font, size: 22, color }, paragraph: { spacing: { line: 320 } } } } }, sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children }] }));
+  return Packer.toBuffer(new Document({ title: doc.title, creator: 'zukai', background: { color: doc.tokens.color.paper.slice(1) }, styles: { default: { document: { run: { font: body, size: 22, color }, paragraph: { spacing: { line: 320 } } } } }, sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, bottom: 1134, left: 1134, right: 1134 } } }, children }] }));
 }

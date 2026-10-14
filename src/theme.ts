@@ -118,7 +118,7 @@ function overlay(base: Json, over: Json, at: string, problems: string[]): Json {
     } else if (isColor(b)) {
       if (isColor(v)) out[k] = long(v);
       else problems.push(`${key} の「${v}」は色ではありません。#rrggbb か #rgb で書きます。`);
-    } else if (k === 'font') {
+    } else if (k === 'font' || k === 'bodyFont') {
       if (isFont(v)) out[k] = v;
       else problems.push(`${key} は、CSS の font-family の形（"名前", sans-serif のように、引用符で囲んだ名前か英数字の名前をカンマで並べる）で書きます。; { } < > \\ / * と改行は使えません。`);
     } else if (typeof v === 'string' && /^[\w-]+$/.test(v)) out[k] = v;
