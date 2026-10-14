@@ -30,6 +30,7 @@ h1+p{color:var(--sub);margin:0 0 8px}
 h2{font-size:1.3rem;line-height:1.5;margin:72px 0 10px;padding-top:20px;border-top:2px solid var(--ink);break-after:avoid}
 h3{font-size:1.08rem;margin:48px 0 8px;color:var(--accent);break-after:avoid}
 p,li{font-size:.95rem;color:var(--sub);margin:10px 0}
+p,li,blockquote{font-family:${t.bodyFont}}
 p.claim{font-size:1.1rem;font-weight:600;color:var(--ink);line-height:1.7;margin:0 0 18px}
 figure{margin:0 0 18px;padding:22px 18px;background:var(--paper);border:1px solid var(--border);border-radius:8px;break-inside:avoid}
 figure>svg{display:block;height:auto}
@@ -43,7 +44,7 @@ pre code{background:none;padding:0}
 a{color:var(--accent)}
 .meta{font-size:.78rem;color:var(--sub);margin:4px 0}.right{margin-left:auto}
 .num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;flex:none;border-radius:11px;background:var(--accent);color:var(--on-accent);font-size:.75rem;font-weight:700}.num.note{background:var(--mark);color:var(--on-mark)}
-ol.marks{list-style:none;margin:-4px 0 6px;padding:0}ol.marks li{display:flex;gap:10px;align-items:flex-start;margin:6px 0;color:var(--ink);font-size:.92rem}
+ol.marks{list-style:none;margin:-4px 0 6px;padding:0}ol.marks li{font-family:${t.font};display:flex;gap:10px;align-items:flex-start;margin:6px 0;color:var(--ink);font-size:.92rem}
 .refs{margin:22px 0 18px}.refs-h{font-size:.8rem;font-weight:700;color:var(--sub);margin-bottom:8px}
 .ref{padding:14px 16px;border:1px solid var(--border);border-radius:8px;margin-top:10px;break-inside:avoid}.ref p{color:var(--ink);font-size:.9rem;margin:8px 0}
 .ref-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.84rem}

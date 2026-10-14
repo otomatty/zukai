@@ -61,7 +61,7 @@ GitHubで共有するときは `README.md` と `assets/` を一緒にコミッ�
 
 PDFの生成にはChromiumが必要です。`npx playwright-core install chromium` で用意するか、`zukai config set chromium <実行ファイル> --scope=user` で使うブラウザを指定してください。生成時にWebサイトへアクセスせず、画像は文書に埋め込みます。
 
-Word・PowerPointはブラウザなしで生成できます。本文と表は編集可能ですが、図はPNG画像です。日本語フォントは `png.font` の設定を使うため、受け手のPCでも同じフォントがあると見た目がそろいます。PowerPointでは9列以上の表を行ごとの文章として出力し、注意を表示します。表の中の画像は表の後ろに、見出し内の画像は見出しの下に配置します。
+Word・PowerPointはブラウザなしで生成できます。本文と表は編集可能ですが、図はPNG画像です。日本語フォントは `png.font` の設定を使うため、受け手のPCでも同じフォントがあると見た目がそろいます。Wordの本文（段落、箇条書き、引用）は、OS に標準で入っている明朝体（macOS はヒラギノ明朝、Windows は游明朝、それ以外は Noto Serif CJK JP）にします。見出しと表は `png.font` のゴシック体です。PowerPointは、すべて `png.font` のゴシック体です。PowerPointでは9列以上の表を行ごとの文章として出力し、注意を表示します。表の中の画像は表の後ろに、見出し内の画像は見出しの下に配置します。
 
 Word・PowerPointのページ背景と本文には、テーマの `color.paper` と `color.ink` を使います。コードの背景とWordの表の見出し行には `color.surface` を使い、本文色とのコントラストが足りない場合はページ背景と同じ色にします。
 

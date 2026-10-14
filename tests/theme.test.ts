@@ -64,6 +64,9 @@ test('無い項目、変えられない値、色でない値、外へ出られ�
   assert.equal(readTheme(themeDir({ figure: { radius: 0 } })).tokens.figure.radius, 0);
   assert.match(readTheme(themeDir({ figure: { radius: -1 } })).problems.join('\n'), /figure\.radius は、0以上の数値/);
   for (const font of [baseTokens().font, 'ヒラギノ角ゴ ProN, sans-serif', "'BIZ UDPGothic', system-ui"]) assert.deepEqual(readTheme(themeDir({ font })).problems, [], font);
+  // 本文の書体も、同じ形で書き、同じ検査を通る。
+  assert.deepEqual(readTheme(themeDir({ bodyFont: baseTokens().font })).problems, []);
+  assert.match(readTheme(themeDir({ bodyFont: 'x}body{color:red' })).problems.join('\n'), /bodyFont は、CSS の font-family の形/);
 });
 
 test('図の余白は0で無効にでき、図の幅の半分を超える値や数値でない値は受け付けない', () => {
