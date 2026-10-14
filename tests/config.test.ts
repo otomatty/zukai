@@ -269,101 +269,36 @@ test('toString のような名前を、サービスや AI ツールと取り違�
   assert.match(tools.err, /--tools の「toString」はありません/);
 });
 
-test('setup の表示文は日本語と英語が揃い、--lang=en で英語の確認を出して言語を保存する', async () => {
-  const { phraseGaps, t } = await import('../src/locale.ts');
-  assert.deepEqual(phraseGaps(), []);
-  assert.equal(t('en', 'plan.empty'), '(none)');
-  assert.equal(t('ja', 'plan.empty'), '（なし）');
-  const home = tmp('lang-home');
-  const project = tmp('lang');
-  fs.mkdirSync(path.join(project, '.git'));
-  const first = run(['setup', '--lang=en', '--yes'], { cwd: project, home });
-  assert.equal(first.code, 0, first.err + first.out);
-  assert.match(first.out, /Project /);
-  assert.match(first.out, /Gemini API key/);
-  assert.match(first.out, /silent, with subtitles only/);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(home, '.zukai', 'config.json'), 'utf8')).lang, 'en');
-  const again = run(['setup', '--yes'], { cwd: project, home });
-  assert.equal(again.code, 0, again.err + again.out);
-  assert.match(again.out, /No changes\./);
-  const bad = run(['setup', '--lang=fr', '--yes'], { cwd: project, home });
-  assert.equal(bad.code, 1);
-  assert.match(bad.err, /--lang に書けるのは ja か en です/);
-  const jaHome = tmp('lang-ja-home');
-  const jaProject = tmp('lang-ja');
-  fs.mkdirSync(path.join(jaProject, '.git'));
-  const ja = run(['setup', 'output', '--lang=ja', '--yes'], { cwd: jaProject, home: jaHome });
-  assert.equal(ja.code, 0, ja.err + ja.out);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(jaHome, '.zukai', 'config.json'), 'utf8')).lang, 'ja');
-  const { equivalent } = await import('../src/setup.ts');
-  assert.match(equivalent(jaProject, { skills: null, values: {}, credentials: {}, chosenLang: 'en' }, [], 'team', new Set(['skills', 'output', 'confluence'])), /--lang=en /);
-  // doctor --json の項目は、表示の言語によらず id で見分けられる。
-  type Doctor = { checks: { id: string; label: string }[] };
-  const en = JSON.parse(run(['doctor', '--json'], { cwd: project, home }).out) as Doctor;
-  const jaDoctor = JSON.parse(run(['doctor', '--json'], { cwd: jaProject, home: jaHome }).out) as Doctor;
-  assert.deepEqual(en.checks.map((c) => c.id), jaDoctor.checks.map((c) => c.id));
-  assert.equal(en.checks.find((c) => c.id === 'skills')?.label, 'Skills');
-  assert.equal(jaDoctor.checks.find((c) => c.id === 'skills')?.label, 'スキル');
-});
-
-test('設定と検査の文は、ja と en が揃い、{名前} の置き換えが食い違わない', async () => {
-  const { messageGaps, msg, setMessageLang } = await import('../src/messages.ts');
-  assert.deepEqual(messageGaps(), []);
-  // 値の中の { } は、置き換えずに残す。
-  try {
-    setMessageLang('en');
-    assert.equal(msg('template.unclosed', { name: '{name}' }), '{{#{name}}} is not closed.');
-  } finally {
-    setMessageLang('ja');
-  }
-  assert.equal(msg('template.unclosed', { name: 'items' }), '{{#items}} が閉じていません。');
-});
-
-test('設定の誤りの文は、この PC の設定の lang の言語で出す', async () => {
-  const { setMessageLang } = await import('../src/messages.ts');
-  const project = tmp('msg-lang');
+test('設定の誤りの文を、日本語で出す', async () => {
+  const project = tmp('msg');
   fs.mkdirSync(path.join(project, '.git'));
   fs.writeFileSync(path.join(project, 'zukai.config.json'), JSON.stringify({ outptu: 'video', 'png.font': 'x' }));
   await withHome(() => {
-    try {
-      setMessageLang('en');
-      const messages = loadConfig(project).problems.map((p) => p.message);
-      assert.ok(messages.includes('There is no setting "outptu". Did you mean "output"? See zukai help config for the list of settings.'), messages.join('\n'));
-      assert.ok(messages.includes('png.font can only be written in the "this PC" settings.'), messages.join('\n'));
-      assert.throws(() => settingsFor(project), /^Error: Settings have errors\.\n[\s\S]*\nRun zukai config list/);
-      assert.throws(() => coerce('output', 'bad', 'team', project), /^Error: The value of output is invalid\. Write one of document, video\.$/);
-      assert.throws(() => setValue(project, 'gemini.apiKey', 'k', 'team'), /can only be written in the "private" settings\./);
-    } finally {
-      setMessageLang('ja');
-    }
-    // 日本語に戻すと、同じ誤りを日本語で出す。
-    assert.match(loadConfig(project).problems[0].message, /項目「outptu」はありません。「output」の書き間違いではありませんか。/);
-    assert.throws(() => coerce('output', 'bad', 'team', project), /output の値が正しくありません。document、video のどれかを書いてください。/);
+    const messages = loadConfig(project).problems.map((p) => p.message);
+    assert.ok(messages.includes('項目「outptu」はありません。「output」の書き間違いではありませんか。項目の一覧は zukai help config で確かめられます。'), messages.join('\n'));
+    assert.ok(messages.includes('png.font は、「この PC」の設定にだけ書けます。'), messages.join('\n'));
+    assert.throws(() => settingsFor(project), /^Error: 設定に誤りがあります。\n[\s\S]*\nzukai config list で/);
+    assert.throws(() => coerce('output', 'bad', 'team', project), /^Error: output の値が正しくありません。document、video のどれかを書いてください。$/);
+    assert.throws(() => setValue(project, 'gemini.apiKey', 'k', 'team'), /「本人だけ」の設定にだけ書けます。/);
   });
 
-  // コマンドは、~/.zukai/config.json の lang で言語を決める。
-  const home = tmp('msg-lang-home');
+  // 表示の言語を選べたころに書いた lang は、残っていても誤りにしない。
+  const home = tmp('msg-home');
   fs.mkdirSync(path.join(home, '.zukai'));
   fs.writeFileSync(path.join(home, '.zukai', 'config.json'), JSON.stringify({ lang: 'en' }));
   const set = run(['config', 'set', 'output', 'bad'], { cwd: project, home });
   assert.equal(set.code, 1);
-  assert.equal(set.err.trim(), 'The value of output is invalid. Write one of document, video.');
+  assert.equal(set.err.trim(), 'output の値が正しくありません。document、video のどれかを書いてください。');
   const list = run(['config', 'list'], { cwd: project, home });
   assert.equal(list.code, 1);
-  assert.match(list.out, /\nSettings errors\n/);
-  assert.match(list.out, /There is no setting "outptu"\. Did you mean "output"\?/);
+  assert.match(list.out, /\n設定の誤り\n/);
+  assert.match(list.out, /項目「outptu」はありません。「output」の書き間違いではありませんか。/);
   const get = run(['config', 'get', 'outptu'], { cwd: project, home });
-  assert.match(get.err, /There is no setting "outptu"\./);
+  assert.match(get.err, /項目「outptu」はありません。/);
+  assert.doesNotMatch(list.out, /lang/);
   const doctor = run(['doctor'], { cwd: project, home });
-  assert.match(doctor.out, /There is no setting "outptu"/);
-  // 設定の lang が読めないときは、止めずに日本語で出す。
-  fs.writeFileSync(path.join(home, '.zukai', 'config.json'), '{');
-  const broken = run(['config', 'set', 'output', 'bad'], { cwd: project, home });
-  assert.equal(broken.code, 1);
-  assert.match(broken.err, /output の値が正しくありません。/);
-  // setup は、選んだ言語で値の誤りを出す。
-  const setupHome = tmp('msg-setup-home');
-  const setup = run(['setup', 'output', '--output=bad', '--lang=en', '--yes'], { cwd: project, home: setupHome });
+  assert.match(doctor.out, /項目「outptu」はありません/);
+  const setup = run(['setup', 'output', '--output=bad', '--yes'], { cwd: project, home: tmp('msg-setup-home') });
   assert.equal(setup.code, 1);
-  assert.match(setup.err, /The value of output is invalid\./);
+  assert.match(setup.err, /output の値が正しくありません。/);
 });
