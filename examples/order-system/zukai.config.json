@@ -1,6 +1,0 @@
-{
-  "repos": {
-    "api": { "path": "repos/order-api" },
-    "infra": { "path": "repos/order-infra" }
-  }
-}
