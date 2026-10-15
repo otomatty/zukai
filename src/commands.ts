@@ -245,8 +245,9 @@ export const commands: Command[] = [
       { name: 'full', desc: 'すべての図の型の書き方を含める' },
       { name: 'video', desc: '設定の output によらず、動画の書き方を含める' },
       { name: 'type-command', value: 'コマンド', desc: '指示の中で案内する、型の書き方を取り出すコマンド。既定は zukai type' },
+      { name: 'part', value: '名前', desc: '動画の書き方のうち、あとから取り出す部分だけを出力する。sound（効果音）、checks（検査の一覧）。カンマで並べられる' },
     ],
-    examples: ['zukai prompt', 'zukai prompt --full'],
+    examples: ['zukai prompt', 'zukai prompt --full', 'zukai prompt --part=sound'],
     settings: ['output', 'terms', 'theme'],
     related: ['type', 'lint', 'theme'],
     async run({ opt, has }) {
@@ -255,7 +256,8 @@ export const commands: Command[] = [
       const { themeFor } = await import('./theme.ts');
       const { settings } = settingsFor(process.cwd());
       const video = has('video') || settings.output === 'video';
-      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey), theme: themeFor(process.cwd()) }));
+      const part = opt('part')?.split(',').map((x) => x.trim()).filter(Boolean) ?? null;
+      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey), theme: themeFor(process.cwd()), part }));
     },
   },
   {

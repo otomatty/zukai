@@ -460,10 +460,15 @@ export async function checkTheme(t: Tokens): Promise<ThemeFinding[]> {
 
 // rules.md を、zukai prompt の指示の節にする。見出しは1段下げ、HTML のコメントは外す。
 // 「## 動画」で始まる節は、動画を作るときだけ入れる。「## 出典」と「## 決めたこと」の節は人が読むためのものなので、入れない。
+const ruleSections = (rules: string): string[] => rules.replace(/<!--[\s\S]*?-->/g, '').replace(/^#\s+.+\n?/m, '').split(/^(?=##\s)/m);
+
+// テーマが、動画の絵柄を決めているか（rules.md の「## 動画」の節に中身があるか）。決めていれば、zukai の既定の絵柄を指示に入れない。
+export const hasVideoRules = (theme: Theme | null | undefined): boolean =>
+  Boolean(theme?.rules && ruleSections(theme.rules).some((p) => /^##\s+動画/.test(p) && p.replace(/^##\s.*$/m, '').trim()));
+
 export function rulesPrompt(theme: Theme | null | undefined, { video = false } = {}): string {
   if (!theme?.rules) return '';
-  const body = theme.rules.replace(/<!--[\s\S]*?-->/g, '').replace(/^#\s+.+\n?/m, '');
-  const parts = body.split(/^(?=##\s)/m);
+  const parts = ruleSections(theme.rules);
   const kept = parts
     .filter((p) => !/^##\s+(出典|決めたこと)/.test(p) && (video || !/^##\s+動画/.test(p)))
     .filter((p) => p.replace(/^##\s.*$/m, '').trim())

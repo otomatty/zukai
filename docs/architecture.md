@@ -11,7 +11,7 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 | 図の型 | `src/figures/` | 型ごとに、仕様の検証と SVG の描画を1ファイルで持つ |
 | 出力 | `src/output-formats.ts`、`src/output.ts`、`src/export/` | 対応形式の一覧、保存先と引数の検査、形式ごとの生成処理。Markdown・PDF・Word・PowerPoint は本文と図の読み取りを共通に使う |
 | Lint | `src/lint/` | 自作ルール21個と textlint |
-| 指示 | `prompts/` | 書き方の規約と例1つ（`base.md`）、後から足した指示（`model-notes.md`） |
+| 指示 | `prompts/` | 書き方の規約と例1つ（`base.md`）、後から足した指示（`model-notes.md`）、動画の書き方（`video.md` と、あとから取り出す `video-*.md`） |
 | 評価 | `corpus/` | 良い原稿と悪い原稿、発火を期待するルール |
 | 実績 | `~/.zukai/logs/` | Lint の実行記録。どのプロジェクトの原稿も、同じ記録に集まる |
 
