@@ -18,7 +18,9 @@ import type { Scope } from '../types.ts';
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
 const IDLE_MS = 30 * 60 * 1000;
 // 原稿を探すときの上限。files は一覧に入れる数、reads は中身を読む .md の数。大きなリポジトリでも、一覧がすぐ返るようにする。
-const SCAN = { depth: 6, files: 300, reads: 2000, bytes: 1024 * 1024 };
+// depth は、aidlc の成果物（aidlc/spaces/<space>/intents/<intent>/construction/<unit>/<stage>/reviews/ の9階層）まで届く深さにする。
+// 中身を読むのは変わったファイルだけなので、reads を増やしても、2回目からは stat の数だけ時間が増える。
+const SCAN = { depth: 10, files: 300, reads: 5000, bytes: 1024 * 1024 };
 // プロジェクト全体を探し直す間隔。.zukai/answers は毎回読む。
 const RESCAN_MS = 10 * 1000;
 
@@ -45,56 +47,60 @@ const hasFigure = (source: string): boolean => {
 
 // プロジェクトの中の原稿（図のブロックを持つ .md）を探す。隠しフォルダ、node_modules、シンボリックリンクは読まない。
 // 中身は、ファイルが変わったときだけ読み直す。探し直すたびに、すべての .md を読んで解析しない。
-const scanned = new StatCache<{ title: string } | null>();
-function scan(project: string): DocItem[] {
-  const out: DocItem[] = [];
-  const seen: string[] = [];
-  let reads = 0;
-  const walk = (dir: string, depth: number) => {
+// フォルダの読み取り、stat、中身の読み込みは、まとめて並べて行う。.md が数千あっても、一覧を待たせない。
+// ponytail: 並べて読むので、reads に達したときにどの .md が外れるかは決まらない。外れる順を決めたくなったら、フォルダを順に読む。
+const scanned = new StatCache<Promise<{ title: string } | null>>();
+async function scan(project: string): Promise<DocItem[]> {
+  let count = 0;
+  const walk = async (dir: string, depth: number): Promise<string[]> => {
+    if (count >= SCAN.reads) return [];
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
-      return;
+      return [];
     }
-    for (const e of entries) {
-      if (out.length >= SCAN.files || reads >= SCAN.reads) return;
-      if (e.name.startsWith('.')) continue;
-      const file = path.join(dir, e.name);
-      if (e.isDirectory()) {
+    const parts = await Promise.all(
+      entries.map(async (e) => {
+        if (e.name.startsWith('.')) return [];
+        const file = path.join(dir, e.name);
         // 書き出したフォルダには原稿の写しがある。写しを原稿として出さない。
-        if (depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown')) walk(file, depth + 1);
-      } else if (e.isFile() && e.name.endsWith('.md')) {
-        try {
-          const st = fs.statSync(file);
-          if (st.size > SCAN.bytes) continue;
-          reads++;
-          seen.push(file);
-          const found = scanned.get(file, st, () => {
-            const source = fs.readFileSync(file, 'utf8');
-            return hasFigure(source) ? { title: source.match(/^# (.+)$/m)?.[1] ?? e.name } : null;
-          });
-          if (!found) continue;
-          out.push({ path: path.relative(project, file).replaceAll('\\', '/'), title: found.title, mtime: st.mtimeMs, answer: false });
-        } catch {
-          // 読めないファイルは一覧に入れない。
-        }
-      }
-    }
+        if (e.isDirectory()) return depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown') ? walk(file, depth + 1) : [];
+        if (!e.isFile() || !e.name.endsWith('.md')) return [];
+        count++;
+        return [file];
+      }),
+    );
+    return parts.flat();
   };
-  walk(project, 0);
-  scanned.keep(seen);
-  return out;
+  const files = (await walk(project, 0)).slice(0, SCAN.reads);
+  const found = await Promise.all(
+    files.map(async (file): Promise<DocItem | null> => {
+      try {
+        const st = await fs.promises.stat(file);
+        if (st.size > SCAN.bytes) return null;
+        const hit = scanned.get(file, st, () => fs.promises.readFile(file, 'utf8').then((source) => (hasFigure(source) ? { title: source.match(/^# (.+)$/m)?.[1] ?? path.basename(file) } : null)));
+        const doc = await hit;
+        return doc && { path: path.relative(project, file).replaceAll('\\', '/'), title: doc.title, mtime: st.mtimeMs, answer: false };
+      } catch {
+        // 読めないファイルは一覧に入れない。
+        return null;
+      }
+    }),
+  );
+  scanned.keep(files);
+  return found.filter((d) => d !== null).slice(0, SCAN.files);
 }
 
 // 新しい順の一覧。AI の返答は、view と同じく screenshot の画像の更新も版に含める。
-function docs(project: string, cache: { at: number; items: DocItem[] }): DocItem[] {
+// 探している間に来た要求は、同じ探索の結果を待つ。
+async function docs(project: string, cache: { at: number; items: Promise<DocItem[]> }): Promise<DocItem[]> {
   if (Date.now() - cache.at > RESCAN_MS) {
-    cache.items = scan(project);
     cache.at = Date.now();
+    cache.items = scan(project);
   }
   const answers = listAnswers(answersDir(project)).map((i) => ({ path: `.zukai/answers/${i.name}`, title: i.title, mtime: i.mtime, answer: true }));
-  return [...answers, ...cache.items].sort((a, b) => b.mtime - a.mtime);
+  return [...answers, ...(await cache.items)].sort((a, b) => b.mtime - a.mtime);
 }
 
 // 設定の1項目。秘密の値は返さず、設定済みかどうかだけを返す。
@@ -191,10 +197,10 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
   ensureDir(project);
   // ページに埋め込む合言葉。プロセスごとに作り直す。
   const token = crypto.randomBytes(32).toString('hex');
-  const cache = { at: 0, items: [] as DocItem[] };
+  const cache = { at: 0, items: Promise.resolve([] as DocItem[]) };
   // 一覧にある原稿だけを読む。パスを含む名前で、置き場所の外のファイルを読ませない。
-  const docFile = (rel: string | null): string => {
-    const item = rel ? docs(project, cache).find((d) => d.path === rel) : null;
+  const docFile = async (rel: string | null): Promise<string> => {
+    const item = rel ? (await docs(project, cache)).find((d) => d.path === rel) : null;
     if (!item) throw Object.assign(new Error('この原稿は一覧にありません。'), { status: 404 });
     return path.join(project, item.path);
   };
@@ -213,21 +219,21 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       case 'GET /api/docs':
         return docs(project, cache);
       case 'GET /api/source':
-        return { source: fs.readFileSync(docFile(q('path')), 'utf8') };
+        return { source: fs.readFileSync(await docFile(q('path')), 'utf8') };
       case 'GET /api/lint': {
-        const file = docFile(q('path'));
+        const file = await docFile(q('path'));
         const { lintResident } = await import('../lint/server.ts');
         return lintResident(fs.readFileSync(file, 'utf8'), file);
       }
       case 'POST /api/build': {
-        const file = docFile(str('path'));
+        const file = await docFile(str('path'));
         const { buildOutput } = await import('../export/index.ts');
         const result = await buildOutput(file, { format: str('format') ?? undefined, imageFormat: str('imageFormat') ?? undefined });
         return { out: path.relative(project, result.out), warnings: result.warnings };
       }
       case 'POST /api/publish': {
         // CLI の publish と同じく、Lint に合格した原稿だけを登録する。
-        const file = docFile(str('path'));
+        const file = await docFile(str('path'));
         const { lintResident } = await import('../lint/server.ts');
         const result = await lintResident(fs.readFileSync(file, 'utf8'), file);
         if (!result.ok) return { ok: false, lint: result };
@@ -298,7 +304,7 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       if (url.pathname === '/health') return json(res, 200, { zukai: true, gui: true, project });
       // 枠に出す資料とテーマの見本。読むだけなので合言葉は求めず、CSP でスクリプトを止める。
       if (url.pathname === '/doc') {
-        const file = docFile(url.searchParams.get('path'));
+        const file = await docFile(url.searchParams.get('path'));
         const source = fs.readFileSync(file, 'utf8');
         const { render } = await import('../export/html.ts');
         const html = await render(source, file).catch((e: Error) => fallback(source, e));

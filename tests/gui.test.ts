@@ -103,6 +103,23 @@ test('AI の返答とプロジェクトの原稿を一覧にし、一覧にな�
   }
 });
 
+test('aidlc の成果物のような深いフォルダの原稿も一覧にする', async () => {
+  const { project, server, api } = await start();
+  try {
+    const intent = 'aidlc/spaces/default/intents/i1';
+    const deep = [`${intent}/inception/requirements-analysis/requirements.md`, `${intent}/construction/unit/functional-design/rules.md`, `${intent}/construction/unit/code-generation/reviews/review-01.md`];
+    for (const rel of deep) {
+      fs.mkdirSync(path.join(project, path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(project, rel), MANUSCRIPT);
+    }
+    const { data: docs } = await api('GET', '/api/docs');
+    assert.deepEqual(docs.map((d: { path: string }) => d.path).sort(), [...deep].sort());
+  } finally {
+    server.close();
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('設定を書き、消す。秘密の値は画面に返さない', async () => {
   const { project, server, api } = await start();
   try {
