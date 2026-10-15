@@ -15,9 +15,9 @@ import type { Theme } from '../theme.ts';
 import type { LintContext } from '../lint/index.ts';
 import type { RefItem } from '../refs.ts';
 import type { Doc, FigureBlock, Limits, Tokens } from '../types.ts';
-
 import { CSP } from './csp.ts';
 
+// CSP の値は、軽いファイル（csp.ts）に置く。描画の依存を読まない view と gui も使うため。
 export { CSP };
 
 const plainLang = (lang: string | undefined): boolean => !(lang && knownLang(lang)) || ['text', 'txt', 'plaintext', 'plain'].includes(lang);

@@ -29,7 +29,7 @@ zukai video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960�
 | 暴走と例外 | 読み込みと1コマの時間に上限を設ける。超えたシーンと、読み込みで例外を出したシーンは、主張文と図だけの簡素な動きに差し替える |
 | 見た目 | 文字のはみ出し、字幕の帯との重なり、文字の大きさ、要素の数、シーンより長いアニメーション、同じ時刻のコマが一致するか、音割れを調べる |
 
-効果音は ZzFX（MIT、`src/video/vendor/`）で作ります。AI は、名前の付いた12個の音（`appear`、`whoosh`、`chime` など）を選ぶか、ZzFX の数値を書いて新しい音を作ります。音の選び方は `spikes/sfx/` で聞き比べました。
+効果音は ZzFX（MIT、`src/video/vendor/`）で作ります。AI は、名前の付いた12個の音（`appear`、`whoosh`、`chime` など）を選ぶか、ZzFX の数値を書いて新しい音を作ります。ZzFX は、Kenney の音のファイル（CC0）と聞き比べて選びました。聞き比べに使ったスクリプトは、コミット 739eaf3 までの `spikes/sfx/` にあります。
 
 ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（既定は `gemini-3.8-flash-tts`、声は `Kore`。`video.model` と `video.voice` で変える）で読み上げ、`.zukai/cache/tts` に保存します。API キーは `zukai login gemini` で `~/.zukai/credentials.json` に保存するか、環境変数 `GEMINI_API_KEY` に置きます。キーが無いときは、字幕だけの無音の動画になります。そのことは `zukai doctor` が知らせ、`zukai prompt` の指示にも書くので、AI がチャットで利用者に伝えます。無料枠のキーでは、地域と利用規約によって、送った文が Google の製品改善に使われることがあります。条件は Gemini API の利用規約で確かめます。
 

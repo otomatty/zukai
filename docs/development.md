@@ -20,7 +20,10 @@ zukai は TypeScript で書いています。Node.js 24 は `.ts` のファイ�
 npm run typecheck   # 型を検査する（tsc）
 npm test            # テストを動かす
 npm run check       # 型の検査とテストを続けて行う
+npm run corpus      # Lint そのものが、corpus/ の原稿で期待どおりに発火するかを確かめる
 ```
+
+`tests/` は zukai のコードのテスト、`corpus/` は Lint のルールの評価に使う原稿です。ルールを足したり変えたりしたときは、`corpus/bad/` に発火させたい原稿を置き、`corpus/expected.json` に期待するルールを書きます。`tests/schema.test-d.ts` は型だけのテストで、`npm run typecheck` が確かめます。
 
 プルリクエストと main への push では、GitHub Actions（`.github/workflows/ci.yml`）が同じ検査を行います。CI では Playwright と Chromium も入れるので、動画と撮影のテストも飛ばさずに動きます。
 

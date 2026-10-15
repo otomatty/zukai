@@ -1,4 +1,4 @@
-// npm run typecheck で確かめる型のテスト（実行はしない）。スキーマから作る仕様の型が、検証で通る形と合うことを確かめる。
+// npm run typecheck で確かめる型のテスト（実行はしない）。名前の .test-d.ts は、型だけのテストの慣習。npm test の tests/*.test.ts には当たらない。スキーマから作る仕様の型が、検証で通る形と合うことを確かめる。
 import type { ZonesSpec } from '../src/figures/zones.ts';
 import type { SankeySpec } from '../src/figures/sankey.ts';
 import type { StateSpec } from '../src/figures/state.ts';

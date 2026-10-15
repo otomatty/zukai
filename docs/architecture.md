@@ -12,10 +12,10 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 | 出力 | `src/export/` | 対応形式の一覧（`formats.ts`）、保存先と引数の検査（`index.ts`）、形式ごとの生成処理。Markdown・PDF・Word・PowerPoint は本文と図の読み取りを共通に使う |
 | コマンド | `src/cli.ts`、`src/cli/` | 入口（`cli.ts`）、コマンドの定義（`commands.ts`）、help、setup、doctor |
 | 画面 | `src/server/` | AI の返答を表示するページ（`view.ts`）と、操作画面（`gui.ts`、`gui.html`） |
-| Lint | `src/lint/` | 自作ルール21個と textlint |
+| Lint | `src/lint/` | 自作ルール23個（一覧は `zukai rules`）と textlint |
 | スキル | `skills/zukai/`、`prompts/skills/` | Claude Code のプラグインとして読む `zukai` スキルと、`zukai setup` が利用先のプロジェクトに書くスキルのひな形（`zukai-answer`、`zukai-theme`） |
 | 指示 | `prompts/` | 書き方の規約と例1つ（`base.md`）、後から足した指示（`model-notes.md`）、動画の書き方（`video.md` と、あとから取り出す `video-*.md`） |
-| 評価 | `corpus/` | 良い原稿と悪い原稿、発火を期待するルール |
+| 評価 | `corpus/` | Lint そのものの評価に使う原稿。良い原稿（`good/`）と悪い原稿（`bad/`）、発火を期待するルール（`expected.json`）。`zukai corpus` が確かめる |
 | 実績 | `~/.zukai/logs/` | Lint の実行記録。どのプロジェクトの原稿も、同じ記録に集まる |
 
 `zukai prompt` と `zukai type` は、`contract/limits.json` と `src/figures/` から指示を組み立てます。組み込みの型は24種類あり、テーマに独自の型があれば一覧に追加されます。最初に渡すのは型の一覧だけにし、書き方の詳細は使う型が決まってから取り出します。上限や図の型を変えると、指示と検査の両方が同時に変わります。
