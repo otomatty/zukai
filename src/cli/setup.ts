@@ -42,8 +42,10 @@ export function zukaiCommand(): string {
 }
 
 export const skillDirs: Record<string, string> = { claude: '.claude/skills', agents: '.agents/skills' };
-// 書くスキルと、その元の指示。zukai-answer は返答を資料にし、zukai-theme は資料からデザインのテーマを作る。
-export const skillSources: Record<string, string> = { 'zukai-answer': 'prompts/answer-skill.md', 'zukai-theme': 'prompts/theme-skill.md' };
+// 書くスキルと、そのひな形。zukai-answer は返答を資料にし、zukai-theme は資料からデザインのテーマを作る。
+// ひな形の {{zukai}} は、その PC で zukai を呼ぶコマンドに置き換えて書く。
+// プラグインのスキル（skills/）とは置き場所を分ける。プラグインはファイルをそのまま読むので、{{zukai}} が残ってしまうため。
+export const skillSources: Record<string, string> = { 'zukai-answer': 'prompts/skills/zukai-answer/SKILL.md', 'zukai-theme': 'prompts/skills/zukai-theme/SKILL.md' };
 export const skillText = (name: string, cmd: string = zukaiCommand()): string => fs.readFileSync(path.join(root, skillSources[name]), 'utf8').replaceAll('{{zukai}}', cmd);
 export const skillFile = (base: string, tool: string, name: string): string => path.join(base, skillDirs[tool], name, 'SKILL.md');
 

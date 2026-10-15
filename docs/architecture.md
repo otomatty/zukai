@@ -13,6 +13,7 @@ AI は Markdown の原稿だけを書きます。Lint は原稿の構造、図�
 | コマンド | `src/cli.ts`、`src/cli/` | 入口（`cli.ts`）、コマンドの定義（`commands.ts`）、help、setup、doctor |
 | 画面 | `src/server/` | AI の返答を表示するページ（`view.ts`）と、操作画面（`gui.ts`、`gui.html`） |
 | Lint | `src/lint/` | 自作ルール21個と textlint |
+| スキル | `skills/zukai/`、`prompts/skills/` | Claude Code のプラグインとして読む `zukai` スキルと、`zukai setup` が利用先のプロジェクトに書くスキルのひな形（`zukai-answer`、`zukai-theme`） |
 | 指示 | `prompts/` | 書き方の規約と例1つ（`base.md`）、後から足した指示（`model-notes.md`）、動画の書き方（`video.md` と、あとから取り出す `video-*.md`） |
 | 評価 | `corpus/` | 良い原稿と悪い原稿、発火を期待するルール |
 | 実績 | `~/.zukai/logs/` | Lint の実行記録。どのプロジェクトの原稿も、同じ記録に集まる |
