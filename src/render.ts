@@ -7,6 +7,7 @@ import { parse, isFigure, isRefs, isVideoOnly } from './parse.ts';
 import { resolveRefs, refsHtml, refsStorage } from './refs.ts';
 import { esc } from './figures/svg.ts';
 import { createHighlighter } from 'shiki';
+import type { Highlighter } from 'shiki';
 import { readJson, knownLang } from './lint/index.ts';
 import { themeFor } from './theme.ts';
 import { typeOf, typesFor } from './figures/custom.ts';
@@ -67,6 +68,19 @@ const ctxOf = (file: string | undefined, given?: Theme): LintContext => {
   return { baseDir, tokens: theme.tokens, types: typesFor(theme) };
 };
 
+// コードの色付けの道具は、作るのに数十ms かかり、作るたびにメモリを数MB使う。gui や view のように長く動くプロセスでも増え続けないよう、
+// 1つだけ作り、資料で使う配色と言語を足しながら使い回す。
+let shared: Promise<Highlighter> | null = null;
+async function highlighterFor(theme: string, langs: string[]): Promise<Highlighter> {
+  shared ??= createHighlighter({ themes: [], langs: [] });
+  const h = await shared;
+  if (!h.getLoadedThemes().includes(theme)) await h.loadTheme(theme as Parameters<Highlighter['loadTheme']>[0]);
+  const loaded = new Set(h.getLoadedLanguages());
+  const missing = langs.filter((l) => !loaded.has(l));
+  if (missing.length) await h.loadLanguage(...(missing as Parameters<Highlighter['loadLanguage']>));
+  return h;
+}
+
 export async function render(source: string, file?: string, { theme: given }: { theme?: Theme } = {}): Promise<string> {
   const limits: Limits = readJson('contract/limits.json');
   const ctx = ctxOf(file, given);
@@ -79,7 +93,7 @@ export async function render(source: string, file?: string, { theme: given }: { 
   const langs = [...new Set([...blocks.filter((b) => b.kind === 'code').map((b) => b.lang), ...refLangs].filter((l) => !plainLang(l)))];
   const escHtml = (c: string) => c.replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const highlight = (code: string, lang: string) => (plainLang(lang) ? `<pre><code>${escHtml(code)}</code></pre>` : highlighter.codeToHtml(code, { lang, theme: tokens.codeTheme }));
-  const highlighter = await createHighlighter({ themes: [tokens.codeTheme], langs });
+  const highlighter = await highlighterFor(tokens.codeTheme, langs);
   const claimLines = new Set(
     doc.sections.filter((s) => !s.container && s.blocks[0]?.kind === 'paragraph').map((s) => s.blocks[0].line),
   );
