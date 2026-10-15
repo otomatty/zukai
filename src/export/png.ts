@@ -58,7 +58,9 @@ function fontOptions(svg: string): ResvgRenderOptions['font'] {
   // 絵文字のフォント（Noto Color Emoji など）は数えない。色付きの絵文字は resvg が描けないので、PC のほかのフォントで補う必要があるため。
   const used = [base, ...familiesOf(svg)].map(familyOf).filter((f) => f.files.length);
   const covered = (cp: number) => used.some((f) => f.ranges.some(([a, b]) => cp >= a && cp <= b));
-  const chars = new Set([...svg].map((ch) => ch.codePointAt(0)!).filter((cp) => cp > 0x7e));
+  // 文字参照（&#x2714; や &#10004;）で書いた字も、参照を戻してから数える。参照のままだと ASCII に見え、確かめ漏れるため。
+  const refs = [...svg.matchAll(/&#(x[0-9a-f]+|\d+);/gi)].map((m) => (m[1][0].toLowerCase() === 'x' ? parseInt(m[1].slice(1), 16) : parseInt(m[1], 10)));
+  const chars = new Set([...[...svg].map((ch) => ch.codePointAt(0)!), ...refs].filter((cp) => cp > 0x7e));
   for (const cp of chars) if (!covered(cp)) return system;
   return { loadSystemFonts: false, fontFiles: [...new Set(used.flatMap((f) => f.files))], defaultFontFamily: base };
 }

@@ -147,4 +147,9 @@ test('PNG は、既定の書体に無い記号も、PC のフォントをすべ�
   const svg = await types.flow.render(yaml('type: flow\nsteps:\n  - label: ✓ 受付\n  - label: ☑ 処理 ✔\n'), t, { tokens: t, baseDir: process.cwd() });
   const system = new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 }, background: t.color.paper, font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render().asPng();
   assert.ok(toPng(svg, t.color.paper).data.equals(system));
+  // 文字参照で書いた記号も同じ。資料に入れた SVG の画像を、PDF や Word のために PNG にするときに通る。
+  const referenced = svg.replaceAll('☑', '&#x2611;').replaceAll('✔', '&#10004;');
+  assert.notEqual(referenced, svg);
+  const systemRef = new Resvg(referenced, { fitTo: { mode: 'zoom', value: 2 }, background: t.color.paper, font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render().asPng();
+  assert.ok(toPng(referenced, t.color.paper).data.equals(systemRef));
 });
