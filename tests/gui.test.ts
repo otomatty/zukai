@@ -11,6 +11,8 @@ import type { AddressInfo } from 'node:net';
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-gui-home-'));
 process.env.HOME = home;
 process.env.USERPROFILE = home;
+// 検査は、常駐するプロセスを起動せずに、このプロセスで行う。
+process.env.ZUKAI_LINT_SERVER = 'off';
 const { serve } = await import('../src/gui.ts');
 
 const MANUSCRIPT = '# 手順\n\n## 流れ\n\n流れを示します。\n\n```yaml figure\ntype: flow\nsteps:\n  - label: 受付\n  - label: 処理\n```\n';

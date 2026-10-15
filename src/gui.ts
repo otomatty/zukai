@@ -208,8 +208,8 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
         return { source: fs.readFileSync(docFile(q('path')), 'utf8') };
       case 'GET /api/lint': {
         const file = docFile(q('path'));
-        const { lint } = await import('./lint/index.ts');
-        return lint(fs.readFileSync(file, 'utf8'), file);
+        const { lintResident } = await import('./lint/server.ts');
+        return lintResident(fs.readFileSync(file, 'utf8'), file);
       }
       case 'POST /api/build': {
         const file = docFile(str('path'));
@@ -220,8 +220,8 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       case 'POST /api/publish': {
         // CLI の publish と同じく、Lint に合格した原稿だけを登録する。
         const file = docFile(str('path'));
-        const { lint } = await import('./lint/index.ts');
-        const result = await lint(fs.readFileSync(file, 'utf8'), file);
+        const { lintResident } = await import('./lint/server.ts');
+        const result = await lintResident(fs.readFileSync(file, 'utf8'), file);
         if (!result.ok) return { ok: false, lint: result };
         const { publish } = await import('./confluence.ts');
         return { ok: true, ...(await publish(file, { spaceId: str('spaceId') || null, parentId: str('parentId') || null })) };

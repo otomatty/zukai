@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { render, CSP } from './render.ts';
-import { lint } from './lint/index.ts';
+import { lintResident } from './lint/server.ts';
 import { parse } from './parse.ts';
 import { stateDir } from './config.ts';
 import type { AddressInfo } from 'node:net';
@@ -87,7 +87,7 @@ export const fallback =(source: string, e: Error) => `<!doctype html>
 async function doc(dir: string, name: string): Promise<{ html: string; withBanner: string }> {
   const file = path.join(dir, name);
   const source = fs.readFileSync(file, 'utf8');
-  const [html, result] = await Promise.all([render(source, file).catch((e: Error) => fallback(source, e)), lint(source, file)]);
+  const [html, result] = await Promise.all([render(source, file).catch((e: Error) => fallback(source, e)), lintResident(source, file)]);
   const errors = result.findings.filter((f) => f.severity === 'error');
   const banner = errors.length
     ? `<aside style="border:1px solid #eb6834;border-radius:8px;padding:12px 16px;margin-bottom:24px"><strong>Lint の指摘が ${errors.length} 件残っています</strong><ul>${errors.map((f) => `<li>L${esc(f.line)} ${esc(f.rule)} ${esc(f.message)}</li>`).join('')}</ul></aside>`

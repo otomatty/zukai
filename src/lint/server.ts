@@ -48,12 +48,22 @@ function nodeFlags(): string[] {
 // 所属するグループ。newgrp などで違うグループから呼ばれたとき、読めるフォルダやファイルが違うので、別のプロセスにする。
 const credentials = () => (windows ? '' : `${process.getegid!()}:${process.getgroups!().sort((x, y) => x - y).join(',')}`);
 
-// 接続先の名前。zukai の場所、ホームのフォルダ、今いるフォルダ、umask（出典のキャッシュを書くときの権限）、所属するグループ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
-// 今いるフォルダを含めるのは、起動するときにだけ読む値の相対パス（NODE_EXTRA_CA_CERTS=./ca.pem など）を、呼んだ側と同じフォルダから読むため。
+// 相対パスらしい値。起動するときにだけ読む値（NODE_EXTRA_CA_CERTS=./ca.pem、--require ./hook.js など）に含まれると、どのフォルダから起動したかで結果が変わる。
+// URL と絶対パスは、どこから起動しても同じものを指す。NODE_PATH のように、区切り文字で複数のパスを並べた値もある。
+const relativePath = (v: string) => v.split(new RegExp(`[\\s=${path.delimiter}]+`)).some((w) => /[\\/]|^\./.test(w) && !path.isAbsolute(w) && !/^[a-z][\w+.-]*:\/\//i.test(w));
+// プロキシの値は、パスではない（NO_PROXY の 127.0.0.0/8 のような値を、相対パスと見なさない）。
+const proxyEnv = (n: string) => /^(HTTPS?|NO|ALL)_PROXY$/i.test(n);
+
+// 接続先の名前。zukai の場所、ホームのフォルダ、umask（出典のキャッシュを書くときの権限）、所属するグループ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
+// 起動するときにだけ読む値に相対パスがあるときだけ、今いるフォルダも含める。その値を、呼んだ側と同じフォルダから読むため。
+// 相対パスが無ければ、どのフォルダから呼んでも同じプロセスを使う（1つのプロセスが辞書で数百MB使うので、フォルダごとに起動しない）。
 // ホームのフォルダが違えば設定（~/.zukai）が違うので、別のプロセスにする。Node や起動時の環境変数が違うときも、同じ結果にならないので別にする。
 function versionKey(): string {
-  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${process.cwd()}\0${process.umask()}\0${credentials()}\0${process.execPath}\0${process.version}\0${JSON.stringify(nodeFlags())}`);
-  for (const [n, v] of Object.entries(process.env).filter(([n]) => startupEnv(n)).sort(([a], [b]) => (a < b ? -1 : 1))) h.update(`\0${n}=${v}`);
+  const env = Object.entries(process.env).filter((e): e is [string, string] => startupEnv(e[0]) && e[1] !== undefined).sort(([a], [b]) => (a < b ? -1 : 1));
+  const flags = nodeFlags();
+  const where = [...env.filter(([n]) => !proxyEnv(n)).map(([, v]) => v), ...flags].some(relativePath) ? process.cwd() : '';
+  const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${where}\0${process.umask()}\0${credentials()}\0${process.execPath}\0${process.version}\0${JSON.stringify(flags)}`);
+  for (const [n, v] of env) h.update(`\0${n}=${v}`);
   const add = (rel: string) => {
     try {
       const st = fs.statSync(path.join(root, rel));
@@ -124,13 +134,32 @@ export const socketPath = (): string => path.join(runDir(), `lint-${versionKey()
 
 // 常駐するプロセスで検査する。使えなければ null を返し、裏で起動する。呼んだ側は、自分で検査する。
 // 検査が例外を出したとき（設定の誤り、依存が足りないなど）も null を返す。呼んだ側が自分で検査し直し、同じ例外（code やスタックも）を出す。
-export async function lintOnServer(source: string, file: string, { textlint = true } = {}): Promise<LintResult | null> {
+// waitMs を渡すと、起動したプロセスが待ち受けるまで、その時間だけ待ってから依頼し直す。gui や view のように長く動くプロセスが使う。
+// 自分で検査すると、そのプロセスにも textlint の辞書（数百MB）が残るため。
+export async function lintOnServer(source: string, file: string, { textlint = true, waitMs = 0 } = {}): Promise<LintResult | null> {
+  const deadline = Date.now() + waitMs;
+  // 起動するのは1回だけ。待ち受けるまでの間に依頼し直しても、もう1つ起動しない。
+  let started = false;
+  const launch = () => {
+    if (!started) start();
+    started = true;
+  };
+  for (;;) {
+    const res = await attempt(source, file, textlint, launch);
+    if (res !== 'started' || Date.now() >= deadline) return res === 'started' ? null : res;
+    await new Promise((ok) => setTimeout(ok, 200));
+  }
+}
+
+// 1回だけ依頼する。常駐していなくて起動したときは 'started' を返す。
+async function attempt(source: string, file: string, textlint: boolean, start: () => void): Promise<LintResult | null | 'started'> {
   if (windows || process.env.ZUKAI_LINT_SERVER === 'off') return null;
   const secret = readSecret(false);
   if (!secret) {
     // 合言葉が無いのは、まだ一度も起動していないとき。置き場所が安全でないときは、常駐する側も起動しないので、自分で検査する。
-    if (!fs.existsSync(secretFile())) start();
-    return null;
+    if (fs.existsSync(secretFile())) return null;
+    start();
+    return 'started';
   }
   const sock = socketPath();
   const req: Request = { secret, source, file, textlint, cwd: process.cwd(), env: Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined)) };
@@ -140,12 +169,20 @@ export async function lintOnServer(source: string, file: string, { textlint = tr
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     // 常駐していない。次の検査から使えるよう、裏で起動する。
-    if (code === 'ENOENT' || code === 'ECONNREFUSED') start();
+    if (code === 'ENOENT' || code === 'ECONNREFUSED') {
+      start();
+      return 'started';
+    }
     return null;
   }
   if ('denied' in res) return null;
   if ('error' in res) return null;
   return res.result;
+}
+
+// 長く動くプロセス（gui、view）が検査するときに使う。常駐するプロセスに任せ、使えないときだけ自分で検査する。
+export async function lintResident(source: string, file: string): Promise<LintResult> {
+  return (await lintOnServer(source, file, { waitMs: 5000 })) ?? (await import('./index.ts')).lint(source, file);
 }
 
 function send(sock: string, req: Request): Promise<Response> {
