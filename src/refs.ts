@@ -98,9 +98,33 @@ const dedent = (lines: string[]) => {
   return Number.isFinite(n) ? lines.map((l) => l.slice(n)) : lines;
 };
 
-const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 32 * 1024 * 1024 });
+const runGit = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 32 * 1024 * 1024 });
 
-function resolveCode(ref: RawRef, config: RefsConfig): CodeRef | RefError {
+// git の結果を、1回の検査や書き出し（ctx が同じ間）だけ覚えておく。同じリポジトリの参照が多くても、remote と rev-parse を1回ずつにする。
+// ctx をまたいでは使わない。gui や常駐する Lint のプロセスで、コミットした後に古い HEAD を読まないため。
+type GitMemo = Map<string, string | Error>;
+const gitMemos = new WeakMap<object, GitMemo>();
+const memoOf = (ctx: object): GitMemo => {
+  let memo = gitMemos.get(ctx);
+  if (!memo) gitMemos.set(ctx, (memo = new Map()));
+  return memo;
+};
+
+function resolveCode(ref: RawRef, config: RefsConfig, memo: GitMemo): CodeRef | RefError {
+  const git = (cwd: string, ...args: string[]): string => {
+    const key = [cwd, ...args].join('\0');
+    let v = memo.get(key);
+    if (v === undefined) {
+      try {
+        v = runGit(cwd, ...args);
+      } catch (e) {
+        v = e as Error;
+      }
+      memo.set(key, v);
+    }
+    if (v instanceof Error) throw v;
+    return v;
+  };
   const m = String(ref.code).match(/^([\w-]+):(.+?)#L(\d+)(?:-L?(\d+))?$/);
   if (!m) return { rule: 'R001', error: `code「${ref.code}」は「リポジトリの別名:パス#L開始-L終了」の形にしてください。` };
   const [, alias, file, a, b = a] = m as unknown as [string, string, string, string, string?];
@@ -216,7 +240,7 @@ export async function resolveRefs(block: RefsBlock, ctx: { baseDir: string }, li
     const unknown = Object.keys(ref ?? {}).filter((k) => !allowed.includes(k));
     if (!ref || (ref.code === undefined && ref.quote === undefined)) items.push({ rule: 'R001', error: '根拠の項目には code か quote を書いてください。' });
     else if (unknown.length) items.push({ rule: 'R001', error: `未定義のキー「${unknown[0]}」があります。使えるキーは ${allowed.join('、')} です。` });
-    else if (ref.code !== undefined) items.push(typeof ref.note === 'string' && ref.note ? resolveCode(ref, config) : { rule: 'R001', error: 'コード参照には note（その行が何をしているか）が必要です。' });
+    else if (ref.code !== undefined) items.push(typeof ref.note === 'string' && ref.note ? resolveCode(ref, config, memoOf(ctx)) : { rule: 'R001', error: 'コード参照には note（その行が何をしているか）が必要です。' });
     else items.push(await resolveQuote(ref, ctx, config, limits));
   }
   const errors: RefError[] = [];
