@@ -47,26 +47,42 @@ const hasFigure = (source: string): boolean => {
 
 // プロジェクトの中の原稿（図のブロックを持つ .md）を探す。隠しフォルダ、node_modules、シンボリックリンクは読まない。
 // 中身は、ファイルが変わったときだけ読み直す。探し直すたびに、すべての .md を読んで解析しない。
-// フォルダは並べて読み、見つけた .md はフォルダをたどった順に並べる。stat と読み込みは SCAN.open 件ずつ並べて行う。
+// .md はフォルダをたどった順に1件ずつ渡し、stat と読み込みは SCAN.open 件ずつ並べて行う。上限に届いたら、それより先のフォルダは読まない。
 // 上限はたどった順に当てるので、上限に達したときに外れる .md は毎回同じになる。
 const scanned = new StatCache<Promise<{ title: string } | null>>();
-async function mdFiles(dir: string, depth: number): Promise<string[]> {
-  let entries: fs.Dirent[];
-  try {
-    entries = await fs.promises.readdir(dir, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const parts = await Promise.all(
-    entries.map(async (e) => {
-      if (e.name.startsWith('.')) return [];
-      const file = path.join(dir, e.name);
-      // 書き出したフォルダには原稿の写しがある。写しを原稿として出さない。
-      if (e.isDirectory()) return depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown') ? mdFiles(file, depth + 1) : [];
-      return e.isFile() && e.name.endsWith('.md') ? [file] : [];
-    }),
-  );
-  return parts.flat();
+const readDir = (dir: string): Promise<fs.Dirent[]> => fs.promises.readdir(dir, { withFileTypes: true }).catch(() => []);
+// 次の .md を返す関数を作る。終わりは null。同時に呼んでも、呼んだ順にたどった順の .md を返す。
+function mdFiles(project: string): () => Promise<string | null> {
+  type Frame = { dir: string; depth: number; entries: fs.Dirent[]; i: number; subdirs: Map<string, Promise<fs.Dirent[]>> };
+  const stack: Frame[] = [];
+  const enter = async (dir: string, entries: Promise<fs.Dirent[]>, depth: number) => {
+    const list = (await entries).filter((e) => !e.name.startsWith('.'));
+    // 下のフォルダは、たどり着く前に読み始めておく。先に読むのは1階層下までなので、読むフォルダの数は進み具合に応じて増える。
+    // 書き出したフォルダには原稿の写しがある。写しを原稿として出さない。
+    const subdirs = new Map(list.filter((e) => e.isDirectory() && depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown')).map((e) => [e.name, readDir(path.join(dir, e.name))]));
+    stack.push({ dir, depth, entries: list, i: 0, subdirs });
+  };
+  const step = async (): Promise<string | null> => {
+    while (stack.length) {
+      const top = stack.at(-1)!;
+      const e = top.entries[top.i++];
+      if (!e) {
+        stack.pop();
+        continue;
+      }
+      const file = path.join(top.dir, e.name);
+      const sub = top.subdirs.get(e.name);
+      if (sub) await enter(file, sub, top.depth + 1);
+      else if (e.isFile() && e.name.endsWith('.md')) return file;
+    }
+    return null;
+  };
+  let chain: Promise<unknown> = enter(project, readDir(project), 0);
+  return () => {
+    const next = chain.then(step);
+    chain = next;
+    return next;
+  };
 }
 async function scan(project: string): Promise<DocItem[]> {
   let reads = 0;
@@ -91,23 +107,30 @@ async function scan(project: string): Promise<DocItem[]> {
       return { read: true, doc: null };
     }
   };
-  // どちらかの上限に届いたら、それより後の .md は調べない。調べている途中のものは最後まで調べる。
-  const files = await mdFiles(project, 0);
+  // どちらかの上限に届いたら、それより後の .md は取り出さない。調べている途中のものは最後まで調べる。
+  // 取り出しは呼んだ順に返るので、i はたどった順の番号になる。
+  const nextFile = mdFiles(project);
   // read は中身を読む対象になったか（bytes 以下か）。上限は、たどった順に read と doc を数えて当てる。
-  const results: { read: boolean; doc: DocItem | null }[] = [];
+  const results: { file: string; read: boolean; doc: DocItem | null }[] = [];
   let next = 0;
+  let done = false;
   const worker = async () => {
-    while (reads < SCAN.reads && found < SCAN.files && next < files.length) {
+    while (!done && reads < SCAN.reads && found < SCAN.files) {
       const i = next++;
-      results[i] = await inspect(files[i]!);
+      const file = await nextFile();
+      if (file === null) {
+        done = true;
+        return;
+      }
+      results[i] = { file, ...(await inspect(file)) };
     }
   };
   await Promise.all(Array.from({ length: SCAN.open }, worker));
-  scanned.keep(files.slice(0, next));
+  scanned.keep(results.filter(Boolean).map((r) => r.file));
   const out: DocItem[] = [];
   let n = 0;
   for (const r of results) {
-    if (out.length >= SCAN.files || (r.read && ++n > SCAN.reads)) break;
+    if (!r || out.length >= SCAN.files || (r.read && ++n > SCAN.reads)) break;
     if (r.doc) out.push(r.doc);
   }
   return out;
