@@ -48,6 +48,9 @@ export class StatCache<T> {
     const live = new Set(files);
     for (const f of this.items.keys()) if (!live.has(f)) this.items.delete(f);
   }
+  delete(file: string): void {
+    this.items.delete(file);
+  }
 }
 
 // 原稿が読む screenshot の画像と、枠の記録（.json）。

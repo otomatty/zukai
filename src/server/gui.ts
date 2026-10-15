@@ -17,10 +17,10 @@ import type { Scope } from '../types.ts';
 
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
 const IDLE_MS = 30 * 60 * 1000;
-// 原稿を探すときの上限。files は一覧に入れる数、reads は中身を読む .md の数。大きなリポジトリでも、一覧がすぐ返るようにする。
+// 原稿を探すときの上限。files は一覧に入れる数、reads は中身を読む .md（bytes 以下）の数。大きなリポジトリでも、一覧がすぐ返るようにする。
 // depth は、aidlc の成果物（aidlc/spaces/<space>/intents/<intent>/construction/<unit>/<stage>/reviews/ の9階層）まで届く深さにする。
-// 中身を読むのは変わったファイルだけなので、reads を増やしても、2回目からは stat の数だけ時間が増える。
-const SCAN = { depth: 10, files: 300, reads: 5000, bytes: 1024 * 1024 };
+// open は、同時に stat と読み込みをするファイルの数。開いているファイルの数の上限（EMFILE）に当たらないようにする。
+const SCAN = { depth: 10, files: 300, reads: 5000, bytes: 1024 * 1024, open: 32 };
 // プロジェクト全体を探し直す間隔。.zukai/answers は毎回読む。
 const RESCAN_MS = 10 * 1000;
 
@@ -47,57 +47,78 @@ const hasFigure = (source: string): boolean => {
 
 // プロジェクトの中の原稿（図のブロックを持つ .md）を探す。隠しフォルダ、node_modules、シンボリックリンクは読まない。
 // 中身は、ファイルが変わったときだけ読み直す。探し直すたびに、すべての .md を読んで解析しない。
-// フォルダの読み取り、stat、中身の読み込みは、まとめて並べて行う。.md が数千あっても、一覧を待たせない。
-// ponytail: 並べて読むので、reads に達したときにどの .md が外れるかは決まらない。外れる順を決めたくなったら、フォルダを順に読む。
+// フォルダは並べて読み、見つけた .md はフォルダをたどった順に並べる。stat と読み込みは SCAN.open 件ずつ並べて行う。
+// 上限はたどった順に当てるので、上限に達したときに外れる .md は毎回同じになる。
 const scanned = new StatCache<Promise<{ title: string } | null>>();
-async function scan(project: string): Promise<DocItem[]> {
-  let count = 0;
-  const walk = async (dir: string, depth: number): Promise<string[]> => {
-    if (count >= SCAN.reads) return [];
-    let entries: fs.Dirent[];
-    try {
-      entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    } catch {
-      return [];
-    }
-    const parts = await Promise.all(
-      entries.map(async (e) => {
-        if (e.name.startsWith('.')) return [];
-        const file = path.join(dir, e.name);
-        // 書き出したフォルダには原稿の写しがある。写しを原稿として出さない。
-        if (e.isDirectory()) return depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown') ? walk(file, depth + 1) : [];
-        if (!e.isFile() || !e.name.endsWith('.md')) return [];
-        count++;
-        return [file];
-      }),
-    );
-    return parts.flat();
-  };
-  const files = (await walk(project, 0)).slice(0, SCAN.reads);
-  const found = await Promise.all(
-    files.map(async (file): Promise<DocItem | null> => {
-      try {
-        const st = await fs.promises.stat(file);
-        if (st.size > SCAN.bytes) return null;
-        const hit = scanned.get(file, st, () => fs.promises.readFile(file, 'utf8').then((source) => (hasFigure(source) ? { title: source.match(/^# (.+)$/m)?.[1] ?? path.basename(file) } : null)));
-        const doc = await hit;
-        return doc && { path: path.relative(project, file).replaceAll('\\', '/'), title: doc.title, mtime: st.mtimeMs, answer: false };
-      } catch {
-        // 読めないファイルは一覧に入れない。
-        return null;
-      }
+async function mdFiles(dir: string, depth: number): Promise<string[]> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const parts = await Promise.all(
+    entries.map(async (e) => {
+      if (e.name.startsWith('.')) return [];
+      const file = path.join(dir, e.name);
+      // 書き出したフォルダには原稿の写しがある。写しを原稿として出さない。
+      if (e.isDirectory()) return depth < SCAN.depth && !SKIP_DIRS.has(e.name) && !e.name.endsWith('.confluence') && !e.name.endsWith('.markdown') ? mdFiles(file, depth + 1) : [];
+      return e.isFile() && e.name.endsWith('.md') ? [file] : [];
     }),
   );
-  scanned.keep(files);
-  return found.filter((d) => d !== null).slice(0, SCAN.files);
+  return parts.flat();
+}
+async function scan(project: string): Promise<DocItem[]> {
+  let reads = 0;
+  let found = 0;
+  const inspect = async (file: string): Promise<{ read: boolean; doc: DocItem | null }> => {
+    let st: fs.Stats;
+    try {
+      st = await fs.promises.stat(file);
+    } catch {
+      return { read: false, doc: null };
+    }
+    if (st.size > SCAN.bytes) return { read: false, doc: null };
+    reads++;
+    try {
+      const doc = await scanned.get(file, st, () => fs.promises.readFile(file, 'utf8').then((source) => (hasFigure(source) ? { title: source.match(/^# (.+)$/m)?.[1] ?? path.basename(file) } : null)));
+      if (!doc) return { read: true, doc: null };
+      found++;
+      return { read: true, doc: { path: path.relative(project, file).replaceAll('\\', '/'), title: doc.title, mtime: st.mtimeMs, answer: false } };
+    } catch {
+      // 読めないファイルは一覧に入れず、次に探すときに読み直す。
+      scanned.delete(file);
+      return { read: true, doc: null };
+    }
+  };
+  // どちらかの上限に届いたら、それより後の .md は調べない。調べている途中のものは最後まで調べる。
+  const files = await mdFiles(project, 0);
+  // read は中身を読む対象になったか（bytes 以下か）。上限は、たどった順に read と doc を数えて当てる。
+  const results: { read: boolean; doc: DocItem | null }[] = [];
+  let next = 0;
+  const worker = async () => {
+    while (reads < SCAN.reads && found < SCAN.files && next < files.length) {
+      const i = next++;
+      results[i] = await inspect(files[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: SCAN.open }, worker));
+  scanned.keep(files.slice(0, next));
+  const out: DocItem[] = [];
+  let n = 0;
+  for (const r of results) {
+    if (out.length >= SCAN.files || (r.read && ++n > SCAN.reads)) break;
+    if (r.doc) out.push(r.doc);
+  }
+  return out;
 }
 
 // 新しい順の一覧。AI の返答は、view と同じく screenshot の画像の更新も版に含める。
-// 探している間に来た要求は、同じ探索の結果を待つ。
+// 探している間に来た要求は、同じ探索の結果を待つ。探し直す間隔は、探し終えたときから数える。
 async function docs(project: string, cache: { at: number; items: Promise<DocItem[]> }): Promise<DocItem[]> {
   if (Date.now() - cache.at > RESCAN_MS) {
-    cache.at = Date.now();
-    cache.items = scan(project);
+    cache.at = Infinity;
+    cache.items = scan(project).finally(() => (cache.at = Date.now()));
   }
   const answers = listAnswers(answersDir(project)).map((i) => ({ path: `.zukai/answers/${i.name}`, title: i.title, mtime: i.mtime, answer: true }));
   return [...answers, ...(await cache.items)].sort((a, b) => b.mtime - a.mtime);
