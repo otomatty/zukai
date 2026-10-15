@@ -26,9 +26,17 @@ export interface RuleStats {
   remained: number;
   suppressed: number;
 }
+// モデルごとの実績。モデルを替えたときに、指示（prompts/model-notes.md）を残すかどうかを、ルールの発火の割合で比べるため。
+// perRun は、1回の実行あたりの発火の数。モデル名を記録しなかった実行は、model が null。
+export interface ModelStats {
+  model: string | null;
+  runs: number;
+  perRun: Record<string, number>;
+}
 export interface Stats {
   runs: number;
   rules: RuleStats[];
+  models: ModelStats[];
   figures: [string, number][];
   free: { file: string; title: string }[];
 }
@@ -51,13 +59,15 @@ export function record(result: LintResult, model?: string | null): void {
   fs.appendFileSync(file, JSON.stringify(entry) + '\n');
 }
 
-export function stats(): Stats {
-  if (!fs.existsSync(file)) return { runs: 0, rules: [], figures: [], free: [] };
+// model を渡すと、そのモデルの実行だけを数える。
+export function stats({ model }: { model?: string } = {}): Stats {
+  if (!fs.existsSync(file)) return { runs: 0, rules: [], models: [], figures: [], free: [] };
   const runs = fs
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((l): Run => JSON.parse(l));
+    .map((l): Run => JSON.parse(l))
+    .filter((r) => model === undefined || r.model === model);
 
   const table: Record<string, Omit<RuleStats, 'files'> & { files: Set<string> }> = {};
   const row = (rule: string) => (table[rule] ??= { rule, fired: 0, files: new Set<string>(), fixed: 0, remained: 0, suppressed: 0 });
@@ -89,5 +99,15 @@ export function stats(): Stats {
   const rules = Object.values(table)
     .map((r) => ({ ...r, files: r.files.size }))
     .sort((a, b) => b.fired - a.fired);
-  return { runs: runs.length, rules, figures: Object.entries(figures).sort((a, b) => b[1] - a[1]), free };
+  const byModel = new Map<string | null, { runs: number; fired: Record<string, number> }>();
+  for (const run of runs) {
+    const m = byModel.get(run.model) ?? { runs: 0, fired: {} };
+    m.runs++;
+    for (const [rule, n] of Object.entries(run.findings)) m.fired[rule] = (m.fired[rule] ?? 0) + n;
+    byModel.set(run.model, m);
+  }
+  const models = [...byModel]
+    .map(([name, m]) => ({ model: name, runs: m.runs, perRun: Object.fromEntries(Object.entries(m.fired).map(([r, n]) => [r, n / m.runs])) }))
+    .sort((a, b) => b.runs - a.runs);
+  return { runs: runs.length, rules, models, figures: Object.entries(figures).sort((a, b) => b[1] - a[1]), free };
 }

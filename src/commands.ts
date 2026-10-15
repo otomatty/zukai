@@ -518,10 +518,25 @@ export const commands: Command[] = [
     name: 'stats',
     group: '開発',
     summary: 'ルールごとの発火、修正、抑制の実績を表示する。記録は ~/.zukai/logs にある',
-    examples: ['zukai stats'],
-    async run() {
+    flags: [
+      { name: 'model', value: '名前', desc: 'そのモデルの実行だけを数える（zukai lint の --model に渡した名前）' },
+      { name: 'by', value: 'model', desc: 'モデルごとに、1回の実行あたりのルールの発火を並べる。モデルを替えたときに、追加の指示を残すかを決めるのに使う' },
+    ],
+    examples: ['zukai stats', 'zukai stats --by=model', 'zukai stats --model=モデル名'],
+    async run({ opt }) {
       const { stats } = await import('./log.ts');
-      const s = stats();
+      const by = opt('by');
+      if (by !== undefined && by !== 'model') throw new Error('--by に書けるのは model だけです。');
+      const s = stats({ model: opt('model') });
+      if (by === 'model') {
+        // 発火の多いルールから8つまでを列にする。全角の文字は2文字分の幅で揃える。
+        const cols = s.rules.slice(0, 8).map((r) => r.rule);
+        const pad = (t: string, n: number) => t + ' '.repeat(Math.max(0, n - [...t].reduce((w, ch) => w + (ch.codePointAt(0)! > 0xff ? 2 : 1), 0)));
+        console.log(`実行 ${s.runs} 回。数字は、1回の実行あたりの発火の数です。`);
+        console.log(`${pad('モデル', 24)}  実行  ${cols.map((c) => c.padStart(6)).join('')}`);
+        for (const m of s.models) console.log(`${pad(m.model ?? '（記録なし）', 24)} ${String(m.runs).padStart(5)}  ${cols.map((c) => (m.perRun[c] ?? 0).toFixed(2).padStart(6)).join('')}`);
+        return;
+      }
       console.log(`実行 ${s.runs} 回`);
       console.log('ルール                発火  ファイル  修正  残存  抑制');
       for (const r of s.rules) {

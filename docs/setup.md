@@ -57,6 +57,7 @@ zukai theme preview                # テーマで描いた図の見本を、1枚
 zukai theme compare 案 案...        # 今のテーマと案（emphasis.box=tint など）を、同じ図で横に並べる
 zukai corpus                       # Lint 自体が期待どおりに動くか確認する
 zukai stats                        # ルールごとの実績を表示する
+zukai stats --by=model             # モデルごとに、1回の実行あたりの発火を並べる
 ```
 
 コマンドは、`src/commands.ts` の定義から引数を検査し、help を作ります。書き間違えたコマンドやオプションには、候補を示します。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.ts` で同じように動きます。
