@@ -32,7 +32,7 @@ export function rng(seed: number): () => number {
   };
 }
 
-// 名前の付いた音。spikes/sfx で聞き比べて選んだ値。
+// 名前の付いた音。Kenney の音のファイルと聞き比べて選んだ値（聞き比べのスクリプトは、コミット 739eaf3 までの spikes/sfx）。
 // ZzFX の数値の順: 音量, ばらつき, 周波数, attack, sustain, release, 波形, 波形の曲がり, slide, deltaSlide, 音程の跳び, 跳ぶ時刻,
 // 繰り返し, ノイズ, 変調, ビット落とし, ディレイ, sustain の音量, decay, トレモロ, フィルタ（負の値がローパス、正の値がハイパス、区切りは値の2倍の周波数）。
 export const PRESETS: Record<string, number[]> = {

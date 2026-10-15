@@ -11,8 +11,8 @@ import type { RenderedImage } from '@resvg/resvg-js';
 import { types } from '../src/figures/index.ts';
 import { baseTokens, readTheme } from '../src/theme.ts';
 import { typesFor } from '../src/figures/custom.ts';
-import { render, renderConfluence } from '../src/render.ts';
-import { pngFont, toPng } from '../src/png.ts';
+import { render, renderConfluence } from '../src/export/html.ts';
+import { pngFont, toPng } from '../src/export/png.ts';
 import { lint } from '../src/lint/index.ts';
 import type { Tokens } from '../src/types.ts';
 
@@ -45,7 +45,7 @@ test('組み込みの全24型は、図の座標を変えずに紙の色の余白
   const t = baseTokens();
   // PNG の既定の白で隠れないよう、紙の色を変え、透明な余白も検出する。
   t.color.paper = '#e9f1f7';
-  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good/', import.meta.url)) };
+  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good', import.meta.url)) };
   for (const type of Object.values(types)) {
     const spec = type.name === 'screenshot'
       ? { type: 'screenshot', image: 'shots/login.png', marks: [{ selector: '.alert', note: '残り時間を表示します。' }] }
@@ -139,4 +139,17 @@ test('HTML と Confluence は、自由図・チャート・テーマ独自の型
   assert.deepEqual(svgs.map(stable), page.figures.map((f) => stable(f.svg)));
   for (const svg of svgs) checkMargin(raster(svg), theme.tokens);
   assert.equal(page.background, '#141f4f');
+});
+
+test('PNG は、既定の書体に無い記号も、PC のフォントをすべて読んだときと同じに描く', async () => {
+  const t = readTheme(null).tokens;
+  // ✓ は日本語の書体にあることが多く、☑ と ✔ は無いことが多い（絵文字の書体にはあるが、色付きの絵文字は描けない）。
+  const svg = await types.flow.render(yaml('type: flow\nsteps:\n  - label: ✓ 受付\n  - label: ☑ 処理 ✔\n'), t, { tokens: t, baseDir: process.cwd() });
+  const system = new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 }, background: t.color.paper, font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render().asPng();
+  assert.ok(toPng(svg, t.color.paper).data.equals(system));
+  // 文字参照で書いた記号も同じ。資料に入れた SVG の画像を、PDF や Word のために PNG にするときに通る。
+  const referenced = svg.replaceAll('☑', '&#x2611;').replaceAll('✔', '&#10004;');
+  assert.notEqual(referenced, svg);
+  const systemRef = new Resvg(referenced, { fitTo: { mode: 'zoom', value: 2 }, background: t.color.paper, font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render().asPng();
+  assert.ok(toPng(referenced, t.color.paper).data.equals(systemRef));
 });

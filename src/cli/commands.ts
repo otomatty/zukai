@@ -3,9 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import type { LintResult } from './lint/index.ts';
-import type { SceneResult } from './video/encode.ts';
-import { outputFormats, imageFormats } from './output-formats.ts';
+import type { LintResult } from '../lint/index.ts';
+import type { SceneResult } from '../video/encode.ts';
+import { outputFormats, imageFormats } from '../export/formats.ts';
 
 export const groups = ['はじめる', '設定', '書く', '検査と出力', '動画', '開発'] as const;
 export type Group = (typeof groups)[number];
@@ -99,7 +99,7 @@ export const commands: Command[] = [
     related: ['setup', 'config'],
     async run({ opt, has }) {
       const { doctor, printDoctor } = await import('./doctor.ts');
-      const { projectOf } = await import('./config.ts');
+      const { projectOf } = await import('../config.ts');
       // --dir で書いたフォルダはそのまま使う。上へたどるのは、--dir が無いときだけ。
       const r = await doctor(opt('dir') ? path.resolve(opt('dir')!) : projectOf(process.cwd()));
       if (has('json')) console.log(JSON.stringify(r, null, 2));
@@ -183,8 +183,8 @@ export const commands: Command[] = [
     settings: ['theme'],
     related: ['config', 'prompt'],
     async run({ args, opt, has }) {
-      const { initTheme, themeReport } = await import('./theme.ts');
-      const { settingsFor, projectOf, stateDir } = await import('./config.ts');
+      const { initTheme, themeReport } = await import('../theme.ts');
+      const { settingsFor, projectOf, stateDir } = await import('../config.ts');
       const [action, ...rest] = args;
       // = を含むものは案、それ以外はフォルダ。
       const variants = rest.filter((a) => a.includes('='));
@@ -212,7 +212,7 @@ export const commands: Command[] = [
           return r.ok ? 0 : 1;
         }
         case 'preview': {
-          const { previewTheme } = await import('./preview.ts');
+          const { previewTheme } = await import('../preview.ts');
           const { html, findings } = await previewTheme(dir);
           const out = opt('out') ?? path.join(stateDir(project), 'theme-preview.html');
           fs.writeFileSync(out, html);
@@ -222,7 +222,7 @@ export const commands: Command[] = [
         }
         case 'compare': {
           if (!variants.length) throw new Error('見比べる案を書いてください。例: zukai theme compare emphasis.box=fill emphasis.box=tint');
-          const { compareThemes } = await import('./preview.ts');
+          const { compareThemes } = await import('../preview.ts');
           const html = await compareThemes(dir, variants, { only: opt('types')?.split(',').map((s) => s.trim()).filter(Boolean) ?? null });
           const out = opt('out') ?? path.join(stateDir(project), 'theme-compare.html');
           fs.writeFileSync(out, html);
@@ -230,7 +230,7 @@ export const commands: Command[] = [
           return 0;
         }
         default: {
-          const { closest } = await import('./config.ts');
+          const { closest } = await import('../config.ts');
           const near = closest(action, ['init', 'check', 'preview', 'compare']);
           throw new Error(`theme の操作「${action}」はありません。${near ? `「${near}」の書き間違いではありませんか。` : ''}init、check、preview、compare のどれかを書きます。`);
         }
@@ -245,17 +245,19 @@ export const commands: Command[] = [
       { name: 'full', desc: 'すべての図の型の書き方を含める' },
       { name: 'video', desc: '設定の output によらず、動画の書き方を含める' },
       { name: 'type-command', value: 'コマンド', desc: '指示の中で案内する、型の書き方を取り出すコマンド。既定は zukai type' },
+      { name: 'part', value: '名前', desc: '動画の書き方のうち、あとから取り出す部分だけを出力する。sound（効果音）、checks（検査の一覧）。カンマで並べられる' },
     ],
-    examples: ['zukai prompt', 'zukai prompt --full'],
+    examples: ['zukai prompt', 'zukai prompt --full', 'zukai prompt --part=sound'],
     settings: ['output', 'terms', 'theme'],
     related: ['type', 'lint', 'theme'],
     async run({ opt, has }) {
-      const { settingsFor } = await import('./config.ts');
-      const { buildPrompt } = await import('./prompt.ts');
-      const { themeFor } = await import('./theme.ts');
+      const { settingsFor } = await import('../config.ts');
+      const { buildPrompt } = await import('../prompt.ts');
+      const { themeFor } = await import('../theme.ts');
       const { settings } = settingsFor(process.cwd());
       const video = has('video') || settings.output === 'video';
-      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey), theme: themeFor(process.cwd()) }));
+      const part = opt('part')?.split(',').map((x) => x.trim()).filter(Boolean) ?? null;
+      process.stdout.write(buildPrompt({ full: has('full'), type: opt('type-command'), video, terms: settings.terms, voice: Boolean(settings.gemini?.apiKey), theme: themeFor(process.cwd()), part }));
     },
   },
   {
@@ -267,8 +269,8 @@ export const commands: Command[] = [
     related: ['prompt', 'icons'],
     settings: ['theme'],
     async run({ args }) {
-      const { buildPrompt } = await import('./prompt.ts');
-      const { themeFor } = await import('./theme.ts');
+      const { buildPrompt } = await import('../prompt.ts');
+      const { themeFor } = await import('../theme.ts');
       process.stdout.write(buildPrompt({ only: args, theme: themeFor(process.cwd()) }));
     },
   },
@@ -279,7 +281,7 @@ export const commands: Command[] = [
     args: [{ name: '語', desc: '探す語。例: lambda' }],
     examples: ['zukai icons lambda'],
     async run({ args }) {
-      const { searchIcons } = await import('./figures/icons.ts');
+      const { searchIcons } = await import('../figures/icons.ts');
       const found = searchIcons(args[0] ?? '');
       console.log(found.length ? found.join('\n') : '見つかりません。別の語で探してください。');
     },
@@ -292,7 +294,7 @@ export const commands: Command[] = [
     examples: ['zukai capture 原稿.md'],
     settings: ['chromium'],
     async run({ args }) {
-      const { capture } = await import('./capture.ts');
+      const { capture } = await import('../capture.ts');
       const done = await capture(args[0]);
       if (!done.length) console.log('url のある screenshot が原稿にありません。');
       for (const r of done) {
@@ -318,11 +320,11 @@ export const commands: Command[] = [
     settings: ['terms', 'repos.*.path'],
     related: ['build', 'stats', 'rules'],
     async run({ args, opt, has }) {
-      const { record } = await import('./log.ts');
+      const { record } = await import('../log.ts');
       // 2回目からは、常駐するプロセスで検査する。textlint の辞書を読み込み直さずに済むため。使えなければ、このプロセスで検査する。
-      const { lintOnServer } = await import('./lint/server.ts');
+      const { lintOnServer } = await import('../lint/server.ts');
       const check = async (source: string, file: string, options: { textlint: boolean }) =>
-        (has('no-server') ? null : await lintOnServer(source, file, options)) ?? (await import('./lint/index.ts')).lint(source, file, options);
+        (has('no-server') ? null : await lintOnServer(source, file, options)) ?? (await import('../lint/index.ts')).lint(source, file, options);
       let ok = true;
       const results: LintResult[] = [];
       for (const file of args) {
@@ -350,7 +352,7 @@ export const commands: Command[] = [
     settings: ['png.font', 'chromium'],
     related: ['publish', 'extract'],
     async run({ args, opt }) {
-      const { buildOutput } = await import('./output.ts');
+      const { buildOutput } = await import('../export/index.ts');
       const result = await buildOutput(args[0], { format: opt('format'), out: opt('out'), imageFormat: opt('image-format') });
       console.log(`${result.out} を書き出しました。`);
       for (const warning of result.warnings) console.warn(`注意: ${warning}`);
@@ -371,8 +373,8 @@ export const commands: Command[] = [
     related: ['build', 'login'],
     // 登録できたときは何も返さず、終了コードを 0 にする。
     async run({ args, opt, has }): Promise<number | void> {
-      const { lint } = await import('./lint/index.ts');
-      const { publish } = await import('./confluence.ts');
+      const { lint } = await import('../lint/index.ts');
+      const { publish } = await import('../export/confluence.ts');
       const result = await lint(fs.readFileSync(args[0], 'utf8'), args[0], { textlint: !has('no-textlint') });
       if (!result.ok) {
         printLint(result);
@@ -394,7 +396,7 @@ export const commands: Command[] = [
     examples: ['zukai extract 資料.html'],
     related: ['build'],
     async run({ args, opt }) {
-      const { extract } = await import('./render.ts');
+      const { extract } = await import('../export/html.ts');
       const source = extract(fs.readFileSync(args[0], 'utf8'));
       if (source === null) throw new Error('この HTML には原稿が埋め込まれていません。');
       const out = opt('out') ?? args[0].replace(/\.html$/, '') + '.md';
@@ -412,8 +414,8 @@ export const commands: Command[] = [
     ],
     examples: ['zukai view'],
     async run({ has }) {
-      const view = await import('./view.ts');
-      const { projectOf } = await import('./config.ts');
+      const view = await import('../server/view.ts');
+      const { projectOf } = await import('../config.ts');
       const project = projectOf(process.cwd());
       if (has('serve')) {
         // ensure が切り離したプロセスで起動する本体。直接実行すると、起動のエラーを確かめられる。
@@ -434,8 +436,8 @@ export const commands: Command[] = [
     examples: ['zukai gui'],
     related: ['view', 'config', 'theme', 'publish'],
     async run({ has }) {
-      const gui = await import('./gui.ts');
-      const { projectOf } = await import('./config.ts');
+      const gui = await import('../server/gui.ts');
+      const { projectOf } = await import('../config.ts');
       const project = projectOf(process.cwd());
       if (has('serve')) {
         // ensure が切り離したプロセスで起動する本体。直接実行すると、起動のエラーを確かめられる。
@@ -457,7 +459,7 @@ export const commands: Command[] = [
     settings: ['video.model', 'video.voice', 'video.style', 'video.bgm', 'video.bgmVolume', 'video.sfx.enabled', 'video.sfx.volume', 'gemini.apiKey', 'chromium'],
     related: ['frames', 'login'],
     async run({ args, opt, has }) {
-      const { makeVideo } = await import('./video/encode.ts');
+      const { makeVideo } = await import('../video/encode.ts');
       const r = await makeVideo(args[0], { out: opt('out'), draft: has('draft'), onProgress: (d, n) => process.stderr.write(`\r${d}/${n} コマ`) });
       process.stderr.write('\n');
       if (r.silentReason) console.log(`音声なしで作りました。${r.silentReason}`);
@@ -479,7 +481,7 @@ export const commands: Command[] = [
     related: ['video'],
     async run({ args, opt, has }) {
       if (!opt('at') && !has('sheet')) throw new Error('--at=秒,秒... か --sheet のどちらかを付けてください。');
-      const { frames } = await import('./video/encode.ts');
+      const { frames } = await import('../video/encode.ts');
       const scene = opt('scene') === undefined ? null : Number(opt('scene'));
       const r = await frames(args[0], { times: opt('at') ? opt('at')!.split(',').map(Number) : [], sheet: has('sheet'), scene });
       if (r.silentReason) console.log(`音声なしの時間割です。${r.silentReason}`);
@@ -496,7 +498,7 @@ export const commands: Command[] = [
     summary: 'corpus/ の原稿で、期待したルールが発火するか確かめる',
     examples: ['zukai corpus'],
     async run() {
-      const { lint, root } = await import('./lint/index.ts');
+      const { lint, root } = await import('../lint/index.ts');
       const expected: Record<string, { own: string[]; textlintClean?: boolean }> = JSON.parse(fs.readFileSync(path.join(root, 'corpus/expected.json'), 'utf8'));
       let failed = 0;
       for (const [rel, want] of Object.entries(expected)) {
@@ -518,10 +520,25 @@ export const commands: Command[] = [
     name: 'stats',
     group: '開発',
     summary: 'ルールごとの発火、修正、抑制の実績を表示する。記録は ~/.zukai/logs にある',
-    examples: ['zukai stats'],
-    async run() {
-      const { stats } = await import('./log.ts');
-      const s = stats();
+    flags: [
+      { name: 'model', value: '名前', desc: 'そのモデルの実行だけを数える（zukai lint の --model に渡した名前）' },
+      { name: 'by', value: 'model', desc: 'モデルごとに、1回の実行あたりのルールの発火を並べる。モデルを替えたときに、追加の指示を残すかを決めるのに使う' },
+    ],
+    examples: ['zukai stats', 'zukai stats --by=model', 'zukai stats --model=モデル名'],
+    async run({ opt }) {
+      const { stats } = await import('../log.ts');
+      const by = opt('by');
+      if (by !== undefined && by !== 'model') throw new Error('--by に書けるのは model だけです。');
+      const s = stats({ model: opt('model') });
+      if (by === 'model') {
+        // 発火の多いルールから8つまでを列にする。全角の文字は2文字分の幅で揃える。
+        const cols = s.rules.slice(0, 8).map((r) => r.rule);
+        const pad = (t: string, n: number) => t + ' '.repeat(Math.max(0, n - [...t].reduce((w, ch) => w + (ch.codePointAt(0)! > 0xff ? 2 : 1), 0)));
+        console.log(`実行 ${s.runs} 回。数字は、1回の実行あたりの発火の数です。`);
+        console.log(`${pad('モデル', 24)}  実行  ${cols.map((c) => c.padStart(6)).join('')}`);
+        for (const m of s.models) console.log(`${pad(m.model ?? '（記録なし）', 24)} ${String(m.runs).padStart(5)}  ${cols.map((c) => (m.perRun[c] ?? 0).toFixed(2).padStart(6)).join('')}`);
+        return;
+      }
       console.log(`実行 ${s.runs} 回`);
       console.log('ルール                発火  ファイル  修正  残存  抑制');
       for (const r of s.rules) {
@@ -543,7 +560,7 @@ export const commands: Command[] = [
     summary: '自作ルールの一覧を表示する',
     examples: ['zukai rules'],
     async run() {
-      const { rules } = await import('./lint/rules.ts');
+      const { rules } = await import('../lint/rules.ts');
       for (const [id, r] of Object.entries(rules)) console.log(`${id}  ${r.severity.padEnd(5)}  ${r.title}  （根拠: ${r.basis}）`);
     },
   },

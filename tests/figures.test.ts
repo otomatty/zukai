@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { lint } from '../src/lint/index.ts';
-import { render } from '../src/render.ts';
+import { render } from '../src/export/html.ts';
 import { iconExists, searchIcons } from '../src/figures/icons.ts';
 import { readOptions, scenesOf } from '../src/video/script.ts';
 

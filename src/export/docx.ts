@@ -5,7 +5,7 @@ import { textOf } from './document.ts';
 import type { ExportDocument } from './document.ts';
 import { imageOf } from './images.ts';
 import { officeSurface, officeTextColor } from './office-colors.ts';
-import { pngFont } from '../png.ts';
+import { pngFont } from './png.ts';
 
 // 本文の明朝体。見出しと表は、図と同じゴシック体（png.font）にする。
 // フォントは名前1つで書くため、PNG のフォントと同じく、OS に標準で入っているものを選ぶ。

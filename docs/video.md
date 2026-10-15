@@ -20,7 +20,7 @@ zukai video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960�
 | `yaml narration question` と `html motion question` など | セクションを、役割（`question` 疑問、`answer` 答え、`example` 例、`term` 用語）ごとの短いショットに分ける。同じ役割の名前で組にする |
 | `html motion` | シーンの絵と動き。目印の時刻は CSS 変数で、`zk.scene((t, root) => …)` で毎コマの JS を書ける。資料には出ない |
 
-台本は、1人の語り手がていねいに説明する形にします。オープニングでテーマと答える疑問を示し、各セクションでは疑問、答え、例、用語の補足をそれぞれ短いショットにし、エンディングで要点をまとめます。答えは原稿の根拠だけで組み立てます。シーンは `zk.refs()` で、Lint と同じ方法で確かめた根拠（コードの抜粋と引用）を読み、画面に出典を示せます。検査は、例ではない行の数値が原稿に無いとき（V013）、疑問から始まらないとき（V014）、同じ書き出しが続くとき（V016）、ショットが長いとき（V107）に知らせます。書き方の全体は `prompts/video.md` にあります。完全な例は `examples/video/login.md` です。
+台本は、1人の語り手がていねいに説明する形にします。オープニングでテーマと答える疑問を示し、各セクションでは疑問、答え、例、用語の補足をそれぞれ短いショットにし、エンディングで要点をまとめます。答えは原稿の根拠だけで組み立てます。シーンは `zk.refs()` で、Lint と同じ方法で確かめた根拠（コードの抜粋と引用）を読み、画面に出典を示せます。検査は、例ではない行の数値が原稿に無いとき（V013）、疑問から始まらないとき（V014）、同じ書き出しが続くとき（V016）、ショットが長いとき（V107）に知らせます。書き方の全体は `prompts/video.md` にあります。効果音（`prompts/video-sound.md`）と検査の一覧（`prompts/video-checks.md`）は、AI が `zukai prompt --part=sound` のように必要なときに取り出します。既定の絵柄（`prompts/video-style.md`）は、テーマの `rules.md` に「## 動画」の節が無いときだけ指示に入ります。完全な例は `examples/video/login.md` です。
 
 | ガードレール | 内容 |
 |---|---|
@@ -29,7 +29,7 @@ zukai video 原稿.md [--draft]         # MP4 を書き出す（--draft は 960�
 | 暴走と例外 | 読み込みと1コマの時間に上限を設ける。超えたシーンと、読み込みで例外を出したシーンは、主張文と図だけの簡素な動きに差し替える |
 | 見た目 | 文字のはみ出し、字幕の帯との重なり、文字の大きさ、要素の数、シーンより長いアニメーション、同じ時刻のコマが一致するか、音割れを調べる |
 
-効果音は ZzFX（MIT、`src/video/vendor/`）で作ります。AI は、名前の付いた12個の音（`appear`、`whoosh`、`chime` など）を選ぶか、ZzFX の数値を書いて新しい音を作ります。音の選び方は `spikes/sfx/` で聞き比べました。
+効果音は ZzFX（MIT、`src/video/vendor/`）で作ります。AI は、名前の付いた12個の音（`appear`、`whoosh`、`chime` など）を選ぶか、ZzFX の数値を書いて新しい音を作ります。ZzFX は、Kenney の音のファイル（CC0）と聞き比べて選びました。聞き比べに使ったスクリプトは、コミット 739eaf3 までの `spikes/sfx/` にあります。
 
 ID と上限は `zukai frames` の出力と `contract/limits.json` の `video` にあります。ナレーションは Gemini TTS（既定は `gemini-3.8-flash-tts`、声は `Kore`。`video.model` と `video.voice` で変える）で読み上げ、`.zukai/cache/tts` に保存します。API キーは `zukai login gemini` で `~/.zukai/credentials.json` に保存するか、環境変数 `GEMINI_API_KEY` に置きます。キーが無いときは、字幕だけの無音の動画になります。そのことは `zukai doctor` が知らせ、`zukai prompt` の指示にも書くので、AI がチャットで利用者に伝えます。無料枠のキーでは、地域と利用規約によって、送った文が Google の製品改善に使われることがあります。条件は Gemini API の利用規約で確かめます。
 

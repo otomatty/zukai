@@ -5,7 +5,7 @@
 import path from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { typesFor } from './figures/custom.ts';
-import { render } from './render.ts';
+import { render } from './export/html.ts';
 import { esc } from './figures/svg.ts';
 import { videoTokens } from './video/script.ts';
 import { readTheme, themeReport, VISION, simulate, distance, SERIES_GAP } from './theme.ts';

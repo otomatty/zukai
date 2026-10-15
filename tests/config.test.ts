@@ -178,7 +178,7 @@ test('publish は、設定の URL からページの URL を組み立てる', ()
     const saved = globalThis.fetch;
     globalThis.fetch = async () => new Response(JSON.stringify({ id: '42' }), { status: 200 });
     try {
-      const { publish } = await import('../src/confluence.ts');
+      const { publish } = await import('../src/export/confluence.ts');
       const r = await publish(file);
       assert.equal(r.url, 'https://ex.atlassian.net/wiki/pages/viewpage.action?pageId=42');
     } finally {
@@ -187,7 +187,7 @@ test('publish は、設定の URL からページの URL を組み立てる', ()
   }));
 
 test('doctor は、zukai と依存パッケージが求める Node の版を確かめる', async () => {
-  const { satisfies } = await import('../src/doctor.ts');
+  const { satisfies } = await import('../src/cli/doctor.ts');
   const range = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).engines.node;
   assert.deepEqual(['22.18.0', '23.6.0', '24.0.0', '24.1.0', '25.0.0'].map((v) => satisfies(v, range)), [false, false, true, true, true]);
   // ^ と || を使った範囲も読む。
@@ -203,7 +203,7 @@ test('URL は接続先のホスト名まで検査し、setup の同じ設定の�
   assert.ok(invalid(url, 'https://ex.atlassian.net/wiki?homepageId=123'));
   assert.ok(invalid(url, 'https://ex.atlassian.net/wiki#top'));
   assert.equal(invalid(url, 'https://ex.atlassian.net/wiki'), null);
-  const { equivalent } = await import('../src/setup.ts');
+  const { equivalent } = await import('../src/cli/setup.ts');
   const answers = { skills: null, values: {}, credentials: {} };
   const project = process.cwd();
   assert.match(equivalent(project, answers, [], 'team', new Set(['output', 'video', 'confluence'])), /^zukai setup output video confluence /);
@@ -222,7 +222,7 @@ test('この PC だけにスキルを書く setup は、プロジェクトに .z
 
 test('doctor は、動画を作らない設定でも、撮影に要る Playwright と Chromium が無ければ直し方を示す', async () =>
   withHome(async () => {
-    const { doctor } = await import('../src/doctor.ts');
+    const { doctor } = await import('../src/cli/doctor.ts');
     const r = await doctor(tmp('doctor'));
     for (const label of ['Playwright', 'Chromium']) {
       const c = r.checks.find((x) => x.label === label)!;
@@ -231,7 +231,7 @@ test('doctor は、動画を作らない設定でも、撮影に要る Playwrigh
   }));
 
 test('Windows では、同じ設定のコマンドの値を PowerShell の単一引用符で囲み、変数を展開させない', async () => {
-  const { equivalent } = await import('../src/setup.ts');
+  const { equivalent } = await import('../src/cli/setup.ts');
   const saved = Object.getOwnPropertyDescriptor(process, 'platform')!;
   Object.defineProperty(process, 'platform', { value: 'win32' });
   try {

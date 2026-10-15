@@ -13,10 +13,10 @@ import { typesFor, typeOf } from '../figures/custom.ts';
 import { isFigure, isFreeFigure, isRefs, isVideoOnly } from '../parse.ts';
 import { readJson } from '../lint/index.ts';
 import { resolveRefs } from '../refs.ts';
-import { toPng } from '../png.ts';
+import { toPng } from './png.ts';
 import { mermaid } from './mermaid.ts';
 import { projectOf } from '../config.ts';
-import type { ImageFormat } from '../output-formats.ts';
+import type { ImageFormat } from './formats.ts';
 import type { RawSpec, Limits, Tokens } from '../types.ts';
 
 /** GFMの表・タスクリスト・参照を維持できる構文木として読む。 */

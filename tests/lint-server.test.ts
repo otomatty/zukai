@@ -68,8 +68,11 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     const failing = spawnSync(process.execPath, [probe, path.join(root, 'corpus/good/free.md')], { cwd: root, env: { ...env, CONFLUENCE_BASE: 'notaurl' }, encoding: 'utf8' });
     assert.equal(JSON.parse(failing.stdout).result, null);
     assert.notEqual(runProbe('--stack-trace-limit=50', probe).sock, direct.sock);
-    // 今いるフォルダが違えば、別の接続先にする。起動するときにだけ読む値の相対パスを、呼んだ側と同じフォルダから読むため。
-    assert.notEqual(JSON.parse(spawnSync(process.execPath, [probe], { cwd: home, env, encoding: 'utf8' }).stdout).sock, direct.sock);
+    // 今いるフォルダが違っても、起動するときにだけ読む値に相対パスが無ければ、同じ接続先を使う。
+    assert.equal(JSON.parse(spawnSync(process.execPath, [probe], { cwd: home, env, encoding: 'utf8' }).stdout).sock, direct.sock);
+    // 相対パスがあれば、別の接続先にする。その値を、呼んだ側と同じフォルダから読むため。
+    const relative = { ...env, NODE_EXTRA_CA_CERTS: './ca.pem' };
+    assert.notEqual(JSON.parse(spawnSync(process.execPath, [probe], { cwd: home, env: relative, encoding: 'utf8' }).stdout).sock, JSON.parse(spawnSync(process.execPath, [probe], { cwd: root, env: relative, encoding: 'utf8' }).stdout).sock);
     const saved = process.env.HOME;
     process.env.HOME = home;
     try {
@@ -111,5 +114,43 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
     assert.deepEqual(socks(), []);
   } finally {
     server.kill();
+  }
+});
+
+test('起動時に読む値に相対パスが無ければ、どのフォルダから呼んでも同じプロセスを使う', { skip: process.platform === 'win32' && 'ソケットのファイルで確かめるため' }, async () => {
+  const { socketPath } = await import('../src/lint/server.ts');
+  const cwd = process.cwd();
+  const saved = { ca: process.env.NODE_EXTRA_CA_CERTS, options: process.env.NODE_OPTIONS, env: process.env.NODE_ENV };
+  const other = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-server-cwd-'));
+  const at = (dir: string) => {
+    process.chdir(dir);
+    return socketPath();
+  };
+  const restore = (name: string, v: string | undefined) => (v === undefined ? delete process.env[name] : (process.env[name] = v));
+  try {
+    delete process.env.NODE_EXTRA_CA_CERTS;
+    process.env.NODE_OPTIONS = '--max-old-space-size=4096';
+    process.env.NODE_ENV = 'production';
+    assert.equal(at(root), at(other));
+    process.env.NODE_EXTRA_CA_CERTS = '/etc/ssl/ca.pem';
+    assert.equal(at(root), at(other));
+    // 相対パスは、起動したフォルダから読まれるので、フォルダごとに別のプロセスにする。区切り文字の無い名前も相対パスとして扱う。
+    for (const ca of ['./ca.pem', 'ca.pem']) {
+      process.env.NODE_EXTRA_CA_CERTS = ca;
+      assert.notEqual(at(root), at(other), ca);
+    }
+    delete process.env.NODE_EXTRA_CA_CERTS;
+    // 診断のためのフラグの値（node --test が付けるものなど）は、ファイルを読まないので同じプロセスを使う。
+    process.env.NODE_OPTIONS = '--report-signal=SIGUSR2 --title=zukai';
+    assert.equal(at(root), at(other));
+    for (const options of ['--require=hook.js', '--require hook.js', '-r hook', '--import=my-loader', '--env-file=.env']) {
+      process.env.NODE_OPTIONS = options;
+      assert.notEqual(at(root), at(other), options);
+    }
+  } finally {
+    process.chdir(cwd);
+    restore('NODE_EXTRA_CA_CERTS', saved.ca);
+    restore('NODE_OPTIONS', saved.options);
+    restore('NODE_ENV', saved.env);
   }
 });

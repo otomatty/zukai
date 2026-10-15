@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core';
 import MarkdownIt from 'markdown-it';
 import { machineSetting } from '../config.ts';
-import { css } from '../render.ts';
+import { css } from './html.ts';
 import { esc } from '../figures/svg.ts';
 import { imageOf } from './images.ts';
 import type { ExportDocument } from './document.ts';

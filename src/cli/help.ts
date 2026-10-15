@@ -1,9 +1,9 @@
 // help の表示。コマンドの定義（commands.ts）と、設定の仕様（contract/settings.json）から作る。
 import { commands, commandOf, groups } from './commands.ts';
-import { spec, specOf, scopeNames, loadConfig, projectOf, display, closest, pad } from './config.ts';
-import type { Config } from './config.ts';
+import { spec, specOf, scopeNames, loadConfig, projectOf, display, closest, pad } from '../config.ts';
+import type { Config } from '../config.ts';
 import type { Command } from './commands.ts';
-import type { SettingSpec } from './types.ts';
+import type { SettingSpec } from '../types.ts';
 
 
 export const usageLine = (c: Command): string => {

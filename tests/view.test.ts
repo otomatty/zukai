@@ -6,8 +6,11 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { serve } from '../src/view.ts';
-import type { Item } from '../src/view.ts';
+import { serve } from '../src/server/view.ts';
+import type { Item } from '../src/server/view.ts';
+
+// 検査は、常駐するプロセスを起動せずに、このプロセスで行う。
+process.env.ZUKAI_LINT_SERVER = 'off';
 
 test('一覧と資料を返し、置き場所の外と別のホスト名には答えない', async () => {
   const project = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-view-'));

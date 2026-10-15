@@ -1,7 +1,6 @@
 node_modules/
 dist/
 .zukai/
-graphify-out/
 logs/
 # このリポジトリで setup したときの手元の設定。利用先のプロジェクトではコミットして共有する。
 /zukai.config.json

@@ -151,7 +151,7 @@
       }
       hooks.push({ id: running, frame });
     },
-    // 名前の付いた効果音（appear、whoosh、chime など。一覧は prompts/video.md）を、シーンの at 秒に鳴らす。
+    // 名前の付いた効果音（appear、whoosh、chime など。一覧は prompts/video-sound.md）を、シーンの at 秒に鳴らす。
     // ZzFX の数値で作った音を、シーンの at 秒に鳴らす。
     zzfx(at, ...params) {
       cues.push({ scene: running, t: at, kind: 'zzfx', params: params.map((v) => (v === undefined ? null : v)) });

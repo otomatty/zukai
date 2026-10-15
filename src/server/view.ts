@@ -6,12 +6,13 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { render, CSP } from './render.ts';
-import { lint } from './lint/index.ts';
-import { parse } from './parse.ts';
-import { stateDir } from './config.ts';
+// 描画（export/html.ts）は、資料を開くときに読む。zukai view が起動を確かめるだけのときに、重い依存を読まないため。
+import { CSP } from '../export/csp.ts';
+import { lintResident } from '../lint/server.ts';
+import { parse } from '../parse.ts';
+import { stateDir } from '../config.ts';
 import type { AddressInfo } from 'node:net';
-import type { FigureBlock } from './types.ts';
+import type { FigureBlock } from '../types.ts';
 
 // 一覧の1件。mtime は資料の版（version）。
 export interface Item {
@@ -31,16 +32,38 @@ export const portOf = (project: string): number => 4800 + (parseInt(crypto.creat
 // 資料の置き場所を作る。.zukai の中に .gitignore を置き、プロジェクトの .gitignore を書き換えずに Git の管理から外す。
 export const ensureDir = (project: string): string => stateDir(project, 'answers');
 
-// 資料の版。原稿と、原稿が読む screenshot の画像と枠の記録（.json）のうち、最も新しい更新時刻にする。
-// capture で撮り直しても原稿は変わらないので、原稿の更新時刻だけでは古い画面が残る。
-function version(file: string, source: string): number {
+// 更新時刻と大きさが前に読んだときと同じなら、前に読んだ結果を使う。ページは一覧を1秒ごとに読み直すので、毎回すべての原稿を解析しない。
+// keep に渡した名前だけを残す。消えたファイルの結果を持ち続けないため。zukai gui も使う。
+export class StatCache<T> {
+  private items = new Map<string, { stamp: string; value: T }>();
+  get(file: string, st: fs.Stats, compute: () => T): T {
+    const stamp = `${st.mtimeMs}:${st.size}`;
+    const hit = this.items.get(file);
+    if (hit?.stamp === stamp) return hit.value;
+    const value = compute();
+    this.items.set(file, { stamp, value });
+    return value;
+  }
+  keep(files: Iterable<string>): void {
+    const live = new Set(files);
+    for (const f of this.items.keys()) if (!live.has(f)) this.items.delete(f);
+  }
+}
+
+// 原稿が読む screenshot の画像と、枠の記録（.json）。
+function screenshotDeps(file: string, source: string): string[] {
   const doc = parse(source);
-  const deps = [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]
+  return [...doc.lead, ...doc.sections.flatMap((s) => s.blocks)]
     .filter((b): b is FigureBlock & { spec: { image: string } } => b.kind === 'figure' && b.spec?.type === 'screenshot' && typeof b.spec.image === 'string')
     .flatMap((b) => {
       const image = path.resolve(path.dirname(file), b.spec.image);
       return [image, `${image}.json`];
     });
+}
+
+// 資料の版。原稿と、原稿が読む screenshot の画像と枠の記録のうち、最も新しい更新時刻にする。
+// capture で撮り直しても原稿は変わらないので、原稿の更新時刻だけでは古い画面が残る。
+function version(file: string, deps: string[]): number {
   return Math.max(
     ...[file, ...deps].map((p) => {
       try {
@@ -54,17 +77,24 @@ function version(file: string, source: string): number {
 
 // 新しい順の一覧。名前は英数字、ハイフン、ドット、下線だけを受け付ける。
 // シンボリックリンクは入れない。リンク先の、置き場所の外のファイルを読ませないため。
-// ponytail: 読み直しのたびに全原稿を読んで解析する。資料が数百件を超えて遅くなったら、原稿の mtime でキャッシュする。
+// 原稿の題名と、読む画像の一覧は、原稿が変わったときだけ読み直す。
+const answers = new StatCache<{ title: string; deps: string[] }>();
 export function list(dir: string): Item[] {
-  return fs
+  const items = fs
     .readdirSync(dir)
-    .filter((n) => /^[\w.-]+\.md$/.test(n) && fs.lstatSync(path.join(dir, n)).isFile())
-    .map((name) => {
+    .filter((n) => /^[\w.-]+\.md$/.test(n))
+    .flatMap((name) => {
       const file = path.join(dir, name);
-      const source = fs.readFileSync(file, 'utf8');
-      return { name, title: source.match(/^# (.+)$/m)?.[1] ?? name, mtime: version(file, source) };
-    })
-    .sort((a, b) => b.mtime - a.mtime);
+      const st = fs.lstatSync(file);
+      if (!st.isFile()) return [];
+      const { title, deps } = answers.get(file, st, () => {
+        const source = fs.readFileSync(file, 'utf8');
+        return { title: source.match(/^# (.+)$/m)?.[1] ?? name, deps: screenshotDeps(file, source) };
+      });
+      return [{ name, title, mtime: version(file, deps), file }];
+    });
+  answers.keep(items.map((i) => i.file));
+  return items.map(({ name, title, mtime }) => ({ name, title, mtime })).sort((a, b) => b.mtime - a.mtime);
 }
 
 const esc = (s: unknown) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -87,7 +117,8 @@ export const fallback =(source: string, e: Error) => `<!doctype html>
 async function doc(dir: string, name: string): Promise<{ html: string; withBanner: string }> {
   const file = path.join(dir, name);
   const source = fs.readFileSync(file, 'utf8');
-  const [html, result] = await Promise.all([render(source, file).catch((e: Error) => fallback(source, e)), lint(source, file)]);
+  const { render } = await import('../export/html.ts');
+  const [html, result] = await Promise.all([render(source, file).catch((e: Error) => fallback(source, e)), lintResident(source, file)]);
   const errors = result.findings.filter((f) => f.severity === 'error');
   const banner = errors.length
     ? `<aside style="border:1px solid #eb6834;border-radius:8px;padding:12px 16px;margin-bottom:24px"><strong>Lint の指摘が ${errors.length} 件残っています</strong><ul>${errors.map((f) => `<li>L${esc(f.line)} ${esc(f.rule)} ${esc(f.message)}</li>`).join('')}</ul></aside>`
@@ -282,7 +313,7 @@ export async function ensure(project: string, { open = true }: { open?: boolean 
   };
   let h = await health();
   if (!h) {
-    const cli = fileURLToPath(new URL('./cli.ts', import.meta.url));
+    const cli = fileURLToPath(new URL('../cli.ts', import.meta.url));
     spawn(process.execPath, [cli, 'view', '--serve'], { cwd: project, detached: true, stdio: 'ignore', windowsHide: true }).unref();
     for (let i = 0; i < 50 && !h; i++) {
       await new Promise((r) => setTimeout(r, 100));

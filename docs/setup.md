@@ -57,9 +57,10 @@ zukai theme preview                # テーマで描いた図の見本を、1枚
 zukai theme compare 案 案...        # 今のテーマと案（emphasis.box=tint など）を、同じ図で横に並べる
 zukai corpus                       # Lint 自体が期待どおりに動くか確認する
 zukai stats                        # ルールごとの実績を表示する
+zukai stats --by=model             # モデルごとに、1回の実行あたりの発火を並べる
 ```
 
-コマンドは、`src/commands.ts` の定義から引数を検査し、help を作ります。書き間違えたコマンドやオプションには、候補を示します。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.ts` で同じように動きます。
+コマンドは、`src/cli/commands.ts` の定義から引数を検査し、help を作ります。書き間違えたコマンドやオプションには、候補を示します。`zukai` を使えない環境では、`node /path/to/zukai/src/cli.ts` で同じように動きます。
 
 `zukai lint` は、2回目から速く終わります（約0.8秒から約0.1秒）。最初の実行で、textlint の辞書を読み込んだプロセスを裏で起動し、次からはそのプロセスで検査するためです。結果は、そのプロセスを使わないときと同じです。このプロセスは、今いるフォルダごとに起動し、10分使われないと終わります。zukai や依存を更新したときは、新しいプロセスに替わります。使わないときは、`--no-server` を付けるか、環境変数 `ZUKAI_LINT_SERVER=off` を設定します。Windows では、このプロセスを使わず、毎回その場で検査します。
 
