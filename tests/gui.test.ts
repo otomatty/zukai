@@ -103,6 +103,41 @@ test('AI の返答とプロジェクトの原稿を一覧にし、一覧にな�
   }
 });
 
+test('aidlc の成果物のような深いフォルダの原稿も一覧にする', async () => {
+  const { project, server, api } = await start();
+  try {
+    const intent = 'aidlc/spaces/default/intents/i1';
+    const deep = [`${intent}/inception/requirements-analysis/requirements.md`, `${intent}/construction/unit/functional-design/rules.md`, `${intent}/construction/unit/code-generation/reviews/review-01.md`];
+    for (const rel of deep) {
+      fs.mkdirSync(path.join(project, path.dirname(rel)), { recursive: true });
+      fs.writeFileSync(path.join(project, rel), MANUSCRIPT);
+    }
+    const { data: docs } = await api('GET', '/api/docs');
+    assert.deepEqual(docs.map((d: { path: string }) => d.path).sort(), [...deep].sort());
+  } finally {
+    server.close();
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+});
+
+// Windows と root では、chmod で読めなくできない。
+test('読めなかった原稿は、次に探すときに読み直す', { skip: process.platform === 'win32' || process.getuid?.() === 0 }, async () => {
+  const { project, server, api } = await start();
+  try {
+    const file = path.join(project, 'locked.md');
+    fs.writeFileSync(file, MANUSCRIPT);
+    fs.chmodSync(file, 0o000);
+    assert.deepEqual((await api('GET', '/api/docs')).data, []);
+    // 中身も更新日時も変えずに、読めるようにする。
+    fs.chmodSync(file, 0o644);
+    await new Promise((r) => setTimeout(r, 10_100));
+    assert.deepEqual((await api('GET', '/api/docs')).data.map((d: { path: string }) => d.path), ['locked.md']);
+  } finally {
+    server.close();
+    fs.rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('設定を書き、消す。秘密の値は画面に返さない', async () => {
   const { project, server, api } = await start();
   try {
