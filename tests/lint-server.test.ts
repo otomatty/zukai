@@ -140,7 +140,10 @@ test('起動時に読む値に相対パスが無ければ、どのフォルダ�
       assert.notEqual(at(root), at(other), ca);
     }
     delete process.env.NODE_EXTRA_CA_CERTS;
-    for (const options of ['--require=hook.js', '--require hook.js']) {
+    // 診断のためのフラグの値（node --test が付けるものなど）は、ファイルを読まないので同じプロセスを使う。
+    process.env.NODE_OPTIONS = '--report-signal=SIGUSR2 --title=zukai';
+    assert.equal(at(root), at(other));
+    for (const options of ['--require=hook.js', '--require hook.js', '-r hook', '--import=my-loader', '--env-file=.env']) {
       process.env.NODE_OPTIONS = options;
       assert.notEqual(at(root), at(other), options);
     }

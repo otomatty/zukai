@@ -53,13 +53,18 @@ const credentials = () => (windows ? '' : `${process.getegid!()}:${process.getgr
 const local = (w: string) => Boolean(w) && !path.isAbsolute(w) && !/^[a-z][\w+.-]*:\/\//i.test(w);
 // 値がファイルのパスである環境変数。ca.pem のように区切り文字の無い名前も、相対パスとして扱う。NODE_PATH は、区切り文字で複数のパスを並べる。
 const PATH_ENV = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_PATH', 'NODE_REPL_HISTORY', 'NODE_ICU_DATA', 'NODE_V8_COVERAGE', 'NODE_REDIRECT_WARNINGS', 'NODE_COMPILE_CACHE', 'OPENSSL_CONF', 'OPENSSL_MODULES', 'SSL_CERT_FILE', 'SSL_CERT_DIR']);
-// Node のフラグ（NODE_OPTIONS と、呼んだ側の Node のフラグ）。--require=hook.js や --require hook.js の値は、パスかもしれない。
-// どのフラグがパスを取るかは数えきれないので、数字と真偽値でない値は、すべて相対パスかもしれないものとして扱う（別のプロセスになるだけで、結果は正しい）。
-const flagHasLocal = (flags: string) =>
-  flags
-    .split(/\s+/)
-    .map((w) => (w.startsWith('-') ? (w.includes('=') ? w.slice(w.indexOf('=') + 1) : '') : w))
-    .some((v) => local(v) && !/^(\d+(\.\d+)?|true|false)$/i.test(v));
+// Node のフラグ（NODE_OPTIONS と、呼んだ側の Node のフラグ）のうち、検査の結果を変えうるファイルを読むもの。
+// --require=hook.js と --require hook.js の両方の形で書ける。診断の出力先（--report-dir など）は、検査の結果を変えないので数えない。
+// node --test は、--report-signal=SIGUSR2 のような値つきのフラグを多く付けるので、値の形だけでは決めない。
+const PATH_FLAGS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '--env-file', '--env-file-if-exists', '--icu-data-dir', '--openssl-config', '--experimental-policy', '--experimental-config-file', '--snapshot-blob', '--localstorage-file']);
+const flagHasLocal = (flags: string) => {
+  const words = flags.split(/\s+/).filter(Boolean);
+  return words.some((w, i) => {
+    const eq = w.indexOf('=');
+    if (eq > 0) return PATH_FLAGS.has(w.slice(0, eq)) && local(w.slice(eq + 1));
+    return PATH_FLAGS.has(w) && local(words[i + 1] ?? '');
+  });
+};
 function startupHasLocal(name: string, value: string): boolean {
   if (PATH_ENV.has(name)) return value.split(path.delimiter).some(local);
   if (name === 'NODE_OPTIONS') return flagHasLocal(value);
