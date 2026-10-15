@@ -3,7 +3,7 @@
 // 文字どうしが重ならない、箱からはみ出さない、図の外に出ない。使える要素と属性は一覧にあるものだけにする。
 // 出力する SVG は、検査を通った要素と属性から組み立て直す。原稿に書かれた文字列をそのまま HTML に入れない。
 import crypto from 'node:crypto';
-import { Resvg } from '@resvg/resvg-js';
+import { createRequire } from 'node:module';
 import { open, close, esc } from './svg.ts';
 import { tokensFor } from '../theme.ts';
 import type { FigureContext, FigureType, Limits, Tokens } from '../types.ts';
@@ -24,6 +24,26 @@ interface XmlNode {
 // 色と文字サイズの検査に使う。validate は tokens を受け取らないので、原稿のプロジェクトのテーマから読む。
 // ctx.tokens があれば、それを使う。theme preview が、まだ設定していないテーマで描くときに渡す。
 const tokensOf = (ctx?: FigureContext): Tokens => ctx?.tokens ?? tokensFor(ctx?.baseDir ?? process.cwd());
+
+// 画像に変換できるかだけを確かめる。文字の形は結果に関係しないので、PC のフォントは読まない（読むと1回に数十ms以上かかる）。
+// 1回の Lint で同じ図を何度も検証するので、描いた SVG ごとに結果を覚えておく。resvg は、自由な図があるときだけ読み込む。
+const require = createRequire(import.meta.url);
+const rasterChecked = new Map<string, string>();
+function rasterError(svg: string): string {
+  let failed = rasterChecked.get(svg);
+  if (failed === undefined) {
+    const { Resvg } = require('@resvg/resvg-js') as typeof import('@resvg/resvg-js');
+    try {
+      new Resvg(svg, { font: { loadSystemFonts: false } }).render();
+      failed = '';
+    } catch (e) {
+      failed = String((e as Error).message ?? e).split('\n')[0];
+    }
+    if (rasterChecked.size >= 500) rasterChecked.delete(rasterChecked.keys().next().value!);
+    rasterChecked.set(svg, failed);
+  }
+  return failed;
+}
 
 const ELEMENTS = new Set(['svg', 'g', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'path', 'text', 'title', 'defs', 'marker', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'use']);
 const ATTRS = new Set([
@@ -226,12 +246,8 @@ const free: FigureType<FreeSpec> & { title(spec: FreeSpec): string; fit(spec: Fr
     if (texts > limits.free.maxTexts) errors.push(`text 要素が${texts}個あります。上限は${limits.free.maxTexts}個です。内容を減らすか、セクションを分けてください。`);
     if (errors.length) return errors;
     // Confluence 用の PNG に変換できるかを確かめる。
-    try {
-      new Resvg(free.render({ svg: spec.svg }, t)).render();
-    } catch (e) {
-      return [`SVG を画像に変換できません。${String((e as Error).message ?? e).split('\n')[0]}`];
-    }
-    return [];
+    const failed = rasterError(free.render({ svg: spec.svg }, t));
+    return failed ? [`SVG を画像に変換できません。${failed}`] : [];
   },
 
   fit(spec, t) {
