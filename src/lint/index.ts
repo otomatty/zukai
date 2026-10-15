@@ -6,7 +6,8 @@ import { parse, sentences } from '../parse.ts';
 import free from '../figures/free.ts';
 import type { FreeSpec } from '../figures/free.ts';
 import { widthOf } from '../figures/svg.ts';
-import { bundledLanguages } from 'shiki';
+// shiki の本体は読まない。言語の一覧だけなら、読み込みが数十ms 速い。
+import { bundledLanguages } from 'shiki/langs';
 import { rules, prosePatterns } from './rules.ts';
 import { resolveRefs } from '../refs.ts';
 import { termsOf, findAvoided } from '../terms.ts';
