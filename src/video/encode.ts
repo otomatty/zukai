@@ -83,6 +83,9 @@ function sceneHtml(sc: PlanScene): string {
   return `<section class="zk-scene" data-id="${sc.id}" data-kind="${sc.kind}" style="${vars}">${inner}</section>`;
 }
 
+// ページに入れる、時刻を制御するスクリプト。シーンを1つずつ検査するたびに読み直さない。
+let runtimeJs: string | undefined;
+
 // only を渡すと、そのシーンだけを入れたページにする。シーンを1つずつ検査するときに使う。
 // 型の動き（motions）は無くてもよく、中身の無い型は飛ばす。
 export function pageHtml(plan: Omit<Plan, 'motions'> & { motions?: Record<string, string | null> }, tokens: Tokens, only: number | null = null): string {
@@ -90,7 +93,7 @@ export function pageHtml(plan: Omit<Plan, 'motions'> & { motions?: Record<string
   // ページの中では、図とシーンの HTML は DOM に入っているので、時間割からは外す。
   const { motions = {}, ...rest } = plan;
   const lite: PagePlan = { ...rest, scenes: plan.scenes.map(({ figureSvg, tableHtml, motionHtml, findings, ...s }) => s) };
-  const runtime = fs.readFileSync(path.join(root, 'src/video/runtime.browser.js'), 'utf8');
+  const runtime = (runtimeJs ??= fs.readFileSync(path.join(root, 'src/video/runtime.browser.js'), 'utf8'));
   const scenes = plan.scenes.filter((s) => only == null || s.id === only);
   // ページのシーンで使う独自の型の動きだけを入れる。AI のシーンのスクリプトと同じく、Chromium の中だけで動く。
   const used = [...new Set(scenes.map((s) => s.figureType).filter((n) => n && motions[n]) as string[])];
@@ -160,7 +163,10 @@ async function openPage(browser: Browser, html: string, plan: Plan, L: VideoLimi
   }
 }
 
-const shot = async (cdp: CDPSession, plan: Plan, scale: number): Promise<Buffer> => Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'png', optimizeForSpeed: true, clip: { x: 0, y: 0, width: plan.width, height: plan.height, scale } })).data, 'base64');
+// format を jpeg にすると、Chromium が PNG に圧縮する時間を省ける。動画のコマは、どのみち x264 で圧縮し直すので、jpeg にする。
+// 書き出すコマの画像と、検査で見比べるコマは png にする。
+const shot = async (cdp: CDPSession, plan: Plan, scale: number, format: 'png' | 'jpeg' = 'png'): Promise<Buffer> =>
+  Buffer.from((await cdp.send('Page.captureScreenshot', { format, ...(format === 'jpeg' ? { quality: 92 } : {}), optimizeForSpeed: true, clip: { x: 0, y: 0, width: plan.width, height: plan.height, scale } })).data, 'base64');
 
 function run(cmd: string, args: string[], input?: (stdin: Writable) => Promise<void>): Promise<Buffer> {
   return new Promise((ok, ng) => {
@@ -284,11 +290,13 @@ async function probe(browser: Browser, plan: Plan, tokens: Tokens, L: VideoLimit
 }
 
 // すべてのシーンを調べ、使えないシーンを自動の動きに差し替えた時間割を返す。
-async function guarded(browser: Browser, prep: Prep): Promise<{ plan: Plan; results: SceneResult[] }> {
+// ブラウザが複数あれば、シーンを順に割り振る。1つのブラウザでは、4つまで同時に調べる。
+async function guarded(browsers: Browser[], prep: Prep): Promise<{ plan: Plan; results: SceneResult[] }> {
   let plan = prep.planOf(prep.scenes);
   const results: SceneResult[] = [];
-  for (let i = 0; i < plan.scenes.length; i += 4) {
-    results.push(...(await Promise.all(plan.scenes.slice(i, i + 4).map((s) => probe(browser, plan, prep.tokens, prep.limits, s.id)))));
+  const batch = 4 * browsers.length;
+  for (let i = 0; i < plan.scenes.length; i += batch) {
+    results.push(...(await Promise.all(plan.scenes.slice(i, i + batch).map((s, j) => probe(browsers[j % browsers.length], plan, prep.tokens, prep.limits, s.id)))));
   }
   const L = prep.limits;
   plan.scenes.forEach((s, i) => {
@@ -315,7 +323,7 @@ export async function frames(file: string, { times = [], sheet = false, scene = 
   const browser = await launch();
   const stem = file.replace(/\.md$/, '');
   try {
-    let { plan, results } = await guarded(browser, prep);
+    let { plan, results } = await guarded([browser], prep);
     for (let attempt = 0; ; attempt++) {
       try {
         const files = await capture(browser, plan, prep, { times, sheet, scene, stem });
@@ -401,7 +409,7 @@ export async function makeVideo(file: string, { out, project = projectOf(path.di
   try {
     const failed = launched.find((x): x is PromiseRejectedResult => x.status === 'rejected');
     if (failed) throw failed.reason;
-    let { plan, results } = await guarded(browsers[0], prep);
+    let { plan, results } = await guarded(browsers, prep);
     // 検査した時刻の間で暴走したときは、そのシーンを差し替えて撮り直す。2回までにする。
     for (let attempt = 0; ; attempt++) {
       try {
@@ -460,11 +468,11 @@ async function render(browsers: Browser[], plan: Plan, prep: Prep, { tmp, draft,
             if (s) sounds.push({ at: sc.start, buf: Buffer.from(s.data, 'base64') });
           }
         }
-        await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'png', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', seg], async (stdin) => {
+        await run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', seg], async (stdin) => {
           try {
             for (let f = a; f < b && !stop; f++) {
               await seekGuarded(p.page, plan, L, f / fps);
-              if (!stdin.write(await shot(p.cdp, plan, scale))) await once(stdin, 'drain');
+              if (!stdin.write(await shot(p.cdp, plan, scale, 'jpeg'))) await once(stdin, 'drain');
               if (++done % 30 === 0) onProgress(done, total);
             }
           } catch (e) {

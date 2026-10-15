@@ -149,9 +149,14 @@ export async function voicesFor(scenes: { lines: Line[] }[], settings: VoiceSett
   const silent = (reason: string) => ({ voices: scenes.map((s) => estimateVoice(s.lines)), silentReason: reason });
   if (!settings.apiKey) return silent('Gemini の API キーがありません。zukai login gemini を実行するか、環境変数 GEMINI_API_KEY を設定してください。');
   try {
-    const voices: Voice[] = [];
+    // キャッシュが無い初回は、シーンごとに読み上げを頼む。1つずつ待つと遅いので、3つまで同時に頼む（多くすると、API の回数の上限に当たりやすい）。
     // キーがあるときは、呼ぶ側がキャッシュの場所を渡す。
-    for (const s of scenes) voices.push(await voiceOf(s.lines, settings, cacheDir!));
+    const voices: Voice[] = new Array(scenes.length);
+    let next = 0;
+    const worker = async () => {
+      for (let i = next++; i < scenes.length; i = next++) voices[i] = await voiceOf(scenes[i].lines, settings, cacheDir!);
+    };
+    await Promise.all(Array.from({ length: Math.min(3, scenes.length) }, worker));
     return { voices, silentReason: null };
   } catch (e) {
     return silent((e as Error).message);
