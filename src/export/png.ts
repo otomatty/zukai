@@ -11,21 +11,31 @@ export const pngFont = (): string => (machineSetting('png.font') as string | nul
 
 // resvg は、PC のフォントをすべて読むと1回に数十〜百数十ms かかる。図ごとに読み直すと、書き出しの大半がこの時間になる。
 // fontconfig（fc-list）があれば、SVG が指定した書体のファイルだけを探して渡す。結果は書体の名前ごとに覚えておく。
-const filesByFamily = new Map<string, string[]>();
-function familyFiles(family: string): string[] {
-  let files = filesByFamily.get(family);
-  if (!files) {
-    try {
-      files = execFileSync('fc-list', [family, '-f', '%{file}\n'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
-    } catch {
-      files = [];
-    }
-    filesByFamily.set(family, files);
-  }
-  return files;
+interface Family {
+  files: string[];
+  // 収録している文字の範囲（コードポイントの [始まり, 終わり]）。
+  ranges: [number, number][];
 }
-let emoji: string[] | undefined;
-const emojiFiles = (): string[] => (emoji ??= familyFiles('Noto Color Emoji'));
+const families = new Map<string, Family>();
+function familyOf(family: string): Family {
+  let f = families.get(family);
+  if (!f) {
+    const list = (format: string) => execFileSync('fc-list', [family, '-f', format], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).split('\n').filter(Boolean);
+    try {
+      const ranges = list('%{charset}\n').flatMap((line) =>
+        line.split(/\s+/).filter(Boolean).map((r): [number, number] => {
+          const [a, b = a] = r.split('-').map((x) => parseInt(x, 16));
+          return [a, b];
+        }),
+      );
+      f = { files: list('%{file}\n'), ranges };
+    } catch {
+      f = { files: [], ranges: [] };
+    }
+    families.set(family, f);
+  }
+  return f;
+}
 
 // SVG の font-family（属性と style の両方）に書かれた書体の名前。総称（sans-serif など）は除く。
 const GENERIC = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy', 'system-ui']);
@@ -38,14 +48,19 @@ const familiesOf = (svg: string): string[] => [
   ),
 ];
 
-// 渡すフォントの指定。既定のフォント（pngFont）が見つからないときは、これまでどおり PC のフォントをすべて読む。
+// 渡すフォントの指定。SVG の文字を、渡すフォントがすべて収録しているときだけ、フォントを絞る。
+// 収録していない字があるとき（✓ のような記号など）と、既定のフォント（pngFont）が見つからないときは、これまでどおり PC のフォントをすべて読む。
 // 足りない字を PC のほかのフォントで補う動きを、変えないようにするため。
 function fontOptions(svg: string): ResvgRenderOptions['font'] {
   const base = pngFont();
-  const main = familyFiles(base);
-  if (!main.length) return { loadSystemFonts: true, defaultFontFamily: base };
-  const fontFiles = [...new Set([...main, ...familiesOf(svg).flatMap(familyFiles), ...emojiFiles()])];
-  return { loadSystemFonts: false, fontFiles, defaultFontFamily: base };
+  const system = { loadSystemFonts: true, defaultFontFamily: base };
+  if (!familyOf(base).files.length) return system;
+  // 絵文字のフォント（Noto Color Emoji など）は数えない。色付きの絵文字は resvg が描けないので、PC のほかのフォントで補う必要があるため。
+  const used = [base, ...familiesOf(svg)].map(familyOf).filter((f) => f.files.length);
+  const covered = (cp: number) => used.some((f) => f.ranges.some(([a, b]) => cp >= a && cp <= b));
+  const chars = new Set([...svg].map((ch) => ch.codePointAt(0)!).filter((cp) => cp > 0x7e));
+  for (const cp of chars) if (!covered(cp)) return system;
+  return { loadSystemFonts: false, fontFiles: [...new Set(used.flatMap((f) => f.files))], defaultFontFamily: base };
 }
 
 // 表示幅の2倍の解像度で書き出す。フォントは実行した PC に入っているものを使う。背景は、テーマの紙の色にする。

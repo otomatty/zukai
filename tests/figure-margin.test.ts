@@ -140,3 +140,11 @@ test('HTML と Confluence は、自由図・チャート・テーマ独自の型
   for (const svg of svgs) checkMargin(raster(svg), theme.tokens);
   assert.equal(page.background, '#141f4f');
 });
+
+test('PNG は、既定の書体に無い記号も、PC のフォントをすべて読んだときと同じに描く', async () => {
+  const t = readTheme(null).tokens;
+  // ✓ は日本語の書体にあることが多く、☑ と ✔ は無いことが多い（絵文字の書体にはあるが、色付きの絵文字は描けない）。
+  const svg = await types.flow.render(yaml('type: flow\nsteps:\n  - label: ✓ 受付\n  - label: ☑ 処理 ✔\n'), t, { tokens: t, baseDir: process.cwd() });
+  const system = new Resvg(svg, { fitTo: { mode: 'zoom', value: 2 }, background: t.color.paper, font: { loadSystemFonts: true, defaultFontFamily: pngFont() } }).render().asPng();
+  assert.ok(toPng(svg, t.color.paper).data.equals(system));
+});

@@ -41,4 +41,9 @@ test('実績を、モデルごとに1回の実行あたりの発火で数える'
   const a = stats({ model: 'model-a' });
   assert.equal(a.runs, 2);
   assert.deepEqual(a.rules.map((r) => [r.rule, r.fired, r.fixed]), [['P001', 3, 1], ['S004', 1, 1]]);
+  // 修正は、別のモデルの直前の実行と比べても数える。
+  record(result('a.md', []), 'model-b');
+  const b = stats({ model: 'model-b' });
+  assert.equal(b.runs, 2);
+  assert.deepEqual(b.rules.map((r) => [r.rule, r.fired, r.fixed]), [['P001', 0, 1]]);
 });

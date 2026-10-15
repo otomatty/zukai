@@ -126,6 +126,9 @@ export function levelsOf(samples: Float32Array, rate: number, fps = 30): number[
   return out.map((v) => Math.round((v / max) * 100) / 100);
 }
 
+// 頼んでいる途中の読み上げ。キャッシュのファイル名ごと。
+const inflight = new Map<string, Promise<Buffer>>();
+
 // 1シーンの音声と、文ごとの時刻。
 export async function voiceOf(lines: Line[], settings: VoiceSettings, cacheDir: string): Promise<Voice> {
   if (!lines.length) return estimateVoice(lines);
@@ -136,9 +139,18 @@ export async function voiceOf(lines: Line[], settings: VoiceSettings, cacheDir: 
   if (fs.existsSync(file)) buf = fs.readFileSync(file);
   else {
     // キャッシュが無いときは、voicesFor がキーを確かめてから呼ぶ。
-    buf = await request(lines, video, settings.apiKey!);
-    fs.mkdirSync(cacheDir, { recursive: true });
-    fs.writeFileSync(file, buf);
+    // 同じ文のシーンを同時に頼むと、同じ読み上げを2回頼んでしまうので、頼んでいる途中のものを共有する。失敗したものは、次に頼み直せるよう外す。
+    let pending = inflight.get(file);
+    if (!pending) {
+      pending = request(lines, video, settings.apiKey!).then((b) => {
+        fs.mkdirSync(cacheDir, { recursive: true });
+        fs.writeFileSync(file, b);
+        return b;
+      });
+      inflight.set(file, pending);
+      pending.then(() => inflight.delete(file), () => inflight.delete(file));
+    }
+    buf = await pending;
   }
   const { rate, samples } = decodeWav(buf);
   return { duration: samples.length / rate, lines: lineTimes(samples, rate, lines), samples, rate, levels: levelsOf(samples, rate) };
@@ -151,12 +163,23 @@ export async function voicesFor(scenes: { lines: Line[] }[], settings: VoiceSett
   try {
     // キャッシュが無い初回は、シーンごとに読み上げを頼む。1つずつ待つと遅いので、3つまで同時に頼む（多くすると、API の回数の上限に当たりやすい）。
     // キーがあるときは、呼ぶ側がキャッシュの場所を渡す。
+    // 1つが失敗したら、ほかは新しく頼まずに止め、頼んでいる途中のものが終わるのを待ってから無音にする。
     const voices: Voice[] = new Array(scenes.length);
     let next = 0;
+    let failed = false;
     const worker = async () => {
-      for (let i = next++; i < scenes.length; i = next++) voices[i] = await voiceOf(scenes[i].lines, settings, cacheDir!);
+      for (let i = next++; i < scenes.length && !failed; i = next++) {
+        try {
+          voices[i] = await voiceOf(scenes[i].lines, settings, cacheDir!);
+        } catch (e) {
+          failed = true;
+          throw e;
+        }
+      }
     };
-    await Promise.all(Array.from({ length: Math.min(3, scenes.length) }, worker));
+    const settled = await Promise.allSettled(Array.from({ length: Math.min(3, scenes.length) }, worker));
+    const rejected = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (rejected) throw rejected.reason;
     return { voices, silentReason: null };
   } catch (e) {
     return silent((e as Error).message);

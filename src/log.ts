@@ -60,26 +60,32 @@ export function record(result: LintResult, model?: string | null): void {
 }
 
 // model を渡すと、そのモデルの実行だけを数える。
+// 修正と残存は、モデルで絞る前の、同じファイルの直前の実行と比べる。別のモデルが書いた原稿を、このモデルが直した分も数えるため。
 export function stats({ model }: { model?: string } = {}): Stats {
   if (!fs.existsSync(file)) return { runs: 0, rules: [], models: [], figures: [], free: [] };
-  const runs = fs
+  const all = fs
     .readFileSync(file, 'utf8')
     .split('\n')
     .filter(Boolean)
-    .map((l): Run => JSON.parse(l))
-    .filter((r) => model === undefined || r.model === model);
+    .map((l): Run => JSON.parse(l));
+  const counted = (r: Run) => model === undefined || r.model === model;
+  const runs = all.filter(counted);
 
   const table: Record<string, Omit<RuleStats, 'files'> & { files: Set<string> }> = {};
   const row = (rule: string) => (table[rule] ??= { rule, fired: 0, files: new Set<string>(), fixed: 0, remained: 0, suppressed: 0 });
+  // prev は、モデルを問わない直前の実行。last は、数える実行のうち最後のもの（図の型の集計に使う）。
+  const prevRun: Record<string, Run> = {};
   const last: Record<string, Run> = {};
-  for (const run of runs) {
+  for (const run of all) {
+    const prev = prevRun[run.file];
+    prevRun[run.file] = run;
+    if (!counted(run)) continue;
     for (const [rule, n] of Object.entries(run.findings)) {
       row(rule).fired += n;
       row(rule).files.add(run.file);
     }
     for (const [rule, n] of Object.entries(run.suppressed)) row(rule).suppressed += n;
     // 同じファイルの直前の実行と比べる。減った件数を「修正できた」、残った件数を「残った」と数える。
-    const prev = last[run.file];
     if (prev) {
       for (const [rule, n] of Object.entries(prev.findings)) {
         const now = run.findings[rule] ?? 0;

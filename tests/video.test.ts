@@ -203,3 +203,39 @@ ${section('非同期の例外', '<script>zk.scene((t) => { if (t > 1) queueMicro
   assert.ok(r.results[6].findings.some((f) => f.rule === 'V002' && f.severity === 'error' && /async bad/.test(f.message)));
   assert.deepEqual(r.scenes.map((s) => s.kind), ['title', 'auto', 'auto', 'free', 'free', 'auto', 'auto']);
 });
+
+test('読み上げは同時に頼み、同じ文は1回だけ頼む。失敗したら、頼んでいる途中のものを待ってから無音にする', async () => {
+  const { voicesFor } = await import('../src/video/tts.ts');
+  const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-tts-'));
+  const settings = { video: { model: 'm', voice: 'v', style: 's' }, apiKey: 'k' } as unknown as Parameters<typeof voicesFor>[1];
+  const pcm = Buffer.alloc(24000 * 2).toString('base64');
+  const saved = globalThis.fetch;
+  let calls = 0;
+  let active = 0;
+  let fail = '';
+  globalThis.fetch = (async (_url: string, init: { body: string }) => {
+    calls++;
+    active++;
+    await new Promise((ok) => setTimeout(ok, 20));
+    active--;
+    if (fail && init.body.includes(fail)) return new Response('quota', { status: 429 });
+    return Response.json({ output: { mime_type: 'audio/pcm', data: pcm } });
+  }) as typeof fetch;
+  try {
+    const scene = (text: string) => ({ lines: [parseLine(text)] });
+    const ok = await voicesFor([scene('最初の文です。'), scene('次の文です。'), scene('最初の文です。'), scene('最後の文です。')], settings, cache);
+    assert.equal(ok.silentReason, null);
+    assert.equal(ok.voices.length, 4);
+    assert.equal(calls, 3);
+
+    calls = 0;
+    fail = '失敗する文';
+    const ng = await voicesFor([scene('失敗する文です。'), scene('ほかの文です。'), scene('別の文です。'), scene('残りの文です。')], settings, cache);
+    assert.match(ng.silentReason!, /429/);
+    assert.equal(active, 0);
+    // 失敗したあとは、新しく頼まない。
+    assert.ok(calls <= 3, String(calls));
+  } finally {
+    globalThis.fetch = saved;
+  }
+});

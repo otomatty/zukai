@@ -48,11 +48,26 @@ function nodeFlags(): string[] {
 // 所属するグループ。newgrp などで違うグループから呼ばれたとき、読めるフォルダやファイルが違うので、別のプロセスにする。
 const credentials = () => (windows ? '' : `${process.getegid!()}:${process.getgroups!().sort((x, y) => x - y).join(',')}`);
 
-// 相対パスらしい値。起動するときにだけ読む値（NODE_EXTRA_CA_CERTS=./ca.pem、--require ./hook.js など）に含まれると、どのフォルダから起動したかで結果が変わる。
-// URL と絶対パスは、どこから起動しても同じものを指す。NODE_PATH のように、区切り文字で複数のパスを並べた値もある。
-const relativePath = (v: string) => v.split(new RegExp(`[\\s=${path.delimiter}]+`)).some((w) => /[\\/]|^\./.test(w) && !path.isAbsolute(w) && !/^[a-z][\w+.-]*:\/\//i.test(w));
-// プロキシの値は、パスではない（NO_PROXY の 127.0.0.0/8 のような値を、相対パスと見なさない）。
-const proxyEnv = (n: string) => /^(HTTPS?|NO|ALL)_PROXY$/i.test(n);
+// 起動するときにだけ読む値に、相対パスがあるか。あれば、どのフォルダから起動したかで、読むファイルが変わる。
+// URL と絶対パスは、どこから起動しても同じものを指す。
+const local = (w: string) => Boolean(w) && !path.isAbsolute(w) && !/^[a-z][\w+.-]*:\/\//i.test(w);
+// 値がファイルのパスである環境変数。ca.pem のように区切り文字の無い名前も、相対パスとして扱う。NODE_PATH は、区切り文字で複数のパスを並べる。
+const PATH_ENV = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_PATH', 'NODE_REPL_HISTORY', 'NODE_ICU_DATA', 'NODE_V8_COVERAGE', 'NODE_REDIRECT_WARNINGS', 'NODE_COMPILE_CACHE', 'OPENSSL_CONF', 'OPENSSL_MODULES', 'SSL_CERT_FILE', 'SSL_CERT_DIR']);
+// Node のフラグ（NODE_OPTIONS と、呼んだ側の Node のフラグ）。--require=hook.js や --require hook.js の値は、パスかもしれない。
+// どのフラグがパスを取るかは数えきれないので、数字と真偽値でない値は、すべて相対パスかもしれないものとして扱う（別のプロセスになるだけで、結果は正しい）。
+const flagHasLocal = (flags: string) =>
+  flags
+    .split(/\s+/)
+    .map((w) => (w.startsWith('-') ? (w.includes('=') ? w.slice(w.indexOf('=') + 1) : '') : w))
+    .some((v) => local(v) && !/^(\d+(\.\d+)?|true|false)$/i.test(v));
+function startupHasLocal(name: string, value: string): boolean {
+  if (PATH_ENV.has(name)) return value.split(path.delimiter).some(local);
+  if (name === 'NODE_OPTIONS') return flagHasLocal(value);
+  // プロキシの値は、パスではない（NO_PROXY の 127.0.0.0/8 のような値を、相対パスと見なさない）。
+  if (/^(HTTPS?|NO|ALL)_PROXY$/i.test(name)) return false;
+  // そのほかの変数（NODE_ENV など）は、パスの形（区切り文字か、. で始まる）をしたものだけを相対パスと見なす。
+  return value.split(/\s+/).some((w) => /[\\/]|^\./.test(w) && local(w));
+}
 
 // 接続先の名前。zukai の場所、ホームのフォルダ、umask（出典のキャッシュを書くときの権限）、所属するグループ、Node の本体と版とフラグ、起動するときにだけ読む環境変数、コードと依存の更新時刻から作る。
 // 起動するときにだけ読む値に相対パスがあるときだけ、今いるフォルダも含める。その値を、呼んだ側と同じフォルダから読むため。
@@ -61,7 +76,7 @@ const proxyEnv = (n: string) => /^(HTTPS?|NO|ALL)_PROXY$/i.test(n);
 function versionKey(): string {
   const env = Object.entries(process.env).filter((e): e is [string, string] => startupEnv(e[0]) && e[1] !== undefined).sort(([a], [b]) => (a < b ? -1 : 1));
   const flags = nodeFlags();
-  const where = [...env.filter(([n]) => !proxyEnv(n)).map(([, v]) => v), ...flags].some(relativePath) ? process.cwd() : '';
+  const where = env.some(([n, v]) => startupHasLocal(n, v)) || flagHasLocal(flags.join(' ')) ? process.cwd() : '';
   const h = crypto.createHash('sha1').update(root).update('\0').update(os.homedir()).update(`\0${where}\0${process.umask()}\0${credentials()}\0${process.execPath}\0${process.version}\0${JSON.stringify(flags)}`);
   for (const [n, v] of env) h.update(`\0${n}=${v}`);
   const add = (rel: string) => {

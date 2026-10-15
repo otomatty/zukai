@@ -120,23 +120,34 @@ test('常駐するプロセスで検査しても、結果と終了コードは�
 test('起動時に読む値に相対パスが無ければ、どのフォルダから呼んでも同じプロセスを使う', { skip: process.platform === 'win32' && 'ソケットのファイルで確かめるため' }, async () => {
   const { socketPath } = await import('../src/lint/server.ts');
   const cwd = process.cwd();
-  const saved = process.env.NODE_EXTRA_CA_CERTS;
+  const saved = { ca: process.env.NODE_EXTRA_CA_CERTS, options: process.env.NODE_OPTIONS, env: process.env.NODE_ENV };
   const other = fs.mkdtempSync(path.join(os.tmpdir(), 'zukai-server-cwd-'));
   const at = (dir: string) => {
     process.chdir(dir);
     return socketPath();
   };
+  const restore = (name: string, v: string | undefined) => (v === undefined ? delete process.env[name] : (process.env[name] = v));
   try {
     delete process.env.NODE_EXTRA_CA_CERTS;
+    process.env.NODE_OPTIONS = '--max-old-space-size=4096';
+    process.env.NODE_ENV = 'production';
     assert.equal(at(root), at(other));
     process.env.NODE_EXTRA_CA_CERTS = '/etc/ssl/ca.pem';
     assert.equal(at(root), at(other));
-    // 相対パスは、起動したフォルダから読まれるので、フォルダごとに別のプロセスにする。
-    process.env.NODE_EXTRA_CA_CERTS = './ca.pem';
-    assert.notEqual(at(root), at(other));
+    // 相対パスは、起動したフォルダから読まれるので、フォルダごとに別のプロセスにする。区切り文字の無い名前も相対パスとして扱う。
+    for (const ca of ['./ca.pem', 'ca.pem']) {
+      process.env.NODE_EXTRA_CA_CERTS = ca;
+      assert.notEqual(at(root), at(other), ca);
+    }
+    delete process.env.NODE_EXTRA_CA_CERTS;
+    for (const options of ['--require=hook.js', '--require hook.js']) {
+      process.env.NODE_OPTIONS = options;
+      assert.notEqual(at(root), at(other), options);
+    }
   } finally {
     process.chdir(cwd);
-    if (saved === undefined) delete process.env.NODE_EXTRA_CA_CERTS;
-    else process.env.NODE_EXTRA_CA_CERTS = saved;
+    restore('NODE_EXTRA_CA_CERTS', saved.ca);
+    restore('NODE_OPTIONS', saved.options);
+    restore('NODE_ENV', saved.env);
   }
 });
