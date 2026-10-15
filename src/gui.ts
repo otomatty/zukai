@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir } from './config.ts';
 import { parse } from './parse.ts';
-import { answersDir, ensureDir, list as listAnswers, fallback, openBrowser } from './view.ts';
+import { answersDir, ensureDir, list as listAnswers, fallback, openBrowser, StatCache } from './view.ts';
 import { imageFormats, outputFormats } from './output-formats.ts';
 import type { ImageFormat, OutputFormat } from './output-formats.ts';
 import type { Scope } from './types.ts';
@@ -44,8 +44,11 @@ const hasFigure = (source: string): boolean => {
 };
 
 // プロジェクトの中の原稿（図のブロックを持つ .md）を探す。隠しフォルダ、node_modules、シンボリックリンクは読まない。
+// 中身は、ファイルが変わったときだけ読み直す。探し直すたびに、すべての .md を読んで解析しない。
+const scanned = new StatCache<{ title: string } | null>();
 function scan(project: string): DocItem[] {
   const out: DocItem[] = [];
+  const seen: string[] = [];
   let reads = 0;
   const walk = (dir: string, depth: number) => {
     let entries: fs.Dirent[];
@@ -66,9 +69,13 @@ function scan(project: string): DocItem[] {
           const st = fs.statSync(file);
           if (st.size > SCAN.bytes) continue;
           reads++;
-          const source = fs.readFileSync(file, 'utf8');
-          if (!hasFigure(source)) continue;
-          out.push({ path: path.relative(project, file).replaceAll('\\', '/'), title: source.match(/^# (.+)$/m)?.[1] ?? e.name, mtime: st.mtimeMs, answer: false });
+          seen.push(file);
+          const found = scanned.get(file, st, () => {
+            const source = fs.readFileSync(file, 'utf8');
+            return hasFigure(source) ? { title: source.match(/^# (.+)$/m)?.[1] ?? e.name } : null;
+          });
+          if (!found) continue;
+          out.push({ path: path.relative(project, file).replaceAll('\\', '/'), title: found.title, mtime: st.mtimeMs, answer: false });
         } catch {
           // 読めないファイルは一覧に入れない。
         }
@@ -76,6 +83,7 @@ function scan(project: string): DocItem[] {
     }
   };
   walk(project, 0);
+  scanned.keep(seen);
   return out;
 }
 
