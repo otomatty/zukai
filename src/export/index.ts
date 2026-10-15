@@ -1,21 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { outputFormats, imageFormats } from './output-formats.ts';
-import type { OutputFormat, ImageFormat } from './output-formats.ts';
-import type { ExportDocument } from './export/document.ts';
+import { outputFormats, imageFormats } from './formats.ts';
+import type { OutputFormat, ImageFormat } from './formats.ts';
+import type { ExportDocument } from './document.ts';
 
 interface Result { files: Map<string, Buffer | string>; warnings: string[] }
 interface Context { file: string; source: string; out: string; imageFormat: ImageFormat }
 const one = (file: string, content: string | Buffer, warnings: string[] = []): Result => ({ files: new Map([[file, content]]), warnings });
 /** 文書用の依存は、その形式が選ばれたときに読み込む。 */
 async function prepare(ctx: Context): Promise<ExportDocument> {
-  const { prepareDocument } = await import('./export/document.ts');
+  const { prepareDocument } = await import('./document.ts');
   return prepareDocument(ctx.source, ctx.file, ctx.out, ctx.imageFormat);
 }
 
 // 新しい形式は一覧とここに登録する。生成が終わってからファイルを書き出す。
 const exporters: Record<OutputFormat, (ctx: Context) => Promise<Result>> = {
-  html: async (c) => one(c.out, await (await import('./render.ts')).render(c.source, c.file)),
+  html: async (c) => one(c.out, await (await import('./html.ts')).render(c.source, c.file)),
   confluence: async (c) => {
     const page = await (await import('./confluence.ts')).bundle(c.source, c.file);
     const files = new Map<string, string | Buffer>(page.files.map((f) => [path.join(c.out, f.name), f.data]));
@@ -34,21 +34,21 @@ const exporters: Record<OutputFormat, (ctx: Context) => Promise<Result>> = {
   png: async (c) => figures(c, 'png'),
   pdf: async (c) => {
     const doc = await prepare({ ...c, out: path.dirname(c.out) });
-    return one(c.out, await (await import('./export/pdf.ts')).writePdf(doc), doc.warnings);
+    return one(c.out, await (await import('./pdf.ts')).writePdf(doc), doc.warnings);
   },
   docx: async (c) => {
     const doc = await prepare({ ...c, out: path.dirname(c.out) });
-    return one(c.out, await (await import('./export/docx.ts')).writeDocx(doc), doc.warnings);
+    return one(c.out, await (await import('./docx.ts')).writeDocx(doc), doc.warnings);
   },
   pptx: async (c) => {
     const doc = await prepare({ ...c, out: path.dirname(c.out) });
-    return one(c.out, await (await import('./export/pptx.ts')).writePptx(doc), doc.warnings);
+    return one(c.out, await (await import('./pptx.ts')).writePptx(doc), doc.warnings);
   },
 };
 
 /** 原稿内の図を登場順に番号付けし、本文を含めずに出力する。 */
 async function figures(c: Context, ext: 'svg' | 'png'): Promise<Result> {
-  const { prepareFigures } = await import('./export/document.ts');
+  const { prepareFigures } = await import('./document.ts');
   const doc = prepareFigures(c.source, c.file);
   if (!doc.figures.length) throw new Error('原稿に図がありません。SVG・PNG出力には figure ブロックが必要です。');
   const files = new Map<string, string | Buffer>();

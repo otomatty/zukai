@@ -11,8 +11,8 @@ import type { RenderedImage } from '@resvg/resvg-js';
 import { types } from '../src/figures/index.ts';
 import { baseTokens, readTheme } from '../src/theme.ts';
 import { typesFor } from '../src/figures/custom.ts';
-import { render, renderConfluence } from '../src/render.ts';
-import { pngFont, toPng } from '../src/png.ts';
+import { render, renderConfluence } from '../src/export/html.ts';
+import { pngFont, toPng } from '../src/export/png.ts';
 import { lint } from '../src/lint/index.ts';
 import type { Tokens } from '../src/types.ts';
 
@@ -45,7 +45,7 @@ test('組み込みの全24型は、図の座標を変えずに紙の色の余白
   const t = baseTokens();
   // PNG の既定の白で隠れないよう、紙の色を変え、透明な余白も検出する。
   t.color.paper = '#e9f1f7';
-  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good/', import.meta.url)) };
+  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good', import.meta.url)) };
   for (const type of Object.values(types)) {
     const spec = type.name === 'screenshot'
       ? { type: 'screenshot', image: 'shots/login.png', marks: [{ selector: '.alert', note: '残り時間を表示します。' }] }

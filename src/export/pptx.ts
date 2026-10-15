@@ -4,7 +4,7 @@ import { textOf } from './document.ts';
 import type { ExportDocument } from './document.ts';
 import { imageOf } from './images.ts';
 import { officeSurface, officeTextColor } from './office-colors.ts';
-import { pngFont } from '../png.ts';
+import { pngFont } from './png.ts';
 
 // パッケージの型定義は CJS と判定されるが、import 側の実体は default のクラス。
 const Presentation = PptxGenJS as unknown as typeof PptxGenJS.default;

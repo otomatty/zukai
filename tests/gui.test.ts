@@ -13,7 +13,7 @@ process.env.HOME = home;
 process.env.USERPROFILE = home;
 // 検査は、常駐するプロセスを起動せずに、このプロセスで行う。
 process.env.ZUKAI_LINT_SERVER = 'off';
-const { serve } = await import('../src/gui.ts');
+const { serve } = await import('../src/server/gui.ts');
 
 const MANUSCRIPT = '# 手順\n\n## 流れ\n\n流れを示します。\n\n```yaml figure\ntype: flow\nsteps:\n  - label: 受付\n  - label: 処理\n```\n';
 

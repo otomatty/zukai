@@ -3,11 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { root, loadConfig, scopeNames } from './config.ts';
+import { root, loadConfig, scopeNames } from '../config.ts';
 import { zukaiCommand, skillStatus, shown } from './setup.ts';
 import type { SkillState } from './setup.ts';
-import { themeReport } from './theme.ts';
-import type { Severity } from './types.ts';
+import { themeReport } from '../theme.ts';
+import type { Severity } from '../types.ts';
 
 // Playwright の型。playwright は入れていない環境もあるので、型は同じ API を持つ playwright-core から取る。
 type Playwright = typeof import('playwright-core');

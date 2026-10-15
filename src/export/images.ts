@@ -1,5 +1,5 @@
 import { imageSize } from 'image-size';
-import { toPng } from '../png.ts';
+import { toPng } from './png.ts';
 import type { ExportDocument } from './document.ts';
 
 /** 同梱画像またはdata URIを埋め込み用に読む。SVGはPNGへ変換し、外部URL・未対応形式はエラーにする。 */

@@ -6,13 +6,13 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-// 描画（render.ts）は、資料を開くときに読む。zukai view が起動を確かめるだけのときに、重い依存を読まないため。
-import { CSP } from './csp.ts';
-import { lintResident } from './lint/server.ts';
-import { parse } from './parse.ts';
-import { stateDir } from './config.ts';
+// 描画（export/html.ts）は、資料を開くときに読む。zukai view が起動を確かめるだけのときに、重い依存を読まないため。
+import { CSP } from '../export/csp.ts';
+import { lintResident } from '../lint/server.ts';
+import { parse } from '../parse.ts';
+import { stateDir } from '../config.ts';
 import type { AddressInfo } from 'node:net';
-import type { FigureBlock } from './types.ts';
+import type { FigureBlock } from '../types.ts';
 
 // 一覧の1件。mtime は資料の版（version）。
 export interface Item {
@@ -117,7 +117,7 @@ export const fallback =(source: string, e: Error) => `<!doctype html>
 async function doc(dir: string, name: string): Promise<{ html: string; withBanner: string }> {
   const file = path.join(dir, name);
   const source = fs.readFileSync(file, 'utf8');
-  const { render } = await import('./render.ts');
+  const { render } = await import('../export/html.ts');
   const [html, result] = await Promise.all([render(source, file).catch((e: Error) => fallback(source, e)), lintResident(source, file)]);
   const errors = result.findings.filter((f) => f.severity === 'error');
   const banner = errors.length
@@ -313,7 +313,7 @@ export async function ensure(project: string, { open = true }: { open?: boolean 
   };
   let h = await health();
   if (!h) {
-    const cli = fileURLToPath(new URL('./cli.ts', import.meta.url));
+    const cli = fileURLToPath(new URL('../cli.ts', import.meta.url));
     spawn(process.execPath, [cli, 'view', '--serve'], { cwd: project, detached: true, stdio: 'ignore', windowsHide: true }).unref();
     for (let i = 0; i < 50 && !h; i++) {
       await new Promise((r) => setTimeout(r, 100));

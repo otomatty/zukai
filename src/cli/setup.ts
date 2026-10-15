@@ -4,10 +4,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, scopeNames, display, listedKeys, closest, pad, widthOf, invalid } from './config.ts';
-import type { Config, ProjectConfig } from './config.ts';
+import { root, loadConfig, projectOf, filesOf, specOf, spec, setValue, unsetValue, coerce, ensureTeamFile, scopeNames, display, listedKeys, closest, pad, widthOf, invalid } from '../config.ts';
+import type { Config, ProjectConfig } from '../config.ts';
 import type { RunContext } from './commands.ts';
-import type { Origin, Scope } from './types.ts';
+import type { Origin, Scope } from '../types.ts';
 
 const SECTIONS = ['skills', 'output', 'video', 'confluence'];
 // セクションを書かずに setup を実行したときに質問するセクション。

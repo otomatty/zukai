@@ -3,10 +3,10 @@
 // 原稿はページに添付するので、添付の原稿を受け取った人が同じページを更新できる。
 import fs from 'node:fs';
 import path from 'node:path';
-import { renderConfluence } from './render.ts';
+import { renderConfluence } from './html.ts';
 import { toPng } from './png.ts';
-import { settingsFor } from './config.ts';
-import type { Settings } from './types.ts';
+import { settingsFor } from '../config.ts';
+import type { Settings } from '../types.ts';
 
 // 添付するファイル。
 interface Attachment {

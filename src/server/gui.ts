@@ -8,12 +8,12 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
-import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir } from './config.ts';
-import { parse } from './parse.ts';
+import { root, loadConfig, listedKeys, specOf, coerce, setValue, unsetValue, scopeNames, settingsFor, stateDir } from '../config.ts';
+import { parse } from '../parse.ts';
 import { answersDir, ensureDir, list as listAnswers, fallback, openBrowser, StatCache } from './view.ts';
-import { imageFormats, outputFormats } from './output-formats.ts';
-import type { ImageFormat, OutputFormat } from './output-formats.ts';
-import type { Scope } from './types.ts';
+import { imageFormats, outputFormats } from '../export/formats.ts';
+import type { ImageFormat, OutputFormat } from '../export/formats.ts';
+import type { Scope } from '../types.ts';
 
 // ページへの要求がこの時間なければ終了する。ページを開いている間は、一覧の読み直しが続くので終わらない。
 const IDLE_MS = 30 * 60 * 1000;
@@ -160,11 +160,11 @@ function inside(project: string, rel: string): string {
   return abs;
 }
 
-const PAGE = fs.readFileSync(path.join(root, 'src/gui.html'), 'utf8');
+const PAGE = fs.readFileSync(path.join(root, 'src/server/gui.html'), 'utf8');
 // ページの本体の CSP。スクリプトは、要求ごとに作る nonce の付いたものだけを動かす。ほかのサイトの枠には入れさせない。
 const shellCsp = (nonce: string) => `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'`;
 // 資料とテーマの見本は、render の CSP でスクリプトを止める。枠に入れられるのは、この画面だけにする。
-const frameCsp = async () => `${(await import('./csp.ts')).CSP}; frame-ancestors 'self'`;
+const frameCsp = async () => `${(await import('../export/csp.ts')).CSP}; frame-ancestors 'self'`;
 
 const send = (res: http.ServerResponse, status: number, type: string, body: string | Buffer, headers: Record<string, string> = {}) => {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers });
@@ -216,22 +216,22 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
         return { source: fs.readFileSync(docFile(q('path')), 'utf8') };
       case 'GET /api/lint': {
         const file = docFile(q('path'));
-        const { lintResident } = await import('./lint/server.ts');
+        const { lintResident } = await import('../lint/server.ts');
         return lintResident(fs.readFileSync(file, 'utf8'), file);
       }
       case 'POST /api/build': {
         const file = docFile(str('path'));
-        const { buildOutput } = await import('./output.ts');
+        const { buildOutput } = await import('../export/index.ts');
         const result = await buildOutput(file, { format: str('format') ?? undefined, imageFormat: str('imageFormat') ?? undefined });
         return { out: path.relative(project, result.out), warnings: result.warnings };
       }
       case 'POST /api/publish': {
         // CLI の publish と同じく、Lint に合格した原稿だけを登録する。
         const file = docFile(str('path'));
-        const { lintResident } = await import('./lint/server.ts');
+        const { lintResident } = await import('../lint/server.ts');
         const result = await lintResident(fs.readFileSync(file, 'utf8'), file);
         if (!result.ok) return { ok: false, lint: result };
-        const { publish } = await import('./confluence.ts');
+        const { publish } = await import('../export/confluence.ts');
         return { ok: true, ...(await publish(file, { spaceId: str('spaceId') || null, parentId: str('parentId') || null })) };
       }
       case 'GET /api/config':
@@ -252,11 +252,11 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
         return { removed: unsetValue(project, key, scope) };
       }
       case 'GET /api/doctor': {
-        const { doctor } = await import('./doctor.ts');
+        const { doctor } = await import('../cli/doctor.ts');
         return doctor(project);
       }
       case 'GET /api/theme': {
-        const { themeReport } = await import('./theme.ts');
+        const { themeReport } = await import('../theme.ts');
         const dir = settingsFor(project).settings.theme ?? null;
         const r = await themeReport(dir);
         return { dir: r.dir && path.relative(project, r.dir).replaceAll('\\', '/'), name: r.name, ok: r.ok, findings: r.findings };
@@ -264,7 +264,7 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       case 'POST /api/theme/init': {
         const rel = str('dir') || 'zukai-theme';
         const dir = inside(project, rel);
-        const { initTheme } = await import('./theme.ts');
+        const { initTheme } = await import('../theme.ts');
         return { dir: path.relative(project, dir).replaceAll('\\', '/'), written: initTheme(dir).map((f) => path.relative(project, f)) };
       }
       default:
@@ -300,7 +300,7 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       if (url.pathname === '/doc') {
         const file = docFile(url.searchParams.get('path'));
         const source = fs.readFileSync(file, 'utf8');
-        const { render } = await import('./render.ts');
+        const { render } = await import('../export/html.ts');
         const html = await render(source, file).catch((e: Error) => fallback(source, e));
         const headers: Record<string, string> = { 'content-security-policy': await frameCsp() };
         if (url.searchParams.has('download')) headers['content-disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(file).replace(/\.md$/, '.html'))}`;
@@ -308,7 +308,7 @@ export function serve(project: string, port: number = guiPortOf(project)): Promi
       }
       if (url.pathname === '/theme/preview' || url.pathname === '/theme/compare') {
         const dir = settingsFor(project).settings.theme ?? null;
-        const { previewTheme, compareThemes } = await import('./preview.ts');
+        const { previewTheme, compareThemes } = await import('../preview.ts');
         const variants = url.searchParams.getAll('v').filter(Boolean);
         const types = url.searchParams.get('types')?.split(',').map((s) => s.trim()).filter(Boolean) ?? [];
         const html = url.pathname === '/theme/preview' ? (await previewTheme(dir)).html : await compareThemes(dir, variants, { only: types.length ? types : null });
@@ -348,7 +348,7 @@ export async function ensure(project: string, { open = true }: { open?: boolean 
   };
   let h = await health();
   if (!h) {
-    const cli = fileURLToPath(new URL('./cli.ts', import.meta.url));
+    const cli = fileURLToPath(new URL('../cli.ts', import.meta.url));
     spawn(process.execPath, [cli, 'gui', '--serve'], { cwd: project, detached: true, stdio: 'ignore', windowsHide: true }).unref();
     for (let i = 0; i < 50 && !h; i++) {
       await new Promise((r) => setTimeout(r, 100));

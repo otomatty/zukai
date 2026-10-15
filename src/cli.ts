@@ -2,8 +2,8 @@
 // コマンドの入口。引数を定義（commands.ts）で検査してから、各コマンドの処理を呼ぶ。
 // ここでは重い依存を読み込まない。help、setup、doctor が、依存の欠けた環境でも動くようにするため。
 import { enableCompileCache } from 'node:module';
-import { commandOf } from './commands.ts';
-import type { Command } from './commands.ts';
+import { commandOf } from './cli/commands.ts';
+import type { Command } from './cli/commands.ts';
 import { closest } from './config.ts';
 
 // 読み込んだコードのコンパイル結果を、OS の一時フォルダに保存して使い回す。2回目からの起動が速くなる。
@@ -55,7 +55,7 @@ function checkArgs(c: Command, { opts, bools, args }: Parsed): string | null {
 
 async function main(argv: string[]): Promise<number> {
   const [name, ...rest] = argv;
-  if (!name || name === '--help' || name === '-h') return (await import('./help.ts')).help([]);
+  if (!name || name === '--help' || name === '-h') return (await import('./cli/help.ts')).help([]);
   if (name === '--version' || name === '-v') {
     const { root } = await import('./config.ts');
     const fs = await import('node:fs');
@@ -64,11 +64,11 @@ async function main(argv: string[]): Promise<number> {
   }
   const c = commandOf(name);
   if (!c) {
-    console.error((await import('./help.ts')).unknownCommand(name));
+    console.error((await import('./cli/help.ts')).unknownCommand(name));
     return 1;
   }
   const parsed = parseArgs(rest);
-  if (parsed.bools.has('help')) return (await import('./help.ts')).help([name]);
+  if (parsed.bools.has('help')) return (await import('./cli/help.ts')).help([name]);
   const bad = checkArgs(c, parsed);
   if (bad) {
     console.error(bad);

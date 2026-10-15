@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import { Resvg } from '@resvg/resvg-js';
 import type { ResvgRenderOptions } from '@resvg/resvg-js';
-import { machineSetting } from './config.ts';
+import { machineSetting } from '../config.ts';
 
 // PNG に変換するときの日本語フォント。SVG のフォント指定の先頭が PC に無い場合に使われる。
 // OS ごとに標準で入っているものを選ぶ。変えたいときは、この PC の設定 png.font（zukai config set png.font 名前）か環境変数 ZUKAI_PNG_FONT で指定する。

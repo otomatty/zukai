@@ -627,7 +627,7 @@ test('画面の注釈の番号は、資料でも動画でも screenshot.onNote �
   const t = readTheme(themeDir({ screenshot: { onNote: '#000000' } })).tokens;
   // 撮影済みの画面（corpus/good/shots）を使う。
   const spec = { type: 'screenshot', image: 'shots/login.png', marks: [{ selector: '.alert', note: '残り時間を表示します。' }] };
-  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good/', import.meta.url)) };
+  const ctx = { baseDir: fileURLToPath(new URL('../corpus/good', import.meta.url)) };
   for (const tokens of [t, videoTokens(t)]) {
     const svg = types.screenshot.render(spec, tokens, ctx);
     assert.match(svg, /style="fill:#000000;font-weight:700">1</);

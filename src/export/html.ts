@@ -3,18 +3,18 @@
 // - renderConfluence: Confluence のストレージ形式の本文と、図の SVG の一覧。
 import path from 'node:path';
 import MarkdownIt from 'markdown-it';
-import { parse, isFigure, isRefs, isVideoOnly } from './parse.ts';
-import { resolveRefs, refsHtml, refsStorage } from './refs.ts';
-import { esc } from './figures/svg.ts';
+import { parse, isFigure, isRefs, isVideoOnly } from '../parse.ts';
+import { resolveRefs, refsHtml, refsStorage } from '../refs.ts';
+import { esc } from '../figures/svg.ts';
 import { createHighlighter } from 'shiki';
 import type { Highlighter } from 'shiki';
-import { readJson, knownLang } from './lint/index.ts';
-import { themeFor } from './theme.ts';
-import { typeOf, typesFor } from './figures/custom.ts';
-import type { Theme } from './theme.ts';
-import type { LintContext } from './lint/index.ts';
-import type { RefItem } from './refs.ts';
-import type { Doc, FigureBlock, Limits, Tokens } from './types.ts';
+import { readJson, knownLang } from '../lint/index.ts';
+import { themeFor } from '../theme.ts';
+import { typeOf, typesFor } from '../figures/custom.ts';
+import type { Theme } from '../theme.ts';
+import type { LintContext } from '../lint/index.ts';
+import type { RefItem } from '../refs.ts';
+import type { Doc, FigureBlock, Limits, Tokens } from '../types.ts';
 
 import { CSP } from './csp.ts';
 
