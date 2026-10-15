@@ -164,7 +164,7 @@ const PAGE = fs.readFileSync(path.join(root, 'src/gui.html'), 'utf8');
 // ページの本体の CSP。スクリプトは、要求ごとに作る nonce の付いたものだけを動かす。ほかのサイトの枠には入れさせない。
 const shellCsp = (nonce: string) => `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'`;
 // 資料とテーマの見本は、render の CSP でスクリプトを止める。枠に入れられるのは、この画面だけにする。
-const frameCsp = async () => `${(await import('./render.ts')).CSP}; frame-ancestors 'self'`;
+const frameCsp = async () => `${(await import('./csp.ts')).CSP}; frame-ancestors 'self'`;
 
 const send = (res: http.ServerResponse, status: number, type: string, body: string | Buffer, headers: Record<string, string> = {}) => {
   res.writeHead(status, { 'content-type': type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers });

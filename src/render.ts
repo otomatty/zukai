@@ -16,8 +16,9 @@ import type { LintContext } from './lint/index.ts';
 import type { RefItem } from './refs.ts';
 import type { Doc, FigureBlock, Limits, Tokens } from './types.ts';
 
-// 書き出す HTML で、原稿に書かれたスクリプトやフォームを動かさない。保存したファイルを開いたときも効くように meta で入れる。
-export const CSP = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'";
+import { CSP } from './csp.ts';
+
+export { CSP };
 
 const plainLang = (lang: string | undefined): boolean => !(lang && knownLang(lang)) || ['text', 'txt', 'plaintext', 'plain'].includes(lang);
 

@@ -6,7 +6,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { render, CSP } from './render.ts';
+// 描画（render.ts）は、資料を開くときに読む。zukai view が起動を確かめるだけのときに、重い依存を読まないため。
+import { CSP } from './csp.ts';
 import { lintResident } from './lint/server.ts';
 import { parse } from './parse.ts';
 import { stateDir } from './config.ts';
@@ -116,6 +117,7 @@ export const fallback =(source: string, e: Error) => `<!doctype html>
 async function doc(dir: string, name: string): Promise<{ html: string; withBanner: string }> {
   const file = path.join(dir, name);
   const source = fs.readFileSync(file, 'utf8');
+  const { render } = await import('./render.ts');
   const [html, result] = await Promise.all([render(source, file).catch((e: Error) => fallback(source, e)), lintResident(source, file)]);
   const errors = result.findings.filter((f) => f.severity === 'error');
   const banner = errors.length
